@@ -1,0 +1,1775 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Dryspace Site Inspections</title>
+<meta name="description" content="Dryspace Solutions offline site inspection app — data is stored on this device and shared when you choose.">
+<meta name="theme-color" content="#123a5f">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="DS Inspect">
+<style>
+/* ---- design tokens (hardcoded — no external dependencies) ---- */
+:root{
+  --font-sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  --color-text-primary:#1a2733;
+  --color-text-secondary:#55606b;
+  --color-text-tertiary:#8a939c;
+  --color-background-primary:#ffffff;
+  --color-background-secondary:#f4f6f8;
+  --color-background-info:#e8f1fa;
+  --color-border-primary:#2b6cb0;
+  --color-border-secondary:#c6cdd4;
+  --color-border-tertiary:#e3e7eb;
+  --color-border-info:#9dc3e6;
+  --color-text-info:#1b5e9e;
+  --border-radius-md:8px;
+  --border-radius-lg:12px;
+}
+html{background:var(--color-background-secondary);-webkit-text-size-adjust:100%}
+body{background:var(--color-background-secondary);min-height:100vh;padding-bottom:env(safe-area-inset-bottom)}
+/* ---- mobile field ergonomics: 16px inputs prevent iOS focus zoom; larger touch targets ---- */
+input[type=text],input[type=date],select,textarea{font-size:16px !important;padding:10px 12px}
+.cbl{padding:9px 12px;font-size:14px}
+.cbl input[type=checkbox],.cbl input[type=radio]{width:18px;height:18px}
+.section-header{padding:15px 16px}
+/* ---- app chrome ---- */
+.screen{min-height:100vh}
+.app-top{background:#123a5f;color:#fff;padding:14px 18px;padding-top:calc(14px + env(safe-area-inset-top));display:flex;align-items:center;gap:10px}
+.app-brand{display:flex;align-items:center;gap:10px;font-weight:600;font-size:16px;letter-spacing:0.02em}
+.app-brand img{height:30px;width:auto;display:block;background:#fff;border-radius:6px;padding:3px 6px}
+.home-wrap{max-width:860px;margin:0 auto;padding:18px 14px 40px}
+.home-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+.home-head h1{font-size:20px;font-weight:600;color:var(--color-text-primary)}
+.btn{font-family:var(--font-sans);display:inline-flex;align-items:center;justify-content:center;gap:6px;font-size:14px;font-weight:500;padding:10px 16px;border:1px solid var(--color-border-secondary);border-radius:var(--border-radius-md);cursor:pointer;background:var(--color-background-primary);color:var(--color-text-primary);min-height:42px}
+.btn:active{transform:translateY(1px)}
+.btn-primary{background:#123a5f;border-color:#123a5f;color:#fff}
+.btn-danger{color:#a12622;border-color:#e0b4b2}
+.btn-ghost{border-color:transparent;background:transparent}
+.insp-card{background:var(--color-background-primary);border:1px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.ic-main{flex:1;min-width:220px}
+.ic-title{font-size:15px;font-weight:600;color:var(--color-text-primary);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ic-sub{font-size:13px;color:var(--color-text-secondary);margin-top:2px}
+.ic-meta{font-size:12px;color:var(--color-text-tertiary);margin-top:4px}
+.ic-actions{display:flex;gap:8px;flex-wrap:wrap}
+.ft-badge{font-size:10px;font-weight:700;letter-spacing:0.05em;padding:2px 8px;border-radius:4px}
+.bg-draft{background:#fdf1dc;color:#8a5a00}
+.bg-done{background:#e0f2e4;color:#1e6b34}
+.empty-note{text-align:center;color:var(--color-text-secondary);font-size:14px;line-height:1.7;background:var(--color-background-primary);border:1px dashed var(--color-border-secondary);border-radius:var(--border-radius-lg);padding:34px 20px}
+.home-foot{margin-top:22px;text-align:center}
+.storage-note{font-size:12px;color:var(--color-text-tertiary);margin-top:10px}
+.ver-note{font-size:12px;color:var(--color-text-tertiary);margin-top:6px;line-height:1.6}
+/* ---- form screen top bar ---- */
+.form-top{position:sticky;top:0;z-index:50;background:var(--color-background-primary);border-bottom:1px solid var(--color-border-tertiary);display:flex;align-items:center;gap:8px;padding:8px 10px;padding-top:calc(8px + env(safe-area-inset-top));flex-wrap:wrap}
+.ft-mid{flex:1;min-width:150px}
+.ft-title{font-size:15px;font-weight:600;color:var(--color-text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:46vw}
+.save-status{font-size:11px;color:var(--color-text-tertiary)}
+.ft-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.form-scroll{padding-bottom:30px}
+.form-endbar{max-width:860px;margin:0 auto;padding:6px 16px 30px;display:flex;gap:10px;flex-wrap:wrap}
+/* ---- media items ---- */
+.m-item{position:relative;display:inline-flex;align-items:center}
+.m-item .img-thumb{width:76px;height:76px}
+.m-del{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:none;background:#a12622;color:#fff;font-size:11px;cursor:pointer;line-height:1}
+.m-file{background:var(--color-background-secondary);border:1px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:6px 26px 6px 10px;font-size:12px;color:var(--color-text-secondary);margin:3px 6px 3px 0}
+.m-file .m-del{top:50%;transform:translateY(-50%);right:4px;background:transparent;color:#a12622;font-size:13px}
+.upload-hint{font-size:14px}
+.upload-area{padding:16px}
+@media print{
+  .app-top,.form-top,.form-endbar,.print-btn{display:none !important}
+  .section-body{display:block !important}
+  body{background:#fff}
+}
+
+
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-sans);color:var(--color-text-primary)}
+.form-wrap{max-width:860px;margin:0 auto;padding:1.5rem 1rem 3rem}
+.form-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;gap:1rem;flex-wrap:wrap;padding-bottom:1.25rem;border-bottom:0.5px solid var(--color-border-tertiary)}
+.form-title{font-size:22px;font-weight:500;margin-bottom:3px}
+.form-sub{font-size:13px;color:var(--color-text-secondary)}
+.logo-wrap img{height:44px;width:auto;display:block}
+.progress-bar{height:3px;background:var(--color-background-secondary);border-radius:2px;margin-bottom:18px;overflow:hidden}
+.progress-fill{height:100%;background:var(--color-text-info);border-radius:2px;width:0%;transition:width 0.3s}
+.print-btn{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;padding:7px 14px;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);cursor:pointer;background:var(--color-background-primary);color:var(--color-text-primary);margin-bottom:1.25rem}
+.print-btn:hover{background:var(--color-background-secondary)}
+.section{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);margin-bottom:1rem;overflow:hidden}
+.section-header{display:flex;align-items:center;padding:13px 16px;cursor:pointer;user-select:none;border-bottom:0.5px solid var(--color-border-tertiary)}
+.section-header:hover{background:var(--color-background-secondary)}
+.section-num{font-size:11px;font-weight:500;color:var(--color-text-info);background:var(--color-background-info);border-radius:4px;padding:2px 7px;margin-right:10px;flex-shrink:0}
+.section-title{font-size:15px;font-weight:500;flex:1}
+.chevron{font-size:11px;color:var(--color-text-secondary);flex-shrink:0;transition:transform 0.2s}
+.chevron.open{transform:rotate(180deg)}
+.section-body{padding:16px;display:none}
+.section-body.open{display:block}
+.field-group{margin-bottom:14px}
+.field-group:last-child{margin-bottom:0}
+label.fl{display:block;font-size:13px;color:var(--color-text-secondary);margin-bottom:5px;font-weight:500}
+.lh{font-size:12px;color:var(--color-text-tertiary);font-weight:400;margin-left:5px}
+input[type=text],input[type=date],select,textarea{width:100%;font-size:14px;color:var(--color-text-primary);background:var(--color-background-primary);border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);padding:8px 10px;font-family:var(--font-sans)}
+textarea{resize:vertical;min-height:68px;line-height:1.5}
+input[type=text]:focus,input[type=date]:focus,select:focus,textarea:focus{outline:none;border-color:var(--color-border-primary);box-shadow:0 0 0 2px var(--color-background-info)}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.three-col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+.cb-group{display:flex;flex-wrap:wrap;gap:7px;margin-top:4px}
+.cbl{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--color-text-primary);cursor:pointer;background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:5px 10px}
+.cbl:hover{border-color:var(--color-border-secondary)}
+.cbl input[type=checkbox],.cbl input[type=radio]{width:14px;height:14px;cursor:pointer;flex-shrink:0}
+.cbl.hi{border-color:var(--color-border-info);background:var(--color-background-info)}
+.cbl.hi span{color:var(--color-text-info);font-weight:500}
+.divider{border:none;border-top:0.5px solid var(--color-border-tertiary);margin:14px 0}
+.sub-label{font-size:13px;font-weight:500;color:var(--color-text-primary);margin-bottom:9px;margin-top:2px}
+.other-input{display:none;margin-top:6px}
+.other-input.show{display:block}
+.dynamic-reveal{display:none;margin-top:8px;padding:12px;background:var(--color-background-secondary);border-radius:var(--border-radius-md);border:0.5px solid var(--color-border-tertiary)}
+.dynamic-reveal.show{display:block}
+.upload-area{border:0.5px dashed var(--color-border-secondary);border-radius:var(--border-radius-md);padding:14px;text-align:center;cursor:pointer;background:var(--color-background-secondary)}
+.upload-area:hover{border-color:var(--color-border-primary)}
+.upload-area input[type=file]{display:none}
+.upload-hint{font-size:13px;color:var(--color-text-secondary)}
+.upload-hint strong{color:var(--color-text-primary)}
+.img-preview{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.img-thumb{width:68px;height:68px;object-fit:cover;border-radius:var(--border-radius-md);border:0.5px solid var(--color-border-tertiary)}
+.file-list{margin-top:8px;font-size:12px;color:var(--color-text-secondary)}
+.file-item{padding:3px 0;border-bottom:0.5px solid var(--color-border-tertiary)}
+.file-item:last-child{border-bottom:none}
+.guide-ref{font-size:11px;color:var(--color-text-info);background:var(--color-background-info);border-radius:4px;padding:2px 6px;margin-left:6px;font-weight:500}
+.other-info-box{margin-top:14px;padding:12px 14px;background:var(--color-background-secondary);border-radius:var(--border-radius-md);border-left:3px solid var(--color-border-info)}
+.other-info-box label.fl{color:var(--color-text-info);font-size:12px;margin-bottom:5px}
+.other-info-box textarea{min-height:54px;font-size:13px;background:var(--color-background-primary)}
+.subsec-photos{margin-top:10px;padding:10px 12px;background:var(--color-background-secondary);border-radius:var(--border-radius-md);border:0.5px solid var(--color-border-tertiary)}
+.subsec-photos label.fl{font-size:12px;color:var(--color-text-secondary);margin-bottom:6px}
+@media(max-width:580px){.two-col,.three-col{grid-template-columns:1fr}.form-header{flex-direction:column-reverse;align-items:flex-start}}
+
+</style>
+</head>
+<body>
+
+<!-- ══════════ HOME SCREEN ══════════ -->
+<div id="screen-home" class="screen">
+  <header class="app-top">
+    <div class="app-brand">
+      <img src="https://dryspace.com.au/wp-content/uploads/2020/09/dryspace_logo.png" alt="Dryspace Solutions" onerror="this.style.display='none'">
+      <span>Dryspace Solutions — Site Inspections</span>
+    </div>
+  </header>
+  <div class="home-wrap">
+    <div class="home-head">
+      <h1>Inspections on this device</h1>
+      <button class="btn btn-primary" onclick="newInspection()">＋ New inspection</button>
+    </div>
+    <div id="insp-list"></div>
+    <div class="home-foot">
+      <label class="btn" style="cursor:pointer">Import draft / report / backup
+        <input type="file" accept=".json,.html,application/json,text/html" style="display:none" onchange="importFile(this)">
+      </label>
+      <button class="btn btn-ghost" onclick="exportBackup()">Download data backup (all inspections)</button>
+      <div id="storage-note" class="storage-note"></div>
+      <div class="ver-note">Dryspace Inspection App v1.0 · Form v4 · Works fully offline<br>Data stays on this device until you tap Send. Delete only after the report has been sent.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ FORM SCREEN ══════════ -->
+<div id="screen-form" class="screen" style="display:none">
+  <header class="form-top">
+    <button class="btn btn-ghost" onclick="goHome()">‹ All</button>
+    <div class="ft-mid">
+      <div class="ft-title" id="ft-title">Inspection</div>
+      <div class="save-status" id="save-status"></div>
+    </div>
+    <div class="ft-actions">
+      <span class="ft-badge bg-draft" id="ft-badge">DRAFT</span>
+      <button class="btn" id="btn-status" onclick="toggleComplete()">Mark complete</button>
+      <button class="btn btn-primary" onclick="shareReport()">Send</button>
+    </div>
+  </header>
+  <div class="form-scroll" id="form-root">
+<div class="form-wrap">
+  <div class="form-header">
+    <div>
+      <div class="form-title">Site Inspection Form</div>
+      <div class="form-sub">Complete all applicable sections during or immediately after the site visit. Leave non-applicable fields blank.</div>
+    </div>
+    <div class="logo-wrap"><img src="https://dryspace.com.au/wp-content/uploads/2020/09/dryspace_logo.png" alt="Dryspace Solutions" onerror="this.style.display='none'"></div>
+  </div>
+
+  <div class="progress-bar"><div class="progress-fill" id="prog"></div></div>
+  
+
+  <!-- ══════════ SECTION 01 ══════════ -->
+  <div class="section" id="s1">
+    <div class="section-header" onclick="tog('s1')">
+      <span class="section-num">01</span><span class="section-title">Job & Client Details</span><span class="chevron open" id="c-s1">&#9660;</span>
+    </div>
+    <div class="section-body open" id="b-s1">
+      <div class="two-col">
+        <div class="field-group"><label class="fl">Inspection date</label><input type="date"></div>
+        <div class="field-group"><label class="fl">Inspector name</label><input type="text" placeholder="e.g. Jamie Stone"></div>
+      </div>
+      <div class="two-col">
+        <div class="field-group"><label class="fl">Inspection number</label><input type="text" placeholder="e.g. INS-042"></div>
+        <div class="field-group"><label class="fl">Lead source</label>
+          <select><option value="">— select —</option><option>Website enquiry</option><option>Referral</option><option>Repeat client</option><option>Builder referral</option><option>Real estate agent</option><option>Google</option><option>Other</option></select>
+        </div>
+      </div>
+      <hr class="divider">
+      <div class="sub-label">Client details</div>
+      <div class="field-group">
+        <label class="fl">Client / job history</label>
+        <div class="cb-group">
+          <label class="cbl hi"><input type="checkbox" class="existing-cb" onchange="togExisting()"><span>Existing / previous client</span></label>
+          <label class="cbl hi"><input type="checkbox" class="existing-cb" onchange="togExisting()"><span>Existing / previous job at this address</span></label>
+        </div>
+        <div class="dynamic-reveal" id="existing-fields">
+          <div class="two-col">
+            <div class="field-group"><label class="fl">Previous proposal / job number(s)</label><input type="text" placeholder="e.g. 150, 163"></div>
+            <div class="field-group"><label class="fl">Previous works completed</label><input type="text" placeholder="e.g. Newton System 500 to rear wall — June 2025"></div>
+          </div>
+        </div>
+      </div>
+      <div class="two-col">
+        <div class="field-group"><label class="fl">Client name(s)</label><input type="text" placeholder="Full name(s) as they should appear on quote"></div>
+        <div class="field-group"><label class="fl">Company / body corporate name <span class="lh">(if applicable)</span></label><input type="text"></div>
+      </div>
+      <div class="two-col">
+        <div class="field-group"><label class="fl">Client email</label><input type="text" placeholder="email@example.com"></div>
+        <div class="field-group"><label class="fl">Client phone / mobile</label><input type="text" placeholder="04xx xxx xxx"></div>
+      </div>
+      <div class="field-group"><label class="fl">Copy quote to (CC) <span class="lh">(e.g. partner, property manager, builder)</span></label><input type="text" placeholder="Name and email"></div>
+      <hr class="divider">
+      <div class="sub-label">Property details</div>
+      <div class="field-group"><label class="fl">Building / complex name <span class="lh">(if applicable)</span></label><input type="text" placeholder="e.g. Marosa Lodge, Iconic Kirra Beach Resort, REALM Kangaroo Point"></div>
+      <div class="field-group"><label class="fl">Property address</label><input type="text" placeholder="Full street address incl. unit number, suburb, state, postcode"></div>
+      <div class="three-col">
+        <div class="field-group">
+          <label class="fl">Property type</label>
+          <select id="prop-type-sel" onchange="togSel('prop-type-sel','prop-type-oth')">
+            <option value="">— select —</option><option>Detached house</option><option>Duplex / townhouse</option><option>Apartment / unit</option><option>Apartment complex / body corporate</option><option>Commercial building</option><option>Industrial / warehouse</option><option>Aged care / institutional</option><option>Heritage building</option><option>Other</option>
+          </select>
+          <div class="other-input" id="prop-type-oth"><input type="text" placeholder="Describe property type..."></div>
+        </div>
+        <div class="field-group"><label class="fl">Approximate age of building</label><input type="text" placeholder="e.g. 15–20 years"></div>
+        <div class="field-group"><label class="fl">Client relationship to property</label>
+          <select><option value="">— select —</option><option>Owner-occupier</option><option>Landlord / investor</option><option>Body corporate rep</option><option>Builder / contractor</option><option>Property manager</option><option>Strata manager</option><option>Other</option></select>
+        </div>
+      </div>
+      <div class="field-group">
+        <label class="fl">Photo — front of property</label>
+        <div class="upload-area" onclick="document.getElementById('prop-photo').click()">
+          <input type="file" id="prop-photo" accept="image/*" multiple onchange="prevImgs(this,'prop-photo-prev')">
+          <div class="upload-hint"><strong>Click to upload</strong> — property exterior photo(s)<br>JPG, PNG, HEIC supported</div>
+        </div>
+        <div class="img-preview" id="prop-photo-prev"></div>
+      </div>
+      <div class="field-group">
+        <label class="fl">Current use of affected area</label>
+        <div class="cb-group">
+          <label class="cbl"><input type="checkbox"> Habitable room(s)</label>
+          <label class="cbl"><input type="checkbox"> Garage (residential)</label>
+          <label class="cbl"><input type="checkbox"> Multi-res garage / body corporate carpark</label>
+          <label class="cbl"><input type="checkbox"> Commercial basement carpark</label>
+          <label class="cbl"><input type="checkbox"> Storage</label>
+          <label class="cbl"><input type="checkbox"> Utility / plant room</label>
+          <label class="cbl"><input type="checkbox"> UPS / electrical room</label>
+          <label class="cbl"><input type="checkbox"> Being renovated / converted</label>
+          <label class="cbl"><input type="checkbox" onchange="togCb(this,'use-oth')"> Other</label>
+        </div>
+        <div class="other-input" id="use-oth"><input type="text" placeholder="Describe current use..."></div>
+      </div>
+      <div class="other-info-box">
+        <label class="fl">01 — Job & Client Details: Other Relevant Information</label>
+        <textarea placeholder="Any additional client or property detail not captured above..."></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ SECTION 02 ══════════ -->
+  <div class="section" id="s2">
+    <div class="section-header" onclick="tog('s2')">
+      <span class="section-num">02</span><span class="section-title">Client Brief — What the Client Told Us</span><span class="chevron open" id="c-s2">&#9660;</span>
+    </div>
+    <div class="section-body open" id="b-s2">
+      <div class="field-group"><label class="fl">What problem(s) has the client reported? <span class="lh">(in their words)</span></label><textarea placeholder="e.g. Water leaking across floor during heavy rain, musty smell, mould on walls..."></textarea></div>
+      <div class="two-col">
+        <div class="field-group"><label class="fl">How long has the problem been occurring?</label><input type="text" placeholder="e.g. 3 years, since they moved in"></div>
+        <div class="field-group"><label class="fl">Is the problem getting better, worse, or the same?</label>
+          <select><option value="">— select —</option><option>Getting worse</option><option>Same / consistent</option><option>Getting better</option><option>Intermittent / unpredictable</option></select>
+        </div>
+      </div>
+      <div class="field-group">
+        <label class="fl">What triggers or worsens the leak?</label>
+        <div class="cb-group">
+          <label class="cbl"><input type="checkbox"> Heavy rain events</label>
+          <label class="cbl"><input type="checkbox"> Sustained / prolonged rain</label>
+          <label class="cbl"><input type="checkbox"> Wind-driven rain (specific direction)</label>
+          <label class="cbl"><input type="checkbox"> Present even in dry weather</label>
+          <label class="cbl"><input type="checkbox"> Unknown / uncertain</label>
+          <label class="cbl"><input type="checkbox" onchange="togCb(this,'trigger-oth')"> Other</label>
+        </div>
+        <div class="other-input" id="trigger-oth"><input type="text" placeholder="Describe trigger..."></div>
+      </div>
+      <div class="field-group">
+        <label class="fl">What is the impact on the client?</label>
+        <div class="cb-group">
+          <label class="cbl"><input type="checkbox"> Untenantable / uninhabitable</label>
+          <label class="cbl"><input type="checkbox"> Loss of rental / Airbnb income</label>
+          <label class="cbl"><input type="checkbox"> Damage to belongings / equipment</label>
+          <label class="cbl"><input type="checkbox"> Health / mould concern</label>
+          <label class="cbl"><input type="checkbox"> Planned renovation / conversion</label>
+          <label class="cbl"><input type="checkbox"> Building or insurance dispute</label>
+          <label class="cbl"><input type="checkbox" onchange="togCb(this,'impact-oth')"> Other</label>
+        </div>
+        <div class="other-input" id="impact-oth"><input type="text" placeholder="Describe impact..."></div>
+      </div>
+      <div class="field-group"><label class="fl">Has the client made any previous repair attempts?</label><textarea placeholder="e.g. Applied negative hydrostatic paint internally, installed external drainage, previous contractor used injection..."></textarea></div>
+      <div class="field-group">
+        <label class="fl">Client-supplied documents, photos or reports <span class="lh">(upload any files provided)</span></label>
+        <div class="upload-area" onclick="document.getElementById('client-docs').click()">
+          <input type="file" id="client-docs" multiple accept="image/*,.pdf,.doc,.docx" onchange="listFiles(this,'client-docs-list')">
+          <div class="upload-hint"><strong>Click to upload</strong> — photos, previous reports, plans, invoices<br>JPG, PNG, PDF, DOC accepted — multiple files supported</div>
+        </div>
+        <div class="file-list" id="client-docs-list"></div>
+      </div>
+      <div class="field-group"><label class="fl">Desired outcome / client's goal</label><textarea placeholder="e.g. Permanently dry garage for use as habitable space, Grade 3 habitable area, protect belongings..."></textarea></div>
+      <div class="other-info-box">
+        <label class="fl">02 — Client Brief: Other Relevant Information</label>
+        <textarea placeholder="Any additional context from the client conversation not captured above..."></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ SECTION 03 ══════════ -->
+  <div class="section" id="s3">
+    <div class="section-header" onclick="tog('s3')">
+      <span class="section-num">03</span><span class="section-title">Site & Structural Overview</span><span class="chevron open" id="c-s3">&#9660;</span>
+    </div>
+    <div class="section-body open" id="b-s3">
+      <div class="two-col">
+        <div class="field-group">
+          <label class="fl">Basement structure type <span class="guide-ref">Guide p.6</span></label>
+          <select id="bst-sel" onchange="togSel('bst-sel','bst-oth')">
+            <option value="">— select —</option>
+            <option>Basement — one or more floors partly or fully below ground floor</option>
+            <option>Sub-basement — additional level below first basement (deep basement)</option>
+            <option>Daylight basement — part above external ground, with windows / light wells</option>
+            <option>Walk-out basement — accessible from ground level on at least one side</option>
+            <option>Cellar — below ground, designed to remain cool</option>
+            <option>Crawl space — access-only, cannot stand upright</option>
+            <option>Other</option>
+          </select>
+          <div class="other-input" id="bst-oth"><input type="text" placeholder="Describe structure type..."></div>
+        </div>
+        <div class="field-group"><label class="fl">Block orientation / slope</label>
+          <select><option value="">— select —</option><option>Slopes front to rear (street at front)</option><option>Slopes rear to front (street at bottom)</option><option>Slopes side to side</option><option>Relatively flat</option><option>Complex / multi-directional</option></select>
+        </div>
+      </div>
+      <div class="field-group">
+        <label class="fl">Is natural drainage available? <span class="lh">(walk-out basement — avoids sump and pump)</span></label>
+        <div class="cb-group">
+          <label class="cbl"><input type="radio" name="natdrain"> Yes</label>
+          <label class="cbl"><input type="radio" name="natdrain"> No — sump and pump likely required</label>
+          <label class="cbl"><input type="radio" name="natdrain"> TBC</label>
+        </div>
+      </div>
+      <div class="field-group">
+        <label class="fl">Required waterproofing grade <span class="guide-ref">Guide p.8</span></label>
+        <div class="cb-group">
+          <label class="cbl"><input type="radio" name="grade"> Grade 1 — non-habitable, some seepage tolerable (e.g. commercial carpark)</label>
+          <label class="cbl"><input type="radio" name="grade"> Grade 2 — no water penetration, damp areas tolerable (e.g. plant rooms, storage)</label>
+          <label class="cbl"><input type="radio" name="grade"> Grade 3 — no water or moisture, habitable space (e.g. bedrooms, gym, media room)</label>
+        </div>
+      </div>
+      <hr class="divider">
+      <div class="sub-label">Wall construction <span class="guide-ref">Guide p.7</span></div>
+      <div class="field-group">
+        <label class="fl">Basement construction type</label>
+        <select id="bct-sel" onchange="togSel('bct-sel','bct-oth')">
+          <option value="">— select —</option>
+          <option>In-situ concrete — timber formwork (best for waterproofing)</option>
+          <option>In-situ concrete — permanent formwork (e.g. Dincel, AFS)</option>
+          <option>Block and brick walls — core-filled</option>
+          <option>Earth retaining walls — blocks, bricks, timber, rock, concrete</option>
+          <option>Pile construction — drilled / poured or driven</option>
+          <option>Other</option>
+        </select>
+        <div class="other-input" id="bct-oth"><input type="text" placeholder="Describe construction type..."></div>
+      </div>
+      <div class="field-group">
+        <label class="fl">Retaining wall material(s)</label>
+        <div class="cb-group">
+          <label class="cbl"><input type="checkbox"> Blockwork — core-filled (assumed)</label>
+          <label class="cbl"><input type="checkbox"> Blockwork — hollow (unconfirmed)</label>
+          <label class="cbl"><input type="checkbox"> Brick</label>
+          <label class="cbl"><input type="checkbox"> Poured in-situ concrete</label>
+          <label class="cbl"><input type="checkbox"> Shotcrete</label>
+          <label class="cbl"><input type="checkbox"> Edge beam / slab edge only</label>
+          <label class="cbl"><input type="checkbox"> Timber / rock / mixed</label>
+          <label class="cbl"><input type="checkbox"> Unknown</label>
+          <label class="cbl"><input type="checkbox" onchange="togCb(this,'wallmat-oth')"> Other</label>
+        </div>
+        <div class="other-input" id="wallmat-oth"><input type="text" placeholder="Describe wall material..."></div>
+      </div>
+      <div class="field-group"><label class="fl">Approximate retained soil height (per wall face where known)</label><textarea placeholder="e.g. Eastern wall ~500mm, Southern wall full height ~2400mm, Northern open elevation..."></textarea></div>
+      <div class="field-group">
+        <label class="fl">Evidence of previous external waterproofing membrane?</label>
+        <div class="cb-group">
+          <label class="cbl"><input type="radio" name="extmem"> Yes — appears intact</label>
+          <label class="cbl"><input type="radio" name="extmem"> Yes — appears failed / deteriorated</label>
+          <label class="cbl"><input type="radio" name="extmem"> No — no evidence</label>
+          <label class="cbl"><input type="radio" name="extmem"> Unable to assess</label>
+        </div>
+      </div>
+      <div class="field-group">
+        <label class="fl">Condensation / moisture vapour management concern? <span class="guide-ref">Guide p.10</span></label>
+        <div class="cb-group">
+          <label class="cbl"><input type="radio" name="condmv"> Yes — moisture sensitive linings planned or present (NCC 3.8.7.2b applies)</label>
+          <label class="cbl"><input type="radio" name="condmv"> No — ventilated / non-habitable space</label>
+          <label class="cbl"><input type="radio" name="condmv"> TBC</label>
+        </div>
+      </div>
+      <hr class="divider">
+      <div class="sub-label">Floor / slab <span class="guide-ref">Guide p.7</span></div>
+      <div class="two-col">
+        <div class="field-group">
+          <label class="fl">Slab design</label>
+          <select id="slab-sel" onchange="togSel('slab-sel','slab-oth')">
+            <option value="">— select —</option>
+            <option>Infill slab — poured within perimeter walls (creates wall/floor junction weakness)</option>
+            <option>Raft slab — walls set on top of slab (preferred for water resistance)</option>
+            <option>Unknown / TBC</option>
+            <option>Other</option>
+          </select>
+          <div class="other-input" id="slab-oth"><input type="text" placeholder="Describe slab design..."></div>
+        </div>
+        <div class="field-group"><label class="fl">Slab thickness <span class="lh">(known or assumed)</span></label><input type="text" placeholder="e.g. Approx 100mm assumed, TBC via scan"></div>
+      </div>
+      <div class="two-col">
+        <div class="field-group">
+          <label class="fl">Floor finish</label>
+          <select id="flrfin-sel" onchange="togSel('flrfin-sel','flrfin-oth')">
+            <option value="">— select —</option><option>Exposed / polished concrete</option><option>Tiles</option><option>Carpet</option><option>Vinyl / floating floor</option><option>Epoxy coated</option><option>Bare concrete</option><option>Timber boards</option><option>Other</option>
+          </select>
+          <div class="other-input" id="flrfin-oth"><input type="text" placeholder="Describe floor finish..."></div>
+        </div>
+        <div class="field-group"><label class="fl">Moisture vapour barrier under slab?</label>
+          <select><option value="">— select —</option><option>Assumed yes (habitable construction standard)</option><option>Likely no</option><option>Unknown</option></select>
+        </div>
+      </div>
+      <div class="field-group">
+        <label class="fl">Slab condition <span class="lh">(assess each item)</span></label>
+        <textarea placeholder="Surface condition: (e.g. clean, contaminated, coated, painted, sealed)&#10;Falls / levels: (e.g. adequate falls, low spots, ponding areas)&#10;Contaminants: (e.g. oil, paint, existing coatings — note location)&#10;Fixings in floor: (e.g. bolts, conduits, posts — note positions relative to wall)&#10;Obstructions: (e.g. plumbing penetrations, drain locations, built-up areas)&#10;Dividing walls / internal walls: (e.g. stud walls on slab, built-in structures affecting drainage run)"></textarea>
+      </div>
+      <hr class="divider">
+      <div class="sub-label">Access & site conditions</div>
+      <div class="two-col">
+        <div class="field-group"><label class="fl">Internal ceiling height</label><input type="text" placeholder="e.g. Approx 2410mm"></div>
+        <div class="field-group"><label class="fl">Inspection conducted during / after rain?</label>
+          <select><option value="">— select —</option><option>Yes — active rain during inspection</option><option>No — dry conditions</option><option>Shortly after rain event</option></select>
+        </div>
+      </div>
+      <div class="field-group"><label class="fl">Access notes / constraints</label><textarea placeholder="e.g. Stair landing hard up against wall, garage very full — partial access only, mini-scaffold required for upper areas..."></textarea></div>
+      <div class="field-group"><label class="fl">Structural concerns noted <span class="lh">(not a structural assessment — flag only)</span></label><textarea placeholder="e.g. Cracked or drummy concrete under stairs. Spalling concrete at corner. No major structural concerns apparent..."></textarea></div>
+      <div class="field-group">
+        <label class="fl">Surrounding site factors <span class="guide-ref">Guide p.12</span></label>
+        <div class="cb-group">
+          <label class="cbl"><input type="checkbox"> Gutters / downpipes — condition checked</label>
+          <label class="cbl"><input type="checkbox"> Surface drainage anomalies</label>
+          <label class="cbl"><input type="checkbox"> Plumbing / water supply leak suspected</label>
+          <label class="cbl"><input type="checkbox"> Tree root proximity / invasive root risk</label>
+          <label class="cbl"><input type="checkbox"> A/C condensate lines near affected area</label>
+          <label class="cbl"><input type="checkbox"> Adjacent structures / party walls</label>
+          <label class="cbl"><input type="checkbox"> High overland water flow</label>
+          <label class="cbl"><input type="checkbox"> Natural spring / volcanic geology</label>
+          <label class="cbl"><input type="checkbox"> Zero boundary / limited excavation access</label>
+          <label class="cbl"><input type="checkbox" onchange="togCb(this,'site-oth')"> Other</label>
+        </div>
+        <div class="other-input" id="site-oth"><input type="text" placeholder="Describe site factor..."></div>
+      </div>
+      <div class="other-info-box">
+        <label class="fl">03 — Site & Structural Overview: Other Relevant Information</label>
+        <textarea placeholder="Any additional site, structural or access detail not captured above..."></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ SECTION 04 ══════════ -->
+  <div class="section" id="s4">
+    <div class="section-header" onclick="tog('s4')">
+      <span class="section-num">04</span><span class="section-title">Inspection Observations — Water Ingress</span><span class="chevron open" id="c-s4">&#9660;</span>
+    </div>
+    <div class="section-body open" id="b-s4">
+      <div class="field-group">
+        <label class="fl">Were active water leaks present during the inspection?</label>
+        <div class="cb-group">
+          <label class="cbl"><input type="radio" name="activeleak"> Yes — free water actively leaking</label>
+          <label class="cbl"><input type="radio" name="activeleak"> No — dry at time of inspection</label>
+          <label class="cbl"><input type="radio" name="activeleak"> Evidence of recent leaks only</label>
+        </div>
+      </div>
+      <div class="field-group">
+        <label class="fl">Primary sources / locations of water ingress identified</label>
+        <div class="cb-group">
+          <label class="cbl"><input type="checkbox"> Wall / floor junction (infill slab)</label>
+          <label class="cbl"><input type="checkbox"> Through retaining walls</label>
+          <label class="cbl"><input type="checkbox"> Through floor / slab cracks</label>
+          <label class="cbl"><input type="checkbox"> At wall / wall junctions (corners)</label>
+          <label class="cbl"><input type="checkbox"> Around pipe penetrations</label>
+          <label class="cbl"><input type="checkbox"> At cold joints / construction joints</label>
+          <label class="cbl"><input type="checkbox"> Through slab from above (inter-level)</label>
+          <label class="cbl"><input type="checkbox"> At perished external joint sealants</label>
+          <label class="cbl"><input type="checkbox"> Over wall top / inadequate upturn</label>
+          <label class="cbl"><input type="checkbox"> Rising damp (capillary wicking)</label>
+          <label class="cbl"><input type="checkbox"> Condensation / moisture vapour only</label>
+          <label class="cbl"><input type="checkbox"> Interstitial condensation (between wall layers)</label>
+          <label class="cbl"><input type="checkbox"> Unknown / TBC</label>
+          <label class="cbl"><input type="checkbox" onchange="togCb(this,'ingress-oth')"> Other</label>
+        </div>
+        <div class="other-input" id="ingress-oth"><input type="text" placeholder="Describe ingress source..."></div>
+      </div>
+      <div class="field-group"><label class="fl">Describe the affected areas in detail <span class="lh">(compass directions, room names, dimensions)</span></label><textarea placeholder="e.g. Eastern wall from bathroom to stairs — approx 500mm high. Southern wall full height. Water penetration worst at south-east corner wall/floor junction..."></textarea></div>
+      <hr class="divider">
+      <div class="sub-label">Signs of moisture — walls <span class="guide-ref">Guide p.13</span></div>
+      <div class="field-group">
+        <div class="cb-group">
+          <label class="cbl"><input type="checkbox"> Active water leaks (free water)</label>
+          <label class="cbl"><input type="checkbox"> Damp patches on walls</label>
+          <label class="cbl"><input type="checkbox"> Efflorescence (white mineral salt deposits)</label>
+          <label class="cbl"><input type="checkbox"> Groundwater / rust staining</label>
+          <label class="cbl"><input type="checkbox"> Bubbling / blistering paint</label>
+          <label class="cbl"><input type="checkbox"> Delaminated render or coatings</label>
+          <label class="cbl"><input type="checkbox"> Drummy render or plaster</label>
+          <label class="cbl"><input type="checkbox"> Mould / mildew on walls</label>
+          <label class="cbl"><input type="checkbox"> Moisture wicking in blockwork</label>
+          <label class="cbl"><input type="checkbox"> Previous repair coatings (failed)</label>
+          <label class="cbl"><input type="checkbox" onchange="togCb(this,'wall-signs-oth')"> Other</label>
+        </div>
+        <div class="other-input" id="wall-signs-oth"><input type="text" placeholder="Describe wall moisture sign..."></div>
+      </div>
+      <div class="subsec-photos">
+        <label class="fl">Photos / video — wall moisture signs</label>
+        <div class="upload-area" onclick="document.getElementById('wall-signs-media').click()">
+          <input type="file" id="wall-signs-media" accept="image/*,video/*" multiple onchange="prevImgs(this,'wall-signs-prev')">
+          <div class="upload-hint"><strong>Click to upload</strong> photos or video of wall moisture signs — JPG, PNG, HEIC, MP4</div>
+        </div>
+        <div class="img-preview" id="wall-signs-prev"></div>
+      </div>
+      <hr class="divider">
+      <div class="sub-label">Signs of moisture — floors and timbers <span class="guide-ref">Guide p.13</span></div>
+      <div class="field-group">
+        <div class="cb-group">
+          <label class="cbl"><input type="checkbox"> Active water pooling on floor</label>
+          <label class="cbl"><input type="checkbox"> Moisture staining / tide marks</label>
+          <label class="cbl"><input type="checkbox"> Efflorescence on floor</label>
+          <label class="cbl"><input type="checkbox"> Visible cracks in slab</label>
+          <label class="cbl"><input type="checkbox"> Drummy / hollow concrete</label>
+          <label class="cbl"><input type="checkbox"> Damaged floor coverings (carpet, vinyl, tiles)</label>
+          <label class="cbl"><input type="checkbox"> Rotting timbers / architraves / skirtings</label>
+          <label class="cbl"><input type="checkbox"> Corroded steel elements</label>
+          <label class="cbl"><input type="checkbox"> Termite risk from moisture</label>
+          <label class="cbl"><input type="checkbox" onchange="togCb(this,'floor-signs-oth')"> Other</label>
+        </div>
+        <div class="other-input" id="floor-signs-oth"><input type="text" placeholder="Describe floor / timber moisture sign..."></div>
+      </div>
+      <div class="subsec-photos">
+        <label class="fl">Photos / video — floor and timber moisture signs</label>
+        <div class="upload-area" onclick="document.getElementById('floor-signs-media').click()">
+          <input type="file" id="floor-signs-media" accept="image/*,video/*" multiple onchange="prevImgs(this,'floor-signs-prev')">
+          <div class="upload-hint"><strong>Click to upload</strong> photos or video of floor and timber moisture signs</div>
+        </div>
+        <div class="img-preview" id="floor-signs-prev"></div>
+      </div>
+      <hr class="divider">
+      <div class="sub-label">Other moisture indicators</div>
+      <div class="field-group">
+        <div class="cb-group">
+          <label class="cbl"><input type="checkbox"> Musty / mouldy smell</label>
+          <label class="cbl"><input type="checkbox"> High moisture readings (meter used)</label>
+          <label class="cbl"><input type="checkbox"> Condensation forming on surfaces</label>
+          <label class="cbl"><input type="checkbox"> High humidity / stale air</label>
+          <label class="cbl"><input type="checkbox" onchange="togCb(this,'other-indicators-oth')"> Other</label>
+        </div>
+        <div class="other-input" id="other-indicators-oth"><input type="text" placeholder="Describe other moisture indicator..."></div>
+      </div>
+      <div class="subsec-photos">
+        <label class="fl">Photos / video — other moisture indicators</label>
+        <div class="upload-area" onclick="document.getElementById('other-indicators-media').click()">
+          <input type="file" id="other-indicators-media" accept="image/*,video/*" multiple onchange="prevImgs(this,'other-indicators-prev')">
+          <div class="upload-hint"><strong>Click to upload</strong> photos or video of other moisture indicators</div>
+        </div>
+        <div class="img-preview" id="other-indicators-prev"></div>
+      </div>
+      <hr class="divider">
+      <div class="field-group">
+        <label class="fl">Floor crack assessment</label>
+        <div class="cb-group">
+          <label class="cbl"><input type="radio" name="flrcracks"> Cracks present — assessed as active water pathway</label>
+          <label class="cbl"><input type="radio" name="flrcracks"> Cracks present — not assessed as active (monitor)</label>
+          <label class="cbl"><input type="radio" name="flrcracks"> Cracks present — could not assess (floor covered)</label>
+          <label class="cbl"><input type="radio" name="flrcracks"> No significant cracks noted</label>
+        </div>
+      </div>
+      <div class="field-group"><label class="fl">Additional observations</label><textarea placeholder="e.g. Existing negative hydrostatic coatings applied to lower courses — failed. Stairs prevent full wall access behind landing. Heavy efflorescence preventing direct membrane application..."></textarea></div>
+      <div class="other-info-box">
+        <label class="fl">04 — Inspection Observations: Other Relevant Information</label>
+        <textarea placeholder="Any additional observations, anomalies or items to flag that don't fit the categories above..."></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ SECTION 05 ══════════ -->
+  <div class="section" id="s5">
+    <div class="section-header" onclick="tog('s5')">
+      <span class="section-num">05</span><span class="section-title">Assessment — Likely Causes & Moisture Sources</span><span class="chevron open" id="c-s5">&#9660;</span>
+    </div>
+    <div class="section-body open" id="b-s5">
+      <div class="field-group">
+        <label class="fl">Moisture source(s) identified <span class="guide-ref">Guide p.14</span></label>
+        <div class="cb-group">
+          <label class="cbl"><input type="checkbox"> Ground water (water within the ground / earth)</label>
+          <label class="cbl"><input type="checkbox"> Surface water (not yet penetrated ground)</label>
+          <label class="cbl"><input type="checkbox"> Rising damp (capillary wicking through masonry)</label>
+          <label class="cbl"><input type="checkbox"> Moisture vapour transmission (through substrate)</label>
+          <label class="cbl"><input type="checkbox"> Condensation (humidity / dew point)</label>
+          <label class="cbl"><input type="checkbox"> Interstitial condensation (between wall layers)</label>
+          <label class="cbl"><input type="checkbox"> General occupancy moisture (laundry, cooking, etc.)</label>
+          <label class="cbl"><input type="checkbox" onchange="togCb(this,'moisture-src-oth')"> Other</label>
+        </div>
+        <div class="other-input" id="moisture-src-oth"><input type="text" placeholder="Describe moisture source..."></div>
+      </div>
+      <div class="field-group">
+        <label class="fl">Contributing structural / design factors</label>
+        <div class="cb-group">
+          <label class="cbl"><input type="checkbox"> Infill slab — inherent wall/floor junction weakness</label>
+          <label class="cbl"><input type="checkbox"> Failed / absent external membrane</label>
+          <label class="cbl"><input type="checkbox"> Porous wall construction (brick/block)</label>
+          <label class="cbl"><input type="checkbox"> High groundwater / saturated soil</label>
+          <label class="cbl"><input type="checkbox"> Perched water table</label>
+          <label class="cbl"><input type="checkbox"> Inadequate or failed external drainage</label>
+          <label class="cbl"><input type="checkbox"> High overland water flow</label>
+          <label class="cbl"><input type="checkbox"> Failed previous repair attempts</label>
+          <label class="cbl"><input type="checkbox"> Perished joint sealants (external)</label>
+          <label class="cbl"><input type="checkbox"> Cracked / drummy render (external)</label>
+          <label class="cbl"><input type="checkbox"> Ground levels too high over flashing / DPC</label>
+          <label class="cbl"><input type="checkbox"> Inadequate waterproofing upturn height</label>
+          <label class="cbl"><input type="checkbox"> Blocked or absent drainage</label>
+          <label class="cbl"><input type="checkbox"> Compromised damp proof course (DPC)</label>
+          <label class="cbl"><input type="checkbox"> Poor ventilation / condensation management</label>
+          <label class="cbl"><input type="checkbox"> Structural cracks in slab or walls</label>
+          <label class="cbl"><input type="checkbox"> Blind junction — wall to slab (construction defect)</label>
+          <label class="cbl"><input type="checkbox" onchange="togCb(this,'cause-oth')"> Other</label>
+        </div>
+        <div class="other-input" id="cause-oth"><input type="text" placeholder="Describe other contributing factor..."></div>
+      </div>
+      <div class="field-group"><label class="fl">Assessment notes <span class="lh">(explain contributing factors in plain language for the quote)</span></label><textarea placeholder="e.g. The infill slab creates a junction between wall and floor which is a known weak point. External membrane appears to have failed along the base of the eastern wall..."></textarea></div>
+      <div class="other-info-box">
+        <label class="fl">05 — Assessment: Other Relevant Information</label>
+        <textarea placeholder="Any additional assessment notes, unusual conditions or observations relating to cause..."></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ SECTION 06 ══════════ -->
+  <div class="section" id="s6">
+    <div class="section-header" onclick="tog('s6')">
+      <span class="section-num">06</span><span class="section-title">Existing Elements Requiring Attention</span><span class="chevron" id="c-s6">&#9660;</span>
+    </div>
+    <div class="section-body" id="b-s6">
+      <div class="field-group">
+        <label class="fl">Wall linings in the work area</label>
+        <div class="cb-group">
+          <label class="cbl"><input type="checkbox"> Plaster linings present — need removal</label>
+          <label class="cbl"><input type="checkbox"> Plaster already removed / substrate exposed</label>
+          <label class="cbl"><input type="checkbox"> Wall tiles — need removal</label>
+          <label class="cbl"><input type="checkbox"> Timber panelling / VJ board</label>
+          <label class="cbl"><input type="checkbox"> Stud framing present — partial removal needed</label>
+          <label class="cbl"><input type="checkbox"> No wall linings present</label>
+          <label class="cbl"><input type="checkbox" onchange="togCb(this,'walllining-oth')"> Other</label>
+        </div>
+        <div class="other-input" id="walllining-oth"><input type="text" placeholder="Describe wall lining..."></div>
+      </div>
+      <div class="field-group">
+        <label class="fl">Stairs and structural elements</label>
+        <div class="cb-group">
+          <label class="cbl"><input type="checkbox"> Timber stairs — partial removal likely needed</label>
+          <label class="cbl"><input type="checkbox"> Stair landing — may need temporary removal</label>
+          <label class="cbl"><input type="checkbox"> Structural support posts — need modification</label>
+          <label class="cbl"><input type="checkbox"> Support post — water damaged / need replacement</label>
+          <label class="cbl"><input type="checkbox" onchange="togCb(this,'stairs-oth')"> Other</label>
+        </div>
+        <div class="other-input" id="stairs-oth"><input type="text" placeholder="Describe stairs / structural element..."></div>
+      </div>
+      <div class="field-group">
+        <label class="fl">Services in the work area</label>
+        <div class="cb-group">
+          <label class="cbl"><input type="checkbox"> Power points / GPOs — electrical make-safe needed</label>
+          <label class="cbl"><input type="checkbox"> Light switches in work zone</label>
+          <label class="cbl"><input type="checkbox"> Data / comms cabling on walls</label>
+          <label class="cbl"><input type="checkbox"> Hot water system — may need isolation / removal</label>
+          <label class="cbl"><input type="checkbox"> Plumbing pipes through wall / slab</label>
+          <label class="cbl"><input type="checkbox"> Air conditioning unit on wall</label>
+          <label class="cbl"><input type="checkbox"> Solar / electrical panel on wall</label>
+          <label class="cbl"><input type="checkbox"> Termite barrier — needs integration</label>
+          <label class="cbl"><input type="checkbox"> UPS / critical electrical systems present</label>
+          <label class="cbl"><input type="checkbox" onchange="togCb(this,'services-oth')"> Other</label>
+        </div>
+        <div class="other-input" id="services-oth"><input type="text" placeholder="Describe service..."></div>
+      </div>
+      <div class="field-group">
+        <label class="fl">Built-in fixtures and cabinetry</label>
+        <div class="cb-group">
+          <label class="cbl"><input type="checkbox"> Built-in shelving / cabinetry — removal needed</label>
+          <label class="cbl"><input type="checkbox"> Laundry / kitchenette — removal and reinstatement</label>
+          <label class="cbl"><input type="checkbox"> Bathroom (full demolition likely required)</label>
+          <label class="cbl"><input type="checkbox"> Garage door and tracks — potential conflict</label>
+          <label class="cbl"><input type="checkbox" onchange="togCb(this,'fixtures-oth')"> Other</label>
+        </div>
+        <div class="other-input" id="fixtures-oth"><input type="text" placeholder="Describe fixture..."></div>
+      </div>
+      <div class="field-group">
+        <label class="fl">External elements affecting works</label>
+        <div class="cb-group">
+          <label class="cbl"><input type="checkbox"> Pavers or garden beds — need removal for drainage</label>
+          <label class="cbl"><input type="checkbox"> Timber fence — temporary removal needed</label>
+          <label class="cbl"><input type="checkbox"> Concrete path — cutting likely needed</label>
+          <label class="cbl"><input type="checkbox"> Scaffolding / elevated access required</label>
+          <label class="cbl"><input type="checkbox"> Soil / backfill — needs to be lowered</label>
+          <label class="cbl"><input type="checkbox" onchange="togCb(this,'extelem-oth')"> Other</label>
+        </div>
+        <div class="other-input" id="extelem-oth"><input type="text" placeholder="Describe external element..."></div>
+      </div>
+      <div class="field-group"><label class="fl">Notes on existing elements</label><textarea placeholder="e.g. Stair landing is hard up against wall — cannot waterproof behind. Cabinetry built-in — must be dismantled in sections. Electrical make-safe required before works commence..."></textarea></div>
+      <div class="other-info-box">
+        <label class="fl">06 — Existing Elements: Other Relevant Information</label>
+        <textarea placeholder="Any additional notes on elements, demolition complexity or access challenges not captured above..."></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ SECTION 07 ══════════ -->
+  <div class="section" id="s7">
+    <div class="section-header" onclick="tog('s7')">
+      <span class="section-num">07</span><span class="section-title">Repair Approach — Preliminary Recommendation</span><span class="chevron" id="c-s7">&#9660;</span>
+    </div>
+    <div class="section-body" id="b-s7">
+      <div class="field-group">
+        <label class="fl">Recommended waterproofing system type <span class="guide-ref">Guide p.9</span></label>
+        <div class="cb-group">
+          <label class="cbl"><input type="radio" name="repair"> Type A — Externally applied membrane (refer to specialist)</label>
+          <label class="cbl"><input type="radio" name="repair"> Type A — Negative hydrostatic membrane (internally applied)</label>
+          <label class="cbl"><input type="radio" name="repair"> Type A — Epoxy moisture barrier coatings (negative side)</label>
+          <label class="cbl"><input type="radio" name="repair"> Type B — High-pressure injection / water stoppage / structural grout</label>
+          <label class="cbl"><input type="radio" name="repair"> Type C — Newton System 500 Cavity Drain System (primary recommendation)</label>
+          <label class="cbl"><input type="radio" name="repair"> Combined — Type A + Type C (e.g. negative hydrostatic + cavity drain)</label>
+          <label class="cbl"><input type="radio" name="repair"> Combined — Type B + Type C (e.g. injection + cavity drain)</label>
+          <label class="cbl"><input type="radio" name="repair"> TBC — further investigation needed</label>
+        </div>
+      </div>
+      <div class="field-group">
+        <label class="fl">Drainage conduit method <span class="lh">(if Type C Cavity Drain System)</span></label>
+        <div class="cb-group">
+          <label class="cbl"><input type="radio" name="conduit"> Newton Bunded BaseDrain — channel set into floor (most robust, 10-yr warranty)</label>
+          <label class="cbl"><input type="radio" name="conduit"> Newton Rebated BaseDrain — rebate cut into slab perimeter</label>
+          <label class="cbl"><input type="radio" name="conduit"> Newton BaseBoard — slimline on-slab channel (7-yr warranty)</label>
+          <label class="cbl"><input type="radio" name="conduit"> TBC after concrete scan / engineer inspection</label>
+          <label class="cbl"><input type="radio" name="conduit"> N/A</label>
+        </div>
+      </div>
+      <div class="field-group">
+        <label class="fl">Is external waterproofing / excavation needed?</label>
+        <div class="cb-group">
+          <label class="cbl"><input type="radio" name="extworks"> No — internal solution sufficient</label>
+          <label class="cbl"><input type="radio" name="extworks"> Yes — refer to external specialist (not priced by Dryspace)</label>
+          <label class="cbl"><input type="radio" name="extworks"> Limited external works required (e.g. sealants, render — Dryspace to price)</label>
+        </div>
+      </div>
+      <div class="field-group"><label class="fl">Areas to be waterproofed <span class="lh">(start / end points, heights, wall elevations)</span></label><textarea placeholder="e.g. Start at left wall of garage next to sliding door, continue around full back wall and return to front right corner. Full ceiling height in stairwell, 1.0m high in storage area..."></textarea></div>
+      <div class="field-group">
+        <label class="fl">Additional recommended works</label>
+        <div class="cb-group">
+          <label class="cbl"><input type="checkbox"> Floor crack repair (epoxy)</label>
+          <label class="cbl"><input type="checkbox"> Epoxy moisture barrier floor coating</label>
+          <label class="cbl"><input type="checkbox"> Substrate / structural grout repairs</label>
+          <label class="cbl"><input type="checkbox"> External joint sealant repairs</label>
+          <label class="cbl"><input type="checkbox"> External render repair</label>
+          <label class="cbl"><input type="checkbox"> External drainage works</label>
+          <label class="cbl"><input type="checkbox"> DPC (damp proof course) to wall top</label>
+          <label class="cbl"><input type="checkbox"> Treatment of embedded / corroded steel</label>
+          <label class="cbl"><input type="checkbox"> Concrete cutting / channel drain at threshold</label>
+          <label class="cbl"><input type="checkbox"> High-pressure injection (crack repair)</label>
+          <label class="cbl"><input type="checkbox"> Water stoppage grout / hydraulic plug</label>
+          <label class="cbl"><input type="checkbox"> Bentonite injection</label>
+          <label class="cbl"><input type="checkbox"> Reinstatement (wall framing, plaster, paint)</label>
+          <label class="cbl"><input type="checkbox" onchange="togCb(this,'addlworks-oth')"> Other</label>
+        </div>
+        <div class="other-input" id="addlworks-oth"><input type="text" placeholder="Describe additional work..."></div>
+      </div>
+      <div class="field-group">
+        <label class="fl">Is a concrete scan / engineer inspection required? <span class="guide-ref">Guide p.15</span></label>
+        <div class="cb-group">
+          <label class="cbl"><input type="radio" name="scan"> Yes — Step 1 (concrete scan + structural engineer)</label>
+          <label class="cbl"><input type="radio" name="scan"> Yes — concrete scan only</label>
+          <label class="cbl"><input type="radio" name="scan"> No — not required</label>
+          <label class="cbl"><input type="radio" name="scan"> TBC</label>
+        </div>
+      </div>
+      <div class="field-group"><label class="fl">Demolition / preparation responsibilities</label><textarea placeholder="e.g. Client has offered to remove plaster linings himself. Builder to undertake demolition and reinstatement. All demolition by Dryspace..."></textarea></div>
+      <div class="field-group"><label class="fl">Preliminary notes on repair approach</label><textarea placeholder="e.g. Two options to be provided: Option 1 BaseBoard, Option 2 Bunded BaseDrain (preferred). Stairs to be partially removed and reinstated..."></textarea></div>
+      <div class="other-info-box">
+        <label class="fl">07 — Repair Approach: Other Relevant Information</label>
+        <textarea placeholder="Any additional repair methodology notes, design considerations or client preferences not captured above..."></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ SECTION 08 ══════════ -->
+  <div class="section" id="s8">
+    <div class="section-header" onclick="tog('s8')">
+      <span class="section-num">08</span><span class="section-title">Drainage Design</span><span class="chevron" id="c-s8">&#9660;</span>
+    </div>
+    <div class="section-body" id="b-s8">
+      <div class="field-group"><label class="fl">Drainage outlet locations identified</label><textarea placeholder="e.g. Left side of garage through external wall near window. Right side through wall to garden bed. Corehole required..."></textarea></div>
+      <div class="field-group">
+        <label class="fl">Drainage outlet type(s)</label>
+        <div class="cb-group">
+          <label class="cbl"><input type="checkbox"> Through wall to ground / garden (frog-flap)</label>
+          <label class="cbl"><input type="checkbox"> Into existing stormwater / pit drain</label>
+          <label class="cbl"><input type="checkbox"> Gravity / natural fall to external</label>
+          <label class="cbl"><input type="checkbox"> Non-return valve required</label>
+          <label class="cbl"><input type="checkbox"> Sump and pump required</label>
+          <label class="cbl"><input type="checkbox"> Channel drain at threshold</label>
+          <label class="cbl"><input type="checkbox"> Connection to stormwater by licensed plumber</label>
+          <label class="cbl"><input type="checkbox" onchange="togCb(this,'drain-oth')"> Other</label>
+        </div>
+        <div class="other-input" id="drain-oth"><input type="text" placeholder="Describe drainage outlet..."></div>
+      </div>
+      <div class="field-group"><label class="fl">Newton Jetting Eye positions <span class="lh">(for maintenance and flushing — BS8102 requirement)</span></label><textarea placeholder="e.g. Two jetting eyes — one at front left corner, one within services void at rear right..."></textarea></div>
+      <div class="other-info-box">
+        <label class="fl">08 — Drainage Design: Other Relevant Information</label>
+        <textarea placeholder="Any additional drainage notes, outlet constraints or design considerations..."></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ SECTION 09 ══════════ -->
+  <div class="section" id="s9">
+    <div class="section-header" onclick="tog('s9')">
+      <span class="section-num">09</span><span class="section-title">Reinstatement & Finishes</span><span class="chevron" id="c-s9">&#9660;</span>
+    </div>
+    <div class="section-body" id="b-s9">
+      <div class="field-group">
+        <label class="fl">Wall lining system post-waterproofing</label>
+        <div class="cb-group">
+          <label class="cbl"><input type="radio" name="walllining"> Metal furring channel (clips into Newton multiplugs — preferred)</label>
+          <label class="cbl"><input type="radio" name="walllining"> Timber stud wall in front of system (chemset bolts into slab)</label>
+          <label class="cbl"><input type="radio" name="walllining"> To be determined by client / builder</label>
+          <label class="cbl"><input type="radio" name="walllining"> Not applicable</label>
+        </div>
+      </div>
+      <div class="field-group">
+        <label class="fl">Is reinstatement to be included in Dryspace scope?</label>
+        <div class="cb-group">
+          <label class="cbl"><input type="radio" name="reinstate"> Yes — include in quotation</label>
+          <label class="cbl"><input type="radio" name="reinstate"> No — client / builder to reinstate</label>
+          <label class="cbl"><input type="radio" name="reinstate"> Partial — offer as optional add-on</label>
+        </div>
+      </div>
+      <div class="field-group">
+        <label class="fl">Reinstatement items to scope</label>
+        <div class="cb-group">
+          <label class="cbl"><input type="checkbox"> Furring channel / battens</label>
+          <label class="cbl"><input type="checkbox"> Plaster lining (set and sand)</label>
+          <label class="cbl"><input type="checkbox"> Cornice</label>
+          <label class="cbl"><input type="checkbox"> Skirtings</label>
+          <label class="cbl"><input type="checkbox"> Painting (internal)</label>
+          <label class="cbl"><input type="checkbox"> Wall tiles (reinstate)</label>
+          <label class="cbl"><input type="checkbox"> Floor tiles (reinstate)</label>
+          <label class="cbl"><input type="checkbox"> Electrical reconnect GPOs</label>
+          <label class="cbl"><input type="checkbox"> Plumbing reconnection</label>
+          <label class="cbl"><input type="checkbox"> Cabinetry / joinery</label>
+          <label class="cbl"><input type="checkbox"> Stair reinstatement</label>
+          <label class="cbl"><input type="checkbox"> Paver reinstatement</label>
+          <label class="cbl"><input type="checkbox"> VJ board / feature cladding</label>
+          <label class="cbl"><input type="checkbox"> New door and frame</label>
+          <label class="cbl"><input type="checkbox" onchange="togCb(this,'reinstate-oth')"> Other</label>
+        </div>
+        <div class="other-input" id="reinstate-oth"><input type="text" placeholder="Describe reinstatement item..."></div>
+      </div>
+      <div class="field-group">
+        <label class="fl">Insulation to be integrated? <span class="lh">(XPS panels recommended for moisture resistance)</span></label>
+        <div class="cb-group">
+          <label class="cbl"><input type="radio" name="insul"> Yes — XPS panels</label>
+          <label class="cbl"><input type="radio" name="insul"> No</label>
+          <label class="cbl"><input type="radio" name="insul"> To discuss with client</label>
+        </div>
+      </div>
+      <div class="field-group"><label class="fl">Notes on finishes / reinstatement</label><textarea placeholder="e.g. Client wants VJ board throughout garage. Paint codes to be provided for colour match. Existing tiles to be reused where possible. Services access panels needed at jetting eye locations..."></textarea></div>
+      <div class="other-info-box">
+        <label class="fl">09 — Reinstatement & Finishes: Other Relevant Information</label>
+        <textarea placeholder="Any additional reinstatement notes, finish preferences or trade coordination notes..."></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ SECTION 10 ══════════ -->
+  <div class="section" id="s10">
+    <div class="section-header" onclick="tog('s10')">
+      <span class="section-num">10</span><span class="section-title">Pricing & Timeline Notes</span><span class="chevron" id="c-s10">&#9660;</span>
+    </div>
+    <div class="section-body" id="b-s10">
+      <div class="two-col">
+        <div class="field-group"><label class="fl">Estimated duration of works</label><input type="text" placeholder="e.g. 3–4 working days"></div>
+        <div class="field-group"><label class="fl">Estimated start date / availability</label><input type="text" placeholder="e.g. Mid-February, ASAP, TBC after approval"></div>
+      </div>
+      <div class="field-group">
+        <label class="fl">QBCC Home Warranty Insurance required?</label>
+        <div class="cb-group">
+          <label class="cbl"><input type="radio" name="qbcc"> Yes — residential owner-client</label>
+          <label class="cbl"><input type="radio" name="qbcc"> No — engaged by licensed builder</label>
+          <label class="cbl"><input type="radio" name="qbcc"> TBC</label>
+        </div>
+      </div>
+      <div class="field-group"><label class="fl">Provisional sums or estimates required?</label><textarea placeholder="e.g. Provisional sum $500 for drummy concrete repair under stairs. Floor crack repair to be assessed on site. Bed-rock removal — TBC after engineer..."></textarea></div>
+      <div class="field-group"><label class="fl">Items to be excluded from scope</label><textarea placeholder="e.g. External drainage works to be completed by client's plumber. Reinstatement not included. Demolition to be completed by client..."></textarea></div>
+      <div class="field-group"><label class="fl">Items client specifically asked to be omitted</label><textarea placeholder="e.g. Client asked for pricing without bathroom inclusion. Client will do demolition himself..."></textarea></div>
+      <div class="other-info-box">
+        <label class="fl">10 — Pricing & Timeline: Other Relevant Information</label>
+        <textarea placeholder="Any additional pricing considerations, budget constraints or scheduling notes..."></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ SECTION 11 ══════════ -->
+  <div class="section" id="s11">
+    <div class="section-header" onclick="tog('s11')">
+      <span class="section-num">11</span><span class="section-title">Photos, Video & Documentation</span><span class="chevron" id="c-s11">&#9660;</span>
+    </div>
+    <div class="section-body" id="b-s11">
+      <div class="field-group"><label class="fl">Photos taken on site — describe key photos captured</label><textarea placeholder="e.g. Front of property, affected east wall showing efflorescence, active leak at wall/floor junction, floor cracks in storage area, external drainage area, plan sketch..."></textarea></div>
+      <div class="field-group">
+        <label class="fl">Upload site photos and video</label>
+        <div class="upload-area" onclick="document.getElementById('site-media').click()">
+          <input type="file" id="site-media" accept="image/*,video/*" multiple onchange="prevImgs(this,'site-media-prev')">
+          <div class="upload-hint"><strong>Click to upload</strong> site inspection photos and video — JPG, PNG, HEIC, MP4, MOV</div>
+        </div>
+        <div class="img-preview" id="site-media-prev"></div>
+      </div>
+      <hr class="divider">
+      <div class="field-group">
+        <label class="fl">Was a site sketch / floor plan drawn?</label>
+        <div class="cb-group">
+          <label class="cbl"><input type="radio" name="sketch"> Yes — attach below</label>
+          <label class="cbl"><input type="radio" name="sketch"> No — areas described in notes</label>
+        </div>
+      </div>
+      <div class="field-group">
+        <label class="fl">Upload sketch or floor plan <span class="lh">(if applicable)</span></label>
+        <div class="upload-area" onclick="document.getElementById('sketch-input').click()">
+          <input type="file" id="sketch-input" accept="image/*,.pdf" multiple onchange="listFiles(this,'sketch-list')">
+          <div class="upload-hint"><strong>Click to upload</strong> sketch, floor plan or photo markups</div>
+        </div>
+        <div class="file-list" id="sketch-list"></div>
+      </div>
+      <hr class="divider">
+      <div class="field-group">
+        <label class="fl">Was a 3D scan undertaken?</label>
+        <div class="cb-group">
+          <label class="cbl hi"><input type="checkbox" onchange="togCb(this,'scan-3d-fields')"><span>Yes — 3D scan completed</span></label>
+        </div>
+        <div class="other-input show" id="scan-3d-fields" style="display:none">
+          <div class="dynamic-reveal show" style="display:block;margin-top:8px">
+            <div class="field-group">
+              <label class="fl">App / software used for 3D scan</label>
+              <div class="cb-group">
+                <label class="cbl"><input type="radio" name="scan3d-app"> Magicplan</label>
+                <label class="cbl"><input type="radio" name="scan3d-app"> Bosch MeasureOn</label>
+                <label class="cbl"><input type="radio" name="scan3d-app"> Matterport</label>
+                <label class="cbl"><input type="radio" name="scan3d-app"> RoomScan Pro</label>
+                <label class="cbl"><input type="radio" name="scan3d-app" onchange="togCb(this,'scan3d-app-oth')"> Other</label>
+              </div>
+              <div class="other-input" id="scan3d-app-oth"><input type="text" placeholder="Name the app or software used..."></div>
+            </div>
+            <div class="field-group"><label class="fl">Scan file / export location or reference</label><input type="text" placeholder="e.g. Saved to job folder, shared via link, attached below..."></div>
+            <div class="field-group">
+              <label class="fl">Upload 3D scan file or exported floor plan <span class="lh">(if applicable)</span></label>
+              <div class="upload-area" onclick="document.getElementById('scan3d-file').click()">
+                <input type="file" id="scan3d-file" multiple accept="image/*,.pdf,.mp4,.mov,.zip" onchange="listFiles(this,'scan3d-file-list')">
+                <div class="upload-hint"><strong>Click to upload</strong> exported scan, floor plan or video walkthrough</div>
+              </div>
+              <div class="file-list" id="scan3d-file-list"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="other-info-box">
+        <label class="fl">11 — Photos & Documentation: Other Relevant Information</label>
+        <textarea placeholder="Any additional documentation notes, file locations or media reference details..."></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ SECTION 12 ══════════ -->
+  <div class="section" id="s12">
+    <div class="section-header" onclick="tog('s12')">
+      <span class="section-num">12</span><span class="section-title">Inspector Notes & Next Steps</span><span class="chevron" id="c-s12">&#9660;</span>
+    </div>
+    <div class="section-body" id="b-s12">
+      <div class="field-group"><label class="fl">General inspection notes / anything else to flag</label><textarea placeholder="e.g. Client mentioned they may want bathroom included — to follow up. Site is occupied — coordinate access with tenant. Two options to be provided for client to choose..."></textarea></div>
+      <div class="field-group">
+        <label class="fl">Follow-up actions before quote is prepared</label>
+        <div class="cb-group">
+          <label class="cbl"><input type="checkbox"> Confirm scope with client</label>
+          <label class="cbl"><input type="checkbox"> Obtain engineer / concrete scan quote</label>
+          <label class="cbl"><input type="checkbox"> Confirm drainage outlet / stormwater connection</label>
+          <label class="cbl"><input type="checkbox"> Obtain QBCC HWI premium rate</label>
+          <label class="cbl"><input type="checkbox"> Obtain reinstatement sub-quotes</label>
+          <label class="cbl"><input type="checkbox"> Confirm paint codes / tile match</label>
+          <label class="cbl"><input type="checkbox"> Review client-supplied plans or reports</label>
+          <label class="cbl"><input type="checkbox"> Confirm termite barrier integration with contractor</label>
+          <label class="cbl"><input type="checkbox" onchange="togCb(this,'followup-oth')"> Other</label>
+        </div>
+        <div class="other-input" id="followup-oth"><input type="text" placeholder="Describe follow-up action..."></div>
+      </div>
+      <div class="field-group"><label class="fl">Target date to have quote issued to client</label><input type="date"></div>
+      <div class="other-info-box">
+        <label class="fl">12 — Inspector Notes: Other Relevant Information</label>
+        <textarea placeholder="Any final notes, reminders or items to pass on to the quoting team..."></textarea>
+      </div>
+    </div>
+  </div>
+</div>
+    <div class="form-endbar">
+      <button class="btn btn-primary" onclick="shareReport()">Send report (email / SharePoint)</button>
+      <button class="btn" onclick="shareMedia()">Share photo &amp; video files</button>
+      <button class="btn" onclick="exportDraft()">Share draft (handover to field team)</button>
+      <button class="btn" onclick="window.print()">Print / PDF</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* Dryspace Site Inspection App v1.0 — offline-first PWA
+   Form content: v4 (Project 2.1). All data stored on-device in IndexedDB. */
+'use strict';
+var APP_VER = '1.1.0';
+var FORM_VER = '4.0';
+var LOGO = 'data:image/png;base64,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'; /* embedded Dryspace logo — set at build time; empty = use remote fallback */
+var DB_NAME = 'ds-inspections';
+var _db = null, cur = null, loading = false, saveTimer = null, savePending = false;
+var MEDIA_MAP = {}; // file-input id -> preview/list container id
+
+/* ---------- IndexedDB ---------- */
+function openDB(){
+  return new Promise(function(res, rej){
+    if(_db) return res(_db);
+    var rq = indexedDB.open(DB_NAME, 1);
+    rq.onupgradeneeded = function(e){
+      var db = e.target.result;
+      if(!db.objectStoreNames.contains('inspections')) db.createObjectStore('inspections', {keyPath:'id'});
+      if(!db.objectStoreNames.contains('media')){
+        var m = db.createObjectStore('media', {keyPath:'mid'});
+        m.createIndex('iid','iid',{unique:false});
+      }
+    };
+    rq.onsuccess = function(){ _db = rq.result; res(_db); };
+    rq.onerror = function(){ rej(rq.error); };
+  });
+}
+function tx(store, mode, fn){
+  return openDB().then(function(db){
+    return new Promise(function(res, rej){
+      var t = db.transaction(store, mode), s = t.objectStore(store), out = fn(s);
+      t.oncomplete = function(){ res(out && out._v !== undefined ? out._v : out); };
+      t.onerror = function(){ rej(t.error); };
+    });
+  });
+}
+function dbPut(store, rec){ return tx(store,'readwrite',function(s){ s.put(rec); }); }
+function dbDel(store, key){ return tx(store,'readwrite',function(s){ s.delete(key); }); }
+function dbGet(store, key){
+  return openDB().then(function(db){ return new Promise(function(res,rej){
+    var rq = db.transaction(store).objectStore(store).get(key);
+    rq.onsuccess = function(){ res(rq.result); }; rq.onerror = function(){ rej(rq.error); };
+  });});
+}
+function dbAll(store){
+  return openDB().then(function(db){ return new Promise(function(res,rej){
+    var rq = db.transaction(store).objectStore(store).getAll();
+    rq.onsuccess = function(){ res(rq.result || []); }; rq.onerror = function(){ rej(rq.error); };
+  });});
+}
+function mediaFor(iid){
+  return openDB().then(function(db){ return new Promise(function(res,rej){
+    var rq = db.transaction('media').objectStore('media').index('iid').getAll(iid);
+    rq.onsuccess = function(){ res((rq.result||[]).sort(function(a,b){return a.added-b.added;})); };
+    rq.onerror = function(){ rej(rq.error); };
+  });});
+}
+
+/* ---------- Utilities ---------- */
+function uuid(){
+  if(window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,function(c){
+    var r = Math.random()*16|0, v = c==='x'?r:(r&0x3|0x8); return v.toString(16); });
+}
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function txt(el){ return el ? el.textContent.replace(/\s+/g,' ').trim() : ''; }
+function labelText(l){
+  if(!l) return '';
+  var c = l.cloneNode(true);
+  c.querySelectorAll('.lh,.guide-ref').forEach(function(x){ x.remove(); });
+  return c.textContent.replace(/\s+/g,' ').trim();
+}
+function fmtKB(n){ return n>1048576 ? (n/1048576).toFixed(1)+' MB' : Math.max(1,Math.round(n/1024))+' KB'; }
+function slug(s){ return String(s||'').replace(/[^A-Za-z0-9 _-]/g,'').trim().replace(/\s+/g,'-').slice(0,40) || 'Inspection'; }
+function blobToDataURL(b){ return new Promise(function(res,rej){
+  var r = new FileReader(); r.onload = function(){ res(r.result); }; r.onerror = rej; r.readAsDataURL(b); });}
+function localISO(){
+  var d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+/* ---------- Field keys ---------- */
+function groupLabelFor(el){
+  var fg = el.closest('.field-group, .other-info-box');
+  if(fg){
+    var l = fg.querySelector('label.fl');
+    if(l) return labelText(l);
+    var p = fg.previousElementSibling;
+    while(p){
+      if(p.classList && p.classList.contains('sub-label')) return labelText(p);
+      p = p.previousElementSibling;
+    }
+  }
+  return 'Field';
+}
+function assignKeys(){
+  var seen = {};
+  document.querySelectorAll('#form-root .section').forEach(function(sec){
+    var sid = sec.id;
+    sec.querySelectorAll('input,select,textarea').forEach(function(el){
+      if(el.type === 'file') return;
+      var k;
+      if(el.type === 'radio'){
+        /* all radios in a group intentionally share one key — never dedupe */
+        el.dataset.k = 'r|' + el.name;
+        return;
+      }
+      var gl = groupLabelFor(el);
+      if(el.closest('.other-input')) gl += ' — Other';
+      if(el.type === 'checkbox') k = 'c|' + sid + '|' + gl + '|' + txt(el.closest('.cbl'));
+      else k = 't|' + sid + '|' + gl;
+      if(seen[k] !== undefined){ seen[k]++; k = k + '#' + seen[k]; } else seen[k] = 1;
+      el.dataset.k = k;
+    });
+  });
+}
+function allControls(){
+  return Array.prototype.slice.call(document.querySelectorAll('#form-root input,#form-root select,#form-root textarea'))
+    .filter(function(el){ return el.type !== 'file'; });
+}
+function collectData(){
+  var d = {};
+  allControls().forEach(function(el){
+    var k = el.dataset.k; if(!k) return;
+    if(el.type === 'radio'){ if(el.checked) d[k] = txt(el.closest('.cbl')); return; }
+    if(el.type === 'checkbox'){ if(el.checked) d[k] = true; return; }
+    if(el.value && String(el.value).trim() !== '') d[k] = el.value;
+  });
+  return d;
+}
+function clearForm(){
+  allControls().forEach(function(el){
+    if(el.type === 'radio' || el.type === 'checkbox') el.checked = false;
+    else el.value = '';
+  });
+  document.querySelectorAll('#form-root .other-input').forEach(function(o){
+    o.classList.remove('show'); o.style.display = '';
+  });
+  var ef = document.getElementById('existing-fields');
+  if(ef) ef.classList.remove('show');
+  document.querySelectorAll('#form-root .img-preview, #form-root .file-list').forEach(function(b){ b.innerHTML=''; });
+}
+function applyData(d){
+  allControls().forEach(function(el){
+    var k = el.dataset.k; if(!k) return;
+    if(el.type === 'radio'){ el.checked = (d[k] !== undefined && d[k] === txt(el.closest('.cbl'))); return; }
+    if(el.type === 'checkbox'){ el.checked = !!d[k]; return; }
+    el.value = d[k] !== undefined ? d[k] : '';
+  });
+  document.querySelectorAll('#form-root [onchange]').forEach(function(el){
+    if(el.type === 'file') return;
+    el.dispatchEvent(new Event('change'));
+  });
+  if(typeof togExisting === 'function') togExisting();
+  updateProg();
+}
+function findVal(key){ return cur && cur.data && cur.data[key] !== undefined ? cur.data[key] : ''; }
+
+/* ---------- Autosave ---------- */
+function setSaveStatus(t){ var el = document.getElementById('save-status'); if(el) el.textContent = t; }
+function queueSave(){
+  if(loading || !cur) return;
+  savePending = true;
+  setSaveStatus('Saving…');
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveNow, 400);
+}
+function saveNow(){
+  if(!cur) return Promise.resolve();
+  clearTimeout(saveTimer);
+  savePending = false;
+  cur.data = collectData();
+  cur.updatedAt = Date.now();
+  cur.client = findVal('t|s1|Client name(s)');
+  cur.address = findVal('t|s1|Property address');
+  cur.inspDate = findVal('t|s1|Inspection date');
+  cur.inspNo = findVal('t|s1|Inspection number');
+  cur.formVer = FORM_VER;
+  return dbPut('inspections', cur).then(function(){
+    setSaveStatus('Saved ' + new Date().toLocaleTimeString());
+    updateFormTitle();
+  }).catch(function(e){
+    setSaveStatus('SAVE FAILED — do not close');
+    console.error(e);
+  });
+}
+document.addEventListener('input', queueSave);
+document.addEventListener('change', function(e){ if(e.target && e.target.type === 'file') return; queueSave(); });
+window.addEventListener('pagehide', function(){ if(savePending) saveNow(); });
+document.addEventListener('visibilitychange', function(){ if(document.visibilityState === 'hidden' && savePending) saveNow(); });
+
+/* ---------- v4 form behaviours (re-implemented) ---------- */
+function tog(id){
+  var b = document.getElementById('b-'+id), c = document.getElementById('c-'+id);
+  var open = b.classList.contains('open');
+  b.classList.toggle('open', !open); b.style.display = open ? 'none' : 'block';
+  c.classList.toggle('open', !open); updateProg();
+}
+function togExisting(){
+  var any = Array.prototype.some.call(document.querySelectorAll('.existing-cb'), function(c){ return c.checked; });
+  document.getElementById('existing-fields').classList.toggle('show', any);
+}
+function togSel(selId, othId){
+  var s = document.getElementById(selId), o = document.getElementById(othId);
+  o.classList.toggle('show', s.value === 'Other');
+}
+function togCb(cb, othId){
+  var o = document.getElementById(othId);
+  if(o) o.style.display = cb.checked ? 'block' : 'none';
+}
+function updateProg(){
+  var all = document.querySelectorAll('.section-body').length;
+  var open = document.querySelectorAll('.section-body.open').length;
+  var p = document.getElementById('prog');
+  if(p) p.style.width = Math.round(open/all*100) + '%';
+}
+
+/* ---------- Media ---------- */
+function compressImage(file, maxDim, q){
+  return new Promise(function(res, rej){
+    var url = URL.createObjectURL(file), img = new Image();
+    img.onload = function(){
+      try{
+        var w = img.naturalWidth, h = img.naturalHeight;
+        var s = Math.min(1, maxDim/Math.max(w,h));
+        w = Math.max(1, Math.round(w*s)); h = Math.max(1, Math.round(h*s));
+        var c = document.createElement('canvas'); c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        c.toBlob(function(b){ URL.revokeObjectURL(url); b ? res(b) : rej(new Error('encode failed')); }, 'image/jpeg', q);
+      }catch(e){ URL.revokeObjectURL(url); rej(e); }
+    };
+    img.onerror = function(e){ URL.revokeObjectURL(url); rej(e); };
+    img.src = url;
+  });
+}
+function prevImgs(input, prevId){ addMedia(input, prevId); }
+function listFiles(input, listId){ addMedia(input, listId); }
+function addMedia(input, containerId){
+  if(!cur){ input.value=''; return; }
+  var files = Array.prototype.slice.call(input.files);
+  input.value = '';
+  var chain = Promise.resolve();
+  files.forEach(function(f){
+    chain = chain.then(function(){
+      var isImg = f.type.indexOf('image/') === 0;
+      var work = isImg
+        ? compressImage(f, 1600, 0.72).then(function(blob){
+            return compressImage(f, 240, 0.6).then(blobToDataURL).then(function(thumb){
+              return {blob: blob, thumb: thumb, type: 'image/jpeg'};
+            });
+          }).catch(function(){ return {blob: f, thumb: null, type: f.type}; })
+        : Promise.resolve({blob: f, thumb: null, type: f.type});
+      return work.then(function(r){
+        var rec = {mid: uuid(), iid: cur.id, field: input.id, name: f.name,
+                   type: r.type, size: r.blob.size, thumb: r.thumb, blob: r.blob, added: Date.now()};
+        return dbPut('media', rec);
+      });
+    });
+  });
+  chain.then(function(){
+    renderMedia(input.id, containerId);
+    setSaveStatus('Saved ' + new Date().toLocaleTimeString());
+  }).catch(function(e){ alert('Could not save one or more files: ' + e); });
+}
+function renderMedia(field, containerId){
+  var box = document.getElementById(containerId);
+  if(!box || !cur) return;
+  mediaFor(cur.id).then(function(recs){
+    box.innerHTML = '';
+    recs.filter(function(r){ return r.field === field; }).forEach(function(r){
+      var wrap = document.createElement('div');
+      wrap.className = 'm-item' + (r.thumb ? '' : ' m-file');
+      if(r.thumb){
+        var im = document.createElement('img'); im.className = 'img-thumb'; im.src = r.thumb;
+        wrap.appendChild(im);
+      } else {
+        var sp = document.createElement('span'); sp.className = 'm-name';
+        sp.textContent = r.name + ' (' + fmtKB(r.size) + ')';
+        wrap.appendChild(sp);
+      }
+      var x = document.createElement('button'); x.type='button'; x.className = 'm-del'; x.textContent = '✕';
+      x.onclick = function(ev){
+        ev.stopPropagation();
+        if(confirm('Remove ' + r.name + ' from this inspection?'))
+          dbDel('media', r.mid).then(function(){ renderMedia(field, containerId); });
+      };
+      wrap.appendChild(x);
+      box.appendChild(wrap);
+    });
+  });
+}
+function buildMediaMap(){
+  document.querySelectorAll('#form-root input[type=file]').forEach(function(inp){
+    var oc = inp.getAttribute('onchange') || '';
+    var m = oc.match(/,\s*'([^']+)'\s*\)/);
+    if(m) MEDIA_MAP[inp.id] = m[1];
+  });
+}
+function renderAllMedia(){
+  Object.keys(MEDIA_MAP).forEach(function(fid){ renderMedia(fid, MEDIA_MAP[fid]); });
+}
+
+/* ---------- Screens ---------- */
+function show(id){
+  document.getElementById('screen-home').style.display = (id==='home') ? '' : 'none';
+  document.getElementById('screen-form').style.display = (id==='form') ? '' : 'none';
+  window.scrollTo(0,0);
+}
+function goHome(){
+  var fin = savePending ? saveNow() : Promise.resolve();
+  fin.then(function(){ cur = null; renderHome(); show('home'); });
+}
+function updateFormTitle(){
+  var t = document.getElementById('ft-title');
+  var name = (cur.client || cur.address || 'Untitled inspection');
+  t.textContent = name;
+  var b = document.getElementById('btn-status');
+  b.textContent = cur.status === 'complete' ? 'Reopen as draft' : 'Mark complete';
+  document.getElementById('ft-badge').textContent = cur.status === 'complete' ? 'COMPLETE' : 'DRAFT';
+  document.getElementById('ft-badge').className = 'ft-badge ' + (cur.status === 'complete' ? 'bg-done' : 'bg-draft');
+}
+function newInspection(){
+  cur = {id: uuid(), createdAt: Date.now(), updatedAt: Date.now(), status: 'draft',
+         formVer: FORM_VER, appVer: APP_VER, data: {}};
+  loading = true;
+  clearForm(); applyData({});
+  loading = false;
+  dbPut('inspections', cur).then(function(){
+    updateFormTitle(); setSaveStatus('New inspection — autosave on');
+    show('form');
+    var d = document.querySelector('#form-root input[type=date]');
+    if(d && !d.value) { d.value = localISO(); queueSave(); }
+  });
+}
+function openInspection(id){
+  dbGet('inspections', id).then(function(rec){
+    if(!rec){ alert('Inspection not found.'); return; }
+    cur = rec;
+    if(rec.formVer && rec.formVer !== FORM_VER)
+      alert('This inspection was saved with form v' + rec.formVer + ' (app is v' + FORM_VER + '). Most fields will load; please review.');
+    loading = true;
+    clearForm(); applyData(rec.data || {});
+    loading = false;
+    renderAllMedia();
+    updateFormTitle(); setSaveStatus('Loaded — autosave on');
+    show('form');
+  });
+}
+function toggleComplete(){
+  if(!cur) return;
+  cur.status = (cur.status === 'complete') ? 'draft' : 'complete';
+  saveNow().then(updateFormTitle);
+}
+function deleteInspection(id, label){
+  if(!confirm('Delete "' + label + '" and all its photos/videos from this device? This cannot be undone.\n\nIf you have not sent the report yet, cancel and send it first.')) return;
+  mediaFor(id).then(function(recs){
+    return Promise.all(recs.map(function(r){ return dbDel('media', r.mid); }));
+  }).then(function(){ return dbDel('inspections', id); }).then(renderHome);
+}
+function renderHome(){
+  Promise.all([dbAll('inspections'), dbAll('media')]).then(function(res){
+    var list = res[0].sort(function(a,b){ return b.updatedAt - a.updatedAt; });
+    var mCount = {};
+    res[1].forEach(function(m){ mCount[m.iid] = (mCount[m.iid]||0) + 1; });
+    var box = document.getElementById('insp-list');
+    box.innerHTML = '';
+    if(!list.length){
+      box.innerHTML = '<div class="empty-note">No inspections yet.<br>Tap <strong>+ New inspection</strong> to start. Everything you enter is saved on this device automatically — no signal needed.</div>';
+      return;
+    }
+    list.forEach(function(r){
+      var card = document.createElement('div'); card.className = 'insp-card';
+      var title = r.client || r.address || 'Untitled inspection';
+      var sub = [r.address && r.client ? r.address : '', r.inspDate ? 'Inspected ' + r.inspDate : '', r.inspNo || '']
+                .filter(Boolean).join(' · ');
+      var media = mCount[r.id] ? mCount[r.id] + ' file' + (mCount[r.id]>1?'s':'') : 'no files';
+      card.innerHTML =
+        '<div class="ic-main">' +
+          '<div class="ic-title">' + esc(title) + ' <span class="ft-badge ' + (r.status==='complete'?'bg-done':'bg-draft') + '">' + (r.status==='complete'?'COMPLETE':'DRAFT') + '</span></div>' +
+          '<div class="ic-sub">' + esc(sub || '—') + '</div>' +
+          '<div class="ic-meta">Updated ' + new Date(r.updatedAt).toLocaleString() + ' · ' + media + '</div>' +
+        '</div>' +
+        '<div class="ic-actions">' +
+          '<button class="btn btn-primary" data-act="open">Open</button>' +
+          '<button class="btn" data-act="share">Send</button>' +
+          '<button class="btn btn-danger" data-act="del">Delete</button>' +
+        '</div>';
+      card.querySelector('[data-act=open]').onclick = function(){ openInspection(r.id); };
+      card.querySelector('[data-act=share]').onclick = function(){
+        openInspectionSilent(r.id).then(shareReport);
+      };
+      card.querySelector('[data-act=del]').onclick = function(){ deleteInspection(r.id, title); };
+      box.appendChild(card);
+    });
+  });
+  if(navigator.storage && navigator.storage.estimate){
+    navigator.storage.estimate().then(function(e){
+      var el = document.getElementById('storage-note');
+      if(el && e.quota) el.textContent = 'Device storage used by this app: ' + fmtKB(e.usage||0) + ' of ' + fmtKB(e.quota) + ' available';
+    });
+  }
+}
+function openInspectionSilent(id){
+  return dbGet('inspections', id).then(function(rec){
+    cur = rec; loading = true; clearForm(); applyData(rec.data || {}); loading = false;
+    renderAllMedia(); updateFormTitle();
+    return rec;
+  });
+}
+
+/* ---------- Report export ---------- */
+function sectionRows(sec){
+  var rows = [], done = {};
+  sec.querySelectorAll('input,select,textarea').forEach(function(el){
+    if(el.type === 'file') return;
+    var k = el.dataset.k; if(!k) return;
+    if(el.type === 'radio'){
+      if(done[el.name]) return; done[el.name] = true;
+      var v = cur.data[k]; if(v === undefined) return;
+      rows.push({label: groupLabelFor(el), items: [String(v)]});
+      return;
+    }
+    if(el.type === 'checkbox'){
+      if(!cur.data[k]) return;
+      var gl = groupLabelFor(el), item = txt(el.closest('.cbl'));
+      var last = rows[rows.length-1];
+      if(last && last.cb && last.label === gl) last.items.push(item);
+      else rows.push({label: gl, cb: true, items: [item]});
+      return;
+    }
+    var val = cur.data[k]; if(val === undefined || String(val).trim() === '') return;
+    var lbl = groupLabelFor(el);
+    if(el.closest('.other-input')) lbl += ' — Other detail';
+    if(el.closest('.other-info-box')) lbl = groupLabelFor(el);
+    rows.push({label: lbl, items: [String(val)]});
+  });
+  return rows;
+}
+function reportName(){
+  var base = slug(cur.client || cur.address);
+  var d = cur.inspDate || localISO();
+  return 'DS_Inspection_' + base + '_' + d + '.html';
+}
+function buildReport(){
+  return saveNow().then(function(){ return mediaFor(cur.id); }).then(function(recs){
+    var imgWork = recs.filter(function(r){ return r.type.indexOf('image/') === 0; })
+      .map(function(r){ return blobToDataURL(r.blob).then(function(u){ r._url = u; }); });
+    return Promise.all(imgWork).then(function(){ return recs; });
+  }).then(function(recs){
+    var secsJson = [], secsHtml = '';
+    document.querySelectorAll('#form-root .section').forEach(function(sec){
+      var num = txt(sec.querySelector('.section-num')), title = txt(sec.querySelector('.section-title'));
+      var rows = sectionRows(sec);
+      var secMedia = recs.filter(function(r){
+        var inp = document.getElementById(r.field);
+        return inp && inp.closest('.section') === sec;
+      });
+      if(!rows.length && !secMedia.length) return;
+      secsJson.push({section: num + ' — ' + title, fields: rows.map(function(r){ return {label: r.label, value: r.items.length>1 ? r.items : r.items[0]}; }),
+                     media: secMedia.map(function(r){ return {name: r.name, type: r.type, size: r.size}; })});
+      var rh = rows.map(function(r){
+        return '<tr><td class="rl">' + esc(r.label) + '</td><td class="rv">' +
+               (r.items.length>1 ? '<ul>' + r.items.map(function(i){ return '<li>' + esc(i) + '</li>'; }).join('') + '</ul>'
+                                 : '<div class="pre">' + esc(r.items[0]) + '</div>') + '</td></tr>';
+      }).join('');
+      var mh = '';
+      var imgs = secMedia.filter(function(r){ return r._url; });
+      var others = secMedia.filter(function(r){ return !r._url; });
+      if(imgs.length) mh += '<div class="figs">' + imgs.map(function(r){
+        var inp = document.getElementById(r.field);
+        var cap = inp ? groupLabelFor(inp) : r.field;
+        return '<figure><img src="' + r._url + '"><figcaption>' + esc(cap) + ' — ' + esc(r.name) + '</figcaption></figure>';
+      }).join('') + '</div>';
+      if(others.length) mh += '<div class="att">Attached separately (video/documents): ' +
+        others.map(function(r){ return esc(r.name) + ' (' + fmtKB(r.size) + ')'; }).join('; ') + '</div>';
+      secsHtml += '<section><h2><span class="sn">' + esc(num) + '</span> ' + esc(title) + '</h2>' +
+                  (rh ? '<table>' + rh + '</table>' : '') + mh + '</section>';
+    });
+    var payload = {
+      docType: 'dryspace-site-inspection', formVersion: FORM_VER, appVersion: APP_VER,
+      exportedAt: new Date().toISOString(),
+      inspection: {id: cur.id, status: cur.status, client: cur.client||'', address: cur.address||'',
+                   inspectionDate: cur.inspDate||'', inspectionNumber: cur.inspNo||'',
+                   createdAt: new Date(cur.createdAt).toISOString(), updatedAt: new Date(cur.updatedAt).toISOString()},
+      sections: secsJson,
+      /* raw field data so a report file can be re-imported into the app on another device */
+      rawData: cur.data
+    };
+    var json = JSON.stringify(payload, null, 1).replace(/<\//g, '<\\/');
+    var html = '<!DOCTYPE html><html lang="en-AU"><head><meta charset="utf-8">' +
+      '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+      '<title>' + esc('Site Inspection — ' + (cur.client || cur.address || 'Dryspace')) + '</title><style>' +
+      'body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1a2733;margin:0;padding:24px;max-width:860px;margin:0 auto}' +
+      'header{border-bottom:3px solid #123a5f;padding-bottom:14px;margin-bottom:18px}' +
+      'h1{font-size:22px;margin:0 0 4px;color:#123a5f}.meta{font-size:13px;color:#55606b;line-height:1.6}' +
+      '.badge{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;background:#e8f1fa;color:#1b5e9e;margin-left:6px}' +
+      'section{margin-bottom:20px;page-break-inside:avoid}' +
+      'h2{font-size:15px;color:#123a5f;border-bottom:1px solid #e3e7eb;padding-bottom:5px;margin:0 0 8px}' +
+      '.sn{background:#e8f1fa;color:#1b5e9e;font-size:11px;padding:2px 7px;border-radius:4px;margin-right:6px}' +
+      'table{width:100%;border-collapse:collapse;font-size:13px}' +
+      'td{vertical-align:top;padding:5px 8px;border-bottom:1px solid #f0f2f4}' +
+      '.rl{width:38%;color:#55606b;font-weight:500}.rv ul{margin:0;padding-left:16px}.pre{white-space:pre-wrap}' +
+      '.figs{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}' +
+      'figure{margin:0;width:calc(50% - 5px)}figure img{width:100%;border-radius:8px;border:1px solid #e3e7eb}' +
+      'figcaption{font-size:11px;color:#8a939c;margin-top:3px}' +
+      '.att{font-size:12px;color:#8a5a00;background:#fdf6e3;border-radius:6px;padding:8px 10px;margin-top:10px}' +
+      'footer{font-size:11px;color:#8a939c;border-top:1px solid #e3e7eb;padding-top:10px;margin-top:24px}' +
+      '@media print{body{padding:0}}' +
+      '</style></head><body><header>' +
+      (LOGO.indexOf('data:') === 0 ? '<img src="' + LOGO + '" alt="Dryspace Solutions" style="height:52px;margin-bottom:10px">' : '') +
+      '<h1>Dryspace Solutions — Site Inspection Report</h1>' +
+      '<div class="meta">' +
+      (cur.client ? '<strong>Client:</strong> ' + esc(cur.client) + '<br>' : '') +
+      (cur.address ? '<strong>Property:</strong> ' + esc(cur.address) + '<br>' : '') +
+      '<strong>Inspection date:</strong> ' + esc(cur.inspDate || '—') +
+      (cur.inspNo ? ' · <strong>Inspection no:</strong> ' + esc(cur.inspNo) : '') +
+      '<span class="badge">' + (cur.status === 'complete' ? 'COMPLETE' : 'DRAFT') + '</span><br>' +
+      'Generated ' + new Date().toLocaleString() + ' · Form v' + FORM_VER + ' · App v' + APP_VER +
+      '</div></header>' + secsHtml +
+      '<footer>Dryspace Solutions — specialist basement waterproofing &amp; remediation. ' +
+      'This report contains a machine-readable data block for the Dryspace Proposal Builder.</footer>' +
+      '<script type="application/json" id="ds-inspection-data">' + json + '<\/script>' +
+      '</body></html>';
+    return {html: html, fname: reportName()};
+  });
+}
+function downloadBlob(blob, name){
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click();
+  setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+}
+function shareReport(){
+  if(!cur) return;
+  buildReport().then(function(r){
+    var file = new File([r.html], r.fname, {type: 'text/html'});
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      navigator.share({files:[file], title: r.fname}).catch(function(e){
+        if(e && e.name === 'AbortError') return;
+        downloadBlob(new Blob([r.html], {type:'text/html'}), r.fname);
+      });
+    } else {
+      downloadBlob(new Blob([r.html], {type:'text/html'}), r.fname);
+      alert('Report downloaded. Attach it to an email or upload it to SharePoint.');
+    }
+  }).catch(function(e){ alert('Could not build report: ' + e); });
+}
+function shareMedia(){
+  if(!cur) return;
+  mediaFor(cur.id).then(function(recs){
+    if(!recs.length){ alert('No photos, videos or documents saved on this inspection yet.'); return; }
+    var files = recs.map(function(r){
+      var nm = r.name;
+      if(r.type === 'image/jpeg' && !/\.jpe?g$/i.test(nm)) nm = nm.replace(/\.[^.]+$/, '') + '.jpg';
+      return new File([r.blob], nm, {type: r.type});
+    });
+    var total = recs.reduce(function(s,r){ return s + r.size; }, 0);
+    if(navigator.canShare && navigator.canShare({files: files})){
+      if(total > 40*1048576 && !confirm('Files total ' + fmtKB(total) + ' — sharing may be slow or fail over email. Continue?')) return;
+      navigator.share({files: files, title: reportName().replace('.html','') + ' — media'}).catch(function(e){
+        if(e && e.name !== 'AbortError') alert('Share failed: ' + e.message + '. Try sharing fewer files or use OneDrive.');
+      });
+    } else {
+      alert('This browser cannot share multiple files. Photos are embedded in the report; use a mobile device to share video files.');
+    }
+  });
+}
+/* ---------- Draft handover (office pre-fill → field team) ---------- */
+function dataURLToBlob(u){
+  var p = u.split(','), mime = (p[0].match(/data:([^;]+)/) || [,''])[1] || 'application/octet-stream';
+  var bin = atob(p[1]), arr = new Uint8Array(bin.length);
+  for(var i=0;i<bin.length;i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], {type: mime});
+}
+function exportDraft(){
+  if(!cur) return;
+  saveNow().then(function(){ return mediaFor(cur.id); }).then(function(recs){
+    /* photos, PDFs, floor plans etc. travel with the draft; videos are excluded (too large for email) */
+    var incl = recs.filter(function(r){ return r.type.indexOf('video/') !== 0; });
+    var excl = recs.filter(function(r){ return r.type.indexOf('video/') === 0; });
+    var total = incl.reduce(function(s,r){ return s + r.size; }, 0);
+    if(total > 20*1048576 && !confirm('Attached files total ' + fmtKB(total) + ' — this draft may be too large to email (Teams/OneDrive will still work). Continue?')) return;
+    Promise.all(incl.map(function(r){
+      return blobToDataURL(r.blob).then(function(u){
+        return {field:r.field, name:r.name, type:r.type, thumb:r.thumb || null, dataURL:u};
+      });
+    })).then(function(media){
+      var payload = {docType:'dryspace-inspection-draft', appVersion:APP_VER, formVersion:FORM_VER,
+                     exportedAt:new Date().toISOString(),
+                     note:'Draft handover file — import via "Import draft / report / backup" on the receiving device.',
+                     inspection: cur, media: media,
+                     videosNotIncluded: excl.map(function(r){ return r.name; })};
+      var fname = 'DS_Draft_' + slug(cur.client || cur.address) + '_' + (cur.inspDate || localISO()) + '.json';
+      var blob = new Blob([JSON.stringify(payload)], {type:'application/json'});
+      var file = new File([blob], fname, {type:'application/json'});
+      var after = function(){
+        if(excl.length) alert('Note: ' + excl.length + ' video file(s) were NOT included in the draft (too large for email): ' +
+          excl.map(function(r){ return r.name; }).join(', ') + '. Share videos via OneDrive if the field team needs them.');
+      };
+      if(navigator.canShare && navigator.canShare({files:[file]})){
+        navigator.share({files:[file], title:fname}).then(after).catch(function(e){
+          if(e && e.name !== 'AbortError'){ downloadBlob(blob, fname); after(); }
+        });
+      } else { downloadBlob(blob, fname); after(); }
+    });
+  });
+}
+function importRecord(rec, then){
+  rec.updatedAt = Date.now();
+  dbGet('inspections', rec.id).then(function(existing){
+    var wipe = Promise.resolve();
+    if(existing){
+      if(confirm('"' + (rec.client || rec.address || 'Untitled') + '" already exists on this device (updated ' +
+          new Date(existing.updatedAt).toLocaleString() + ').\n\nOK = replace it with the imported copy\nCancel = keep both (import as a new inspection)')){
+        /* replacing: clear the old copy's stored files so they aren't orphaned/duplicated */
+        wipe = mediaFor(rec.id).then(function(ms){ return Promise.all(ms.map(function(m){ return dbDel('media', m.mid); })); });
+      } else {
+        rec.id = uuid();
+      }
+    }
+    wipe.then(function(){ dbPut('inspections', rec).then(then); });
+  });
+}
+function importDraftMedia(payload, done){
+  var iid = payload.inspection.id;
+  var chain = Promise.resolve(), n = 0;
+  (payload.media || []).forEach(function(m){
+    chain = chain.then(function(){
+      var b = dataURLToBlob(m.dataURL);
+      n++;
+      return dbPut('media', {mid: uuid(), iid: iid, field: m.field, name: m.name,
+                             type: m.type, size: b.size, thumb: m.thumb || null, blob: b, added: Date.now()});
+    });
+  });
+  chain.then(function(){ done(n); });
+}
+function importFile(input){
+  var f = input.files && input.files[0];
+  input.value = '';
+  if(!f) return;
+  var r = new FileReader();
+  r.onload = function(){
+    var text = r.result, payload = null;
+    try { payload = JSON.parse(text); }
+    catch(e){
+      var m = String(text).match(/<script type="application\/json" id="ds-inspection-data">([\s\S]*?)<\/script>/);
+      if(m){ try { payload = JSON.parse(m[1].replace(/<\\\//g,'</')); } catch(e2){} }
+    }
+    if(!payload){ alert('Could not read that file. Import accepts: a DS_Draft .json file, a DS_Inspections_Backup .json file, or a DS_Inspection report .html file.'); return; }
+    if(payload.docType === 'dryspace-inspection-draft' && payload.inspection){
+      importRecord(payload.inspection, function(){
+        importDraftMedia(payload, function(n){
+          renderHome();
+          var msg = 'Draft imported' + (n ? ' with ' + n + ' attached file(s).' : '.');
+          if(payload.videosNotIncluded && payload.videosNotIncluded.length)
+            msg += '\n\nVideos were not included in the draft: ' + payload.videosNotIncluded.join(', ');
+          alert(msg);
+        });
+      });
+    } else if(payload.docType === 'dryspace-inspection-backup' && payload.inspections){
+      var chain = Promise.resolve();
+      payload.inspections.forEach(function(rec){ chain = chain.then(function(){ return new Promise(function(res){ importRecord(rec, res); }); }); });
+      chain.then(function(){ renderHome(); alert(payload.inspections.length + ' inspection(s) imported from backup (field data only — no photos).'); });
+    } else if(payload.docType === 'dryspace-site-inspection' && payload.rawData){
+      var rec = {id: (payload.inspection && payload.inspection.id) || uuid(),
+                 createdAt: Date.now(), updatedAt: Date.now(),
+                 status: (payload.inspection && payload.inspection.status) || 'draft',
+                 formVer: payload.formVersion || FORM_VER, appVer: APP_VER,
+                 client: payload.inspection ? payload.inspection.client : '',
+                 address: payload.inspection ? payload.inspection.address : '',
+                 inspDate: payload.inspection ? payload.inspection.inspectionDate : '',
+                 inspNo: payload.inspection ? payload.inspection.inspectionNumber : '',
+                 data: payload.rawData};
+      importRecord(rec, function(){ renderHome(); alert('Report imported as an editable inspection (answers only — photos stay in the report file).'); });
+    } else if(payload.docType === 'dryspace-site-inspection'){
+      alert('This report was made with app v1.0 and cannot be re-imported. Reports from v1.1 onward can be.');
+    } else {
+      alert('Unrecognised file type.');
+    }
+  };
+  r.readAsText(f);
+}
+function exportBackup(){
+  dbAll('inspections').then(function(list){
+    var payload = {docType:'dryspace-inspection-backup', appVersion:APP_VER, formVersion:FORM_VER,
+                   exportedAt:new Date().toISOString(), note:'Field data only — photos/videos are not included in this backup.',
+                   inspections:list};
+    downloadBlob(new Blob([JSON.stringify(payload, null, 1)], {type:'application/json'}),
+                 'DS_Inspections_Backup_' + localISO() + '.json');
+  });
+}
+
+/* ---------- Init ---------- */
+function init(){
+  if(LOGO.indexOf('data:') === 0){
+    document.querySelectorAll('.app-brand img, .logo-wrap img').forEach(function(im){
+      im.src = LOGO; im.removeAttribute('onerror'); im.style.display = '';
+    });
+  }
+  assignKeys();
+  buildMediaMap();
+  updateProg();
+  document.querySelectorAll('.section-body.open').forEach(function(b){ b.style.display='block'; });
+  document.querySelectorAll('.section-body:not(.open)').forEach(function(b){ b.style.display='none'; });
+  renderHome();
+  show('home');
+  if(navigator.storage && navigator.storage.persist){
+    navigator.storage.persist().then(function(granted){
+      if(!granted) console.warn('Persistent storage not granted — data may be evicted if device is very low on space.');
+    });
+  }
+  if('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')){
+    navigator.serviceWorker.register('sw.js').catch(function(e){ console.warn('SW registration failed', e); });
+  }
+}
+document.addEventListener('DOMContentLoaded', init);
+
+</script>
+</body>
+</html>
