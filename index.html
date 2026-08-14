@@ -1411,6 +1411,7 @@ input[type=text]:focus,input[type=date]:focus,select:focus,textarea:focus{outlin
 
 <script src="ds-media-sync.js"></script>
 <script src="ds-sharepoint.js"></script>
+<script src="ds-auth.js"></script>
 <script>
 /* Dryspace Site Inspection App v1.0 — offline-first PWA
    Form content: v4 (Project 2.1). All data stored on-device in IndexedDB. */
@@ -1428,9 +1429,22 @@ var LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAoAAAADBCAMAAABoiPHxAA
 var SP_CONFIG = {
   hostname: 'dryspacesolutions.sharepoint.com',
   sitePath: '/sites/SiteInspections',
-  clientId: '',      /* PENDING — Entra Application (client) ID */
-  tenantId: ''       /* PENDING — Entra Directory (tenant) ID */
+  clientId: '52e68162-1061-446c-a69c-df560efa3b9c',   /* Entra Application (client) ID */
+  tenantId: 'f5f560ce-0cc8-4b51-8f7e-be09f1dffe8b',   /* Entra Directory (tenant) ID */
+  /* Entra matches these as exact strings — a stray trailing slash is rejected,
+     so they are listed literally rather than derived from location. Each must
+     appear verbatim under Authentication in the app registration. */
+  redirectUris: {
+    live:  'https://ds-js1.github.io/dryspace-inspect/',
+    local: 'http://localhost:8765'
+  }
 };
+function spRedirectUri(){
+  var h = location.hostname;
+  return (h === 'localhost' || h === '127.0.0.1')
+    ? SP_CONFIG.redirectUris.local
+    : SP_CONFIG.redirectUris.live;
+}
 function spConfigured(){ return !!(SP_CONFIG.clientId && SP_CONFIG.tenantId); }
 
 var DB_NAME = 'ds-inspections';

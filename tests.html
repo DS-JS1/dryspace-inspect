@@ -50,6 +50,7 @@ code{font-family:ui-monospace,Consolas,monospace;background:#f4f6f8;padding:1px 
 <!-- loaded directly, not through the app, so the module is proven standalone -->
 <script src="ds-media-sync.js"></script>
 <script src="ds-sharepoint.js"></script>
+<script src="ds-auth.js"></script>
 <script>
 'use strict';
 
@@ -985,8 +986,161 @@ function sharePointChecks(){
       if(!C) return;
       eq(C.hostname, 'dryspacesolutions.sharepoint.com', 'hostname configured');
       eq(C.sitePath, '/sites/SiteInspections', 'site path configured');
-      ok(APPW.spConfigured() === false,
-         'app reports itself unconfigured until the Entra ids are filled in');
+      var guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      ok(guid.test(C.clientId), 'client id present and well formed');
+      ok(guid.test(C.tenantId), 'tenant id present and well formed');
+    });
+  });
+}
+
+/* ---------- Microsoft sign-in ----------
+   The interactive sign-in itself cannot be automated — it needs a real password
+   at a Microsoft page. What IS testable is everything around it: PKCE
+   correctness, state validation, token rotation, and the behaviour that decides
+   whether being offline quietly signs someone out. */
+function authChecks(){
+  var A = window.DSAuth;
+  section('Microsoft sign-in');
+  ok(!!A, 'ds-auth.js loaded');
+  if(!A) return Promise.resolve();
+
+  function memStore(){
+    var m = {};
+    return {getItem: function(k){ return k in m ? m[k] : null; },
+            setItem: function(k, v){ m[k] = String(v); },
+            removeItem: function(k){ delete m[k]; },
+            _dump: m};
+  }
+  function res(status, body){
+    return {ok: status >= 200 && status < 300, status: status,
+            json: function(){ return Promise.resolve(body); }};
+  }
+  function make(fetchImpl, nowFn){
+    var st = memStore();
+    return {st: st, a: A.create({
+      clientId: 'CID', tenantId: 'TID',
+      redirectUri: 'http://localhost:8765',
+      fetchImpl: fetchImpl, storage: st,
+      now: nowFn || function(){ return 1000000; }
+    })};
+  }
+
+  test('verifier is a valid PKCE secret', function(){
+    var v = A.makeVerifier();
+    ok(v.length >= 43 && v.length <= 128, 'length within the RFC range (' + v.length + ')');
+    ok(/^[A-Za-z0-9\-._~]+$/.test(v), 'uses only unreserved characters');
+    ok(A.makeVerifier() !== A.makeVerifier(), 'a fresh secret each time');
+  });
+
+  /* RFC 7636 Appendix B reference vector — proves the hash and encoding are
+     right, rather than merely self-consistent. */
+  return A.challengeFor('dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk').then(function(c){
+    eq(c, 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM',
+       'challenge matches the RFC 7636 reference vector');
+  }).then(function(){
+    var m = make(function(){ return Promise.reject(new Error('should not call')); });
+    var navigated = null;
+    return m.a.signIn(function(u){ navigated = u; }).then(function(){
+      ok(/login\.microsoftonline\.com\/TID\/oauth2\/v2\.0\/authorize/.test(navigated),
+         'authorize endpoint built for the right tenant');
+      ok(navigated.indexOf('code_challenge_method=S256') > -1, 'uses S256, not plain');
+      ok(navigated.indexOf('client_id=CID') > -1, 'carries the client id');
+      ok(navigated.indexOf('redirect_uri=http%3A%2F%2Flocalhost%3A8765') > -1,
+         'redirect uri sent exactly as configured');
+      ok(navigated.indexOf('offline_access') > -1,
+         'requests offline_access, without which there is no refresh token');
+      ok(navigated.indexOf('code_verifier') === -1,
+         'the secret itself never travels — only its hash');
+    });
+  }).then(function(){
+    var m = make();
+    return m.a.handleRedirect('').then(function(r){
+      eq(r, null, 'an ordinary launch is not treated as a sign-in response');
+    });
+  }).then(function(){
+    /* a response that this device did not initiate must be refused */
+    var m = make(function(){ return Promise.resolve(res(200, {})); });
+    m.st.setItem('ds-auth-CID-pending', JSON.stringify({verifier: 'v', state: 'MINE'}));
+    return m.a.handleRedirect('?code=abc&state=SOMEONE_ELSE', function(){}).then(function(){
+      record(false, 'mismatched state should reject', 'accepted a foreign response');
+    }, function(e){
+      ok(/did not match/.test(e.message), 'refuses a response with the wrong state');
+    });
+  }).then(function(){
+    /* full code exchange */
+    var sent = null;
+    var idToken = 'x.' + btoa(JSON.stringify({preferred_username: 'jamie@dryspace.com.au', name: 'Jamie Stone'})) + '.y';
+    var m = make(function(url, init){ sent = init.body;
+      return Promise.resolve(res(200, {access_token: 'AT1', refresh_token: 'RT1',
+                                       expires_in: 3600, id_token: idToken})); });
+    m.st.setItem('ds-auth-CID-pending', JSON.stringify({verifier: 'VERIFIER1', state: 'S1'}));
+    return m.a.handleRedirect('?code=CODE1&state=S1', function(){}).then(function(saved){
+      ok(sent.indexOf('code_verifier=VERIFIER1') > -1, 'verifier sent to redeem the code');
+      ok(sent.indexOf('grant_type=authorization_code') > -1, 'authorization_code grant used');
+      eq(saved.accessToken, 'AT1', 'access token stored');
+      eq(saved.refreshToken, 'RT1', 'refresh token stored');
+      eq(m.a.account().name, 'Jamie Stone', 'account name read from the id token');
+      ok(m.a.isSignedIn() === true, 'reports signed in');
+      ok(!m.st.getItem('ds-auth-CID-pending'), 'the one-time verifier is discarded after use');
+    });
+  }).then(function(){
+    /* cached token reused; expired token refreshed; rotation honoured */
+    var t = 1000000, calls = 0;
+    var m = make(function(){ calls++;
+      return Promise.resolve(res(200, {access_token: 'AT2', refresh_token: 'RT2', expires_in: 3600})); },
+      function(){ return t; });
+    m.st.setItem('ds-auth-CID', JSON.stringify({accessToken: 'OLD', refreshToken: 'RT1',
+                                                expiresAt: t + 3600000, account: null}));
+    return m.a.getToken().then(function(tok){
+      eq(tok, 'OLD', 'a valid token is reused rather than refreshed');
+      eq(calls, 0, 'no network call while the token is good');
+      t += 3600000;                              /* now expired */
+      return m.a.getToken();
+    }).then(function(tok){
+      eq(tok, 'AT2', 'an expired token is refreshed');
+      eq(calls, 1, 'exactly one refresh');
+      eq(JSON.parse(m.st.getItem('ds-auth-CID')).refreshToken, 'RT2',
+         'the rotated refresh token replaces the old one — Entra invalidates the previous');
+    });
+  }).then(function(){
+    /* several uploads starting at once must not each spend the single-use token */
+    var calls = 0;
+    var m = make(function(){ calls++;
+      return new Promise(function(r){ setTimeout(function(){
+        r(res(200, {access_token: 'AT3', refresh_token: 'RT3', expires_in: 3600})); }, 20); }); });
+    m.st.setItem('ds-auth-CID', JSON.stringify({accessToken: 'X', refreshToken: 'RT0', expiresAt: 0}));
+    return Promise.all([m.a.getToken(), m.a.getToken(), m.a.getToken()]).then(function(toks){
+      eq(calls, 1, 'concurrent callers share one refresh, not three');
+      eq(toks.join(','), 'AT3,AT3,AT3', 'all callers get the new token');
+    });
+  }).then(function(){
+    /* a dead refresh token must ask for sign-in */
+    var m = make(function(){ return Promise.resolve(res(400, {error: 'invalid_grant'})); });
+    m.st.setItem('ds-auth-CID', JSON.stringify({accessToken: 'X', refreshToken: 'DEAD', expiresAt: 0}));
+    return m.a.getToken().then(function(){
+      record(false, 'dead refresh token should reject', 'resolved unexpectedly');
+    }, function(e){
+      ok(e.needsSignIn === true, 'flags that a fresh sign-in is required');
+      ok(m.a.isSignedIn() === false, 'stale credentials cleared rather than retried forever');
+    });
+  }).then(function(){
+    /* being offline must NOT sign anyone out */
+    var m = make(function(){ return Promise.reject(new Error('Failed to fetch')); });
+    m.st.setItem('ds-auth-CID', JSON.stringify({accessToken: 'X', refreshToken: 'GOOD', expiresAt: 0}));
+    return m.a.getToken().then(function(){
+      record(false, 'offline refresh should reject', 'resolved with no connection');
+    }, function(e){
+      ok(e.offline === true, 'reports offline');
+      ok(m.a.isSignedIn() === true,
+         'credentials survive being offline — losing signal must not sign a field user out');
+    });
+  }).then(function(){
+    test('app config exposes the right redirect for this host', function(){
+      var W = APPW;
+      ok(!!W.SP_CONFIG.redirectUris, 'both redirect uris configured');
+      eq(W.spRedirectUri(), 'http://localhost:8765',
+         'localhost selects the local redirect uri');
+      ok(W.spConfigured() === true, 'app now reports itself configured');
     });
   });
 }
@@ -1019,6 +1173,7 @@ clearWorkers()
   .then(function(){ return releaseChecks(APPW); })
   .then(mediaModuleChecks)
   .then(sharePointChecks)
+  .then(authChecks)
   .then(finish)
   .catch(function(e){
     var s = document.getElementById('summary');
