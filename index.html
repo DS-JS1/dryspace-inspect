@@ -2957,7 +2957,26 @@ function init(){
       if(!granted) console.warn('Persistent storage not granted — data may be evicted if device is very low on space.');
     });
   }
-  if('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')){
+  /* ?nosw=1 — development escape hatch. The service worker serves cache-first,
+     which is correct in the field and a nuisance while building: an edit appears
+     to do nothing because the cached copy is still being served. This unregisters
+     it and clears the caches so the next load is genuinely current. Harmless in
+     production, where nobody types the flag. */
+  if(location.search.indexOf('nosw=1') > -1){
+    if(navigator.serviceWorker){
+      navigator.serviceWorker.getRegistrations().then(function(rs){
+        rs.forEach(function(r){ r.unregister(); });
+      }).catch(function(){});
+    }
+    if(window.caches){
+      caches.keys().then(function(ks){
+        ks.forEach(function(k){ caches.delete(k); });
+      }).catch(function(){});
+    }
+    setUpdateStatus('Service worker disabled for this session (nosw=1). Reload without the flag for normal behaviour.');
+    var cbx = document.getElementById('btn-check-update');
+    if(cbx) cbx.style.display = 'none';
+  } else if('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')){
     navigator.serviceWorker.register('sw.js')
       .then(initUpdates)
       .catch(function(e){ console.warn('SW registration failed', e); });
