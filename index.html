@@ -63,6 +63,9 @@ input[type=text],input[type=date],select,textarea{font-size:16px !important;padd
 .empty-note{text-align:center;color:var(--color-text-secondary);font-size:14px;line-height:1.7;background:var(--color-background-primary);border:1px dashed var(--color-border-secondary);border-radius:var(--border-radius-lg);padding:34px 20px}
 .home-foot{margin-top:22px;text-align:center}
 .storage-note{font-size:12px;color:var(--color-text-tertiary);margin-top:10px}
+.upd-banner{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#e0f2e4;border:1px solid #a9d8b8;color:#1e6b34;border-radius:var(--border-radius-lg);padding:12px 14px;margin-bottom:14px;font-size:14px;font-weight:500}
+.upd-banner .ub-msg{flex:1;min-width:200px}
+.upd-status{font-size:12px;color:var(--color-text-tertiary);margin-top:8px;min-height:16px;line-height:1.5}
 .ver-note{font-size:12px;color:var(--color-text-tertiary);margin-top:6px;line-height:1.6}
 /* ---- form screen top bar ---- */
 .form-top{position:sticky;top:0;z-index:50;background:var(--color-background-primary);border-bottom:1px solid var(--color-border-tertiary);display:flex;align-items:center;gap:8px;padding:8px 10px;padding-top:calc(8px + env(safe-area-inset-top));flex-wrap:wrap}
@@ -201,12 +204,18 @@ input[type=text]:focus,input[type=date]:focus,select:focus,textarea:focus{outlin
       <h1>Inspections on this device</h1>
       <button class="btn btn-primary" onclick="newInspection()">＋ New inspection</button>
     </div>
+    <div id="update-banner" class="upd-banner" style="display:none">
+      <span class="ub-msg">A new version of the app is ready.</span>
+      <button class="btn btn-primary" onclick="applyUpdate()">Update now</button>
+    </div>
     <div id="insp-list"></div>
     <div class="home-foot">
       <label class="btn" style="cursor:pointer">Import draft / report / backup
         <input type="file" accept=".json,.html,application/json,text/html" style="display:none" onchange="importFile(this)">
       </label>
       <button class="btn btn-ghost" onclick="exportBackup()">Download data backup (all inspections)</button>
+      <button class="btn btn-ghost" id="btn-check-update" onclick="checkForUpdate()">Check for app update</button>
+      <div id="upd-status" class="upd-status"></div>
       <div id="storage-note" class="storage-note"></div>
       <div class="ver-note"><span id="app-ver-line"></span><br>Data stays on this device until you tap Send. Delete only after the report has been sent.</div>
     </div>
@@ -2642,6 +2651,66 @@ function exportBackup(){
   });
 }
 
+/* ---------- v1.3: app update detection ----------
+   The service worker serves cache-first so the app launches instantly with no
+   signal — but that also means it never notices a new build on its own. Browsers
+   re-check sw.js only occasionally, and an installed iOS PWA that is never fully
+   closed may not check for weeks. So updates are surfaced explicitly instead:
+   detected automatically where possible, and checkable on demand. */
+var swReg = null, updateReady = false, reloading = false;
+
+function setUpdateStatus(t){
+  var el = document.getElementById('upd-status');
+  if(el) el.textContent = t || '';
+}
+function showUpdateBanner(){
+  updateReady = true;
+  var b = document.getElementById('update-banner');
+  if(b) b.style.display = '';
+  setUpdateStatus('');
+}
+function watchWorker(w){
+  if(!w) return;
+  w.addEventListener('statechange', function(){
+    /* controller present means this is an update, not the very first install */
+    if(w.state === 'installed' && navigator.serviceWorker.controller) showUpdateBanner();
+  });
+}
+function initUpdates(reg){
+  if(!reg) return;
+  swReg = reg;
+  if(reg.waiting && navigator.serviceWorker.controller) showUpdateBanner();
+  watchWorker(reg.installing);
+  reg.addEventListener('updatefound', function(){ watchWorker(reg.installing); });
+  navigator.serviceWorker.addEventListener('controllerchange', function(){
+    if(reloading) return;      /* guard against a reload loop */
+    reloading = true;
+    location.reload();
+  });
+}
+function checkForUpdate(){
+  if(!swReg){ setUpdateStatus('Update checking is not available in this browser.'); return; }
+  if(navigator.onLine === false){
+    setUpdateStatus('No connection — check again when you have signal. The app works offline regardless.');
+    return;
+  }
+  setUpdateStatus('Checking…');
+  swReg.update().then(function(){
+    if(updateReady || swReg.waiting){ showUpdateBanner(); return; }
+    if(swReg.installing){ setUpdateStatus('New version found — preparing it now…'); return; }
+    setUpdateStatus('You are on the latest version (v' + APP_VER + '). Checked ' + fmtAUStamp(Date.now()) + '.');
+  }).catch(function(){
+    setUpdateStatus('Could not reach the server — check again when you have signal.');
+  });
+}
+function applyUpdate(){
+  /* Updating reloads the page, so never do it with an inspection open. */
+  if(cur){ alert('Close the current inspection first — updating reloads the app.'); return; }
+  if(!swReg || !swReg.waiting){ location.reload(); return; }
+  setUpdateStatus('Updating…');
+  swReg.waiting.postMessage({type: 'SKIP_WAITING'});
+}
+
 /* ---------- Init ---------- */
 function init(){
   var ftl = document.getElementById('ft-logo');
@@ -2672,7 +2741,12 @@ function init(){
     });
   }
   if('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')){
-    navigator.serviceWorker.register('sw.js').catch(function(e){ console.warn('SW registration failed', e); });
+    navigator.serviceWorker.register('sw.js')
+      .then(initUpdates)
+      .catch(function(e){ console.warn('SW registration failed', e); });
+  } else {
+    var cb = document.getElementById('btn-check-update');
+    if(cb) cb.style.display = 'none';   /* nothing to check against */
   }
 }
 document.addEventListener('DOMContentLoaded', init);

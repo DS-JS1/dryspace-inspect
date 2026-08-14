@@ -370,6 +370,41 @@ function run(W){
        broken.length + ' chip(s) point at a media id that no longer exists');
   });
 
+  /* ===== update detection (v1.3) ===== */
+  section('App update detection');
+
+  test('update functions are present', function(){
+    ['checkForUpdate', 'applyUpdate', 'initUpdates', 'showUpdateBanner'].forEach(function(fn){
+      ok(typeof W[fn] === 'function', fn + '() defined');
+    });
+  });
+
+  test('banner starts hidden', function(){
+    var b = D.getElementById('update-banner');
+    ok(!!b, 'update banner exists in the home screen');
+    if(b) ok(b.style.display === 'none', 'banner is hidden until an update is found');
+  });
+
+  test('manual check control exists', function(){
+    ok(!!D.getElementById('btn-check-update'), '"Check for app update" button present');
+    ok(!!D.getElementById('upd-status'), 'status line present for the result');
+  });
+
+  test('updating cannot interrupt an open inspection', function(){
+    /* Applying an update reloads the page. With an inspection open that would
+       discard whatever has not yet hit the 400ms autosave, so it must refuse. */
+    var realAlert = W.alert, realCur = W.cur, alerted = null, reloaded = false;
+    var realReg = W.swReg;
+    W.alert = function(m){ alerted = m; };
+    W.cur = {id: 'guard-test'};
+    W.swReg = {waiting: {postMessage: function(){ reloaded = true; }}};
+    try { W.applyUpdate(); } catch(e){}
+    W.alert = realAlert; W.cur = realCur; W.swReg = realReg;
+    ok(alerted !== null, 'refuses and explains when an inspection is open',
+       'applyUpdate() proceeded with a record open');
+    ok(reloaded === false, 'does not signal the waiting worker while a record is open');
+  });
+
   /* ===== hasVal ===== */
   section('hasVal content rules');
 
@@ -507,6 +542,17 @@ function releaseChecks(W){
          'CACHE_VERSION is "' + m[1] + '" but APP_VER is "' + appVer +
          '". Devices would silently keep running the previously cached app.');
     }
+    /* A new build must wait to be applied. Calling skipWaiting() on install
+       swaps code under a page that is still running the old version, and gives
+       the user no say in when it happens. */
+    var inst = sw.match(/addEventListener\(\s*'install'[\s\S]*?\n\}\);/);
+    ok(!!inst, 'sw.js has an install handler');
+    ok(inst && inst[0].indexOf('skipWaiting') === -1,
+       'install does not call skipWaiting() — updates wait to be applied',
+       'sw.js activates a new build immediately, so no update can be announced');
+    ok(/addEventListener\(\s*'message'[\s\S]{0,200}?SKIP_WAITING/.test(sw),
+       'sw.js applies an update when the page asks (SKIP_WAITING)',
+       'no message handler — the "Update now" button would have nothing to talk to');
   }).catch(function(){ record(false, 'sw.js readable', 'fetch failed'); })
 
   .then(function(){

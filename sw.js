@@ -10,11 +10,18 @@ var APP_FILES = [
   './apple-touch-icon.png'
 ];
 
+/* v1.3 — deliberately NOT calling skipWaiting() here. A new build stays in the
+   "waiting" state until the page asks for it, so the app can tell the user an
+   update is ready rather than swapping code underneath them mid-inspection.
+   Previously the new worker took control immediately while the open page was
+   still running the old code. */
 self.addEventListener('install', function(e){
-  e.waitUntil(
-    caches.open(CACHE_VERSION).then(function(c){ return c.addAll(APP_FILES); })
-      .then(function(){ return self.skipWaiting(); })
-  );
+  e.waitUntil(caches.open(CACHE_VERSION).then(function(c){ return c.addAll(APP_FILES); }));
+});
+
+/* The page sends this once the user taps "Update now". */
+self.addEventListener('message', function(e){
+  if(e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
 self.addEventListener('activate', function(e){

@@ -212,3 +212,41 @@ FOLDER RENAME — 2 August 2026
   v1.2.1 folder, and a callout added requiring the folder name to match
   APP_VER on every future release.
 - PROJECT_CONTEXT_BRIEF in the parent folder renamed to (as_at-V1.2.1).
+
+
+v1.3.0 — IN DEVELOPMENT
+--------------------------------------------------------------------------
+Under version control from this release. The app is now developed in a git
+repository; every change below is a reviewable commit rather than a folder copy.
+
+Migration and field integrity
+- Retired "Basement construction type" dropdown: choosing "Other" now converts.
+  assignKeys() previously accepted only ONE legacy rule per control, and the
+  merged Other checkbox already carried one, so that answer had no path across.
+  Rules are now ";;" separated. Found by the new test harness, not by review.
+- Media is keyed by a permanent data-mfid instead of the file input's DOM id.
+  Renaming an input's id previously orphaned every photo attached to it — the
+  one place v1.2's stable-id work had been skipped. Existing media is rekeyed
+  automatically at start-up and after a draft import.
+
+App updates are now visible
+- The service worker no longer activates a new build silently. It waits, and
+  the home screen shows "A new version of the app is ready" with an Update now
+  button. Previously updates applied without notice, on the browser's own
+  schedule — and an installed iOS PWA that is never fully closed may not check
+  for weeks. This is how v1.1.1 stayed live while two versions sat finished.
+- New "Check for app update" button on the home screen for checking on demand.
+  Reports the running version and states plainly when there is no connection —
+  in a basement that is expected, not an error.
+- Updating refuses while an inspection is open, since applying one reloads the
+  app. Only offered from the home screen.
+
+Test harness (new)
+- tests.html: 76 assertions run against the real functions inside index.html via
+  a hidden iframe, so they cannot drift from shipping code.
+- Migration coverage is proven against the actual v1.1.1 build rather than a
+  synthetic record: all 296 keys it can produce are accounted for — 294 mapped
+  to a stable id, 1 merged, 1 converted by value rule.
+- Release gates: CACHE_VERSION must carry APP_VER (a forgotten bump is silent
+  and leaves every device on the old app), the field id manifest must exist and
+  agree, and the changelog must carry an entry for the current version.
