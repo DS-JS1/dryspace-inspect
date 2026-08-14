@@ -63,6 +63,7 @@ input[type=text],input[type=date],select,textarea{font-size:16px !important;padd
 .empty-note{text-align:center;color:var(--color-text-secondary);font-size:14px;line-height:1.7;background:var(--color-background-primary);border:1px dashed var(--color-border-secondary);border-radius:var(--border-radius-lg);padding:34px 20px}
 .home-foot{margin-top:22px;text-align:center}
 .storage-note{font-size:12px;color:var(--color-text-tertiary);margin-top:10px}
+.storage-note.sn-warn{color:#8a5a00;background:#fdf6e3;border:1px solid #e8d9ae;border-radius:var(--border-radius-md);padding:8px 10px}
 .upd-banner{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#e0f2e4;border:1px solid #a9d8b8;color:#1e6b34;border-radius:var(--border-radius-lg);padding:12px 14px;margin-bottom:14px;font-size:14px;font-weight:500}
 .upd-banner .ub-msg{flex:1;min-width:200px}
 .upd-status{font-size:12px;color:var(--color-text-tertiary);margin-top:8px;min-height:16px;line-height:1.5}
@@ -1408,6 +1409,7 @@ input[type=text]:focus,input[type=date]:focus,select:focus,textarea:focus{outlin
   </div>
 </div>
 
+<script src="ds-media-sync.js"></script>
 <script>
 /* Dryspace Site Inspection App v1.0 — offline-first PWA
    Form content: v4 (Project 2.1). All data stored on-device in IndexedDB. */
@@ -2086,17 +2088,18 @@ function addMedia(input, containerId){
   var chain = Promise.resolve();
   files.forEach(function(f){
     chain = chain.then(function(){
-      var isImg = f.type.indexOf('image/') === 0;
-      var work = isImg
-        ? compressImage(f, 1600, 0.72).then(function(blob){
-            return compressImage(f, 240, 0.6).then(blobToDataURL).then(function(thumb){
-              return {blob: blob, thumb: thumb, type: 'image/jpeg'};
-            });
-          }).catch(function(){ return {blob: f, thumb: null, type: f.type}; })
-        : Promise.resolve({blob: f, thumb: null, type: f.type});
-      return work.then(function(r){
+      /* v1.3 — three renditions: thumb for previews, a 1600px copy so emailed
+         reports stay deliverable, and the untouched original as the evidence
+         copy bound for SharePoint. Non-images keep one copy; duplicating a
+         video to no purpose would just consume the iPad's storage. */
+      return DSMedia.makeRenditions(f, compressImage).then(function(r){
         var rec = {mid: uuid(), iid: cur.id, field: mfid, name: f.name,
-                   type: r.type, size: r.blob.size, thumb: r.thumb, blob: r.blob, added: Date.now()};
+                   type: r.type, size: r.reportSize, thumb: r.thumb,
+                   blob: r.report,
+                   original: r.derived ? r.original : null,
+                   origSize: r.origSize, origHash: r.origHash,
+                   up: 'local', upTries: 0, remote: null,
+                   added: Date.now()};
         return dbPut('media', rec);
       });
     });
@@ -2286,10 +2289,18 @@ function renderHome(){
     });
   });
   if(navigator.storage && navigator.storage.estimate){
-    navigator.storage.estimate().then(function(e){
+    Promise.all([navigator.storage.estimate(), dbAll('media')]).then(function(res){
+      var e = res[0], media = res[1] || [];
       var el = document.getElementById('storage-note');
-      if(el && e.quota) el.textContent = 'Device storage used by this app: ' + fmtKB(e.usage||0) + ' of ' + fmtKB(e.quota) + ' available';
-    });
+      if(!el || !e.quota) return;
+      var reclaimable = media.filter(function(m){ return DSMedia.isPurgeable(m); })
+                             .reduce(function(a, m){ return a + (m.origSize || 0); }, 0);
+      var p = DSMedia.pressure(e.usage || 0, e.quota);
+      var msg = DSMedia.pressureMessage(p, reclaimable, fmtKB);
+      el.textContent = 'Device storage used by this app: ' + fmtKB(e.usage || 0) +
+                       ' of ' + fmtKB(e.quota) + ' available' + (msg ? ' — ' + msg : '');
+      el.className = 'storage-note' + (p.level === 'urgent' || p.level === 'warn' ? ' sn-warn' : '');
+    }).catch(function(){});
   }
 }
 function openInspectionSilent(id){
@@ -2475,12 +2486,14 @@ function shareMedia(){
   if(!cur) return;
   mediaFor(cur.id).then(function(recs){
     if(!recs.length){ alert('No photos, videos or documents saved on this inspection yet.'); return; }
+    /* Shares the untouched originals. Before v1.3 this shared the 1600px report
+       copies while calling itself full-size media. */
     var files = recs.map(function(r){
       var nm = r.name;
       if(r.type === 'image/jpeg' && !/\.jpe?g$/i.test(nm)) nm = nm.replace(/\.[^.]+$/, '') + '.jpg';
-      return new File([r.blob], nm, {type: r.type});
+      return new File([DSMedia.originalOf(r)], nm, {type: r.type});
     });
-    var total = recs.reduce(function(s,r){ return s + r.size; }, 0);
+    var total = recs.reduce(function(s,r){ return s + (r.origSize || r.size); }, 0);
     if(navigator.canShare && navigator.canShare({files: files})){
       if(total > 40*1048576 && !confirm('Files total ' + fmtKB(total) + ' — sharing may be slow or fail over email. Continue?')) return;
       navigator.share({files: files, title: reportName().replace('.html','') + ' — media'}).catch(function(e){

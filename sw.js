@@ -4,6 +4,7 @@ var CACHE_VERSION = 'ds-inspect-v1.2.1';
 var APP_FILES = [
   './',
   './index.html',
+  './ds-media-sync.js',
   './manifest.webmanifest',
   './icon-192.png',
   './icon-512.png',

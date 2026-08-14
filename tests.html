@@ -47,6 +47,8 @@ code{font-family:ui-monospace,Consolas,monospace;background:#f4f6f8;padding:1px 
 
 <iframe id="app" title="app under test"></iframe>
 
+<!-- loaded directly, not through the app, so the module is proven standalone -->
+<script src="ds-media-sync.js"></script>
 <script>
 'use strict';
 
@@ -578,6 +580,212 @@ function releaseChecks(W){
   });
 }
 
+/* ---------- ds-media-sync module ---------- */
+function mediaModuleChecks(){
+  var M = window.DSMedia;
+  section('Media module — naming');
+
+  ok(!!M, 'ds-media-sync.js loaded standalone');
+  if(!M) return Promise.resolve();
+
+  test('sanitiser removes what SharePoint rejects', function(){
+    eq(M.sanitiseSegment('Unit 3/12 Marine Pde'), 'Unit 3 12 Marine Pde', 'slash removed');
+    eq(M.sanitiseSegment('a"b*c:d<e>f?g|h'), 'a b c d e f g h', 'all illegal characters removed');
+    eq(M.sanitiseSegment('  padded  '), 'padded', 'outer whitespace trimmed');
+    eq(M.sanitiseSegment('trailing.'), 'trailing', 'trailing dot removed');
+    eq(M.sanitiseSegment('.leading'), 'leading', 'leading dot removed');
+    eq(M.sanitiseSegment('a' + String.fromCharCode(1) + 'b'), 'ab', 'control characters removed');
+    eq(M.sanitiseSegment('~$temp'), 'temp', 'temp-file prefix removed');
+  });
+
+  test('reserved device names are escaped', function(){
+    eq(M.sanitiseSegment('CON'), 'CON_', 'CON would be rejected as a name');
+    eq(M.sanitiseSegment('lpt1'), 'lpt1_', 'LPT1 likewise');
+    eq(M.sanitiseSegment('console'), 'console', 'a name merely containing one is fine');
+  });
+
+  test('length is capped without leaving a trailing dot', function(){
+    eq(M.sanitiseSegment('abcdefghij', 4), 'abcd', 'truncated to the cap');
+    eq(M.sanitiseSegment('abc.defghi', 4), 'abc', 'truncation does not leave a trailing dot');
+  });
+
+  test('folder name carries the address', function(){
+    eq(M.folderName({inspNo:'INS-042', address:'12 Marine Parade, Kirra'}),
+       'INS-042 - 12 Marine Parade, Kirra', 'number and address combined');
+    eq(M.folderName({address:'12 Marine Parade'}), '12 Marine Parade', 'address alone when no number');
+    eq(M.folderName({}), 'Unfiled', 'never produces an empty folder name');
+  });
+
+  test('file name is identifiable, not a camera default', function(){
+    eq(M.fileName({inspNo:'INS-042', date:'2026-08-14'}, 'm.s4.wall-moisture-signs', 3, 'IMG_1234.JPG'),
+       'INS-042_2026-08-14_s4-wall-moisture-signs_003.jpg', 'full name assembled');
+    eq(M.fileName({inspNo:'INS-042', date:'2026-08-14'}, 'm.s1.title-photo', 1, 'x.jpeg'),
+       'INS-042_2026-08-14_s1-title-photo_001.jpg', 'jpeg normalised to jpg');
+  });
+
+  test('extension falls back to the mime type', function(){
+    eq(M.extFor('noextension', 'image/jpeg'), 'jpg', 'jpeg from mime');
+    eq(M.extFor('', 'video/quicktime'), 'mov', 'quicktime from mime');
+    eq(M.extFor('', 'application/pdf'), 'pdf', 'pdf from mime');
+    eq(M.extFor('scan.HEIC', ''), 'heic', 'extension wins and is lowercased');
+  });
+
+  test('folder is pinned once assigned', function(){
+    var job = {inspNo:'INS-042', address:'12 Marine Pde'};
+    var first = M.resolveFolder(job);
+    job.address = '14 Marine Pde';                 /* a later correction */
+    eq(M.resolveFolder(job), first,
+       'correcting the address does not split a job across two folders');
+  });
+
+  section('Media module — state');
+
+  test('legal transitions only', function(){
+    ok(M.canTransition('local', 'queued') === true, 'local -> queued');
+    ok(M.canTransition('queued', 'uploading') === true, 'queued -> uploading');
+    ok(M.canTransition('uploading', 'uploaded') === true, 'uploading -> uploaded');
+    ok(M.canTransition('uploaded', 'purged') === true, 'uploaded -> purged');
+    ok(M.canTransition('local', 'purged') === false, 'local -> purged refused');
+    ok(M.canTransition('local', 'uploaded') === false, 'local -> uploaded refused');
+    ok(M.canTransition('purged', 'queued') === false, 'purged is terminal');
+  });
+
+  test('an illegal change throws rather than corrupting state', function(){
+    var threw = false;
+    try { M.setState({up:'local'}, 'purged'); } catch(e){ threw = true; }
+    ok(threw, 'setState refuses local -> purged');
+  });
+
+  test('nothing is purgeable without a verified remote copy', function(){
+    ok(M.isPurgeable({up:'local', origSize:10}) === false, 'local file is not purgeable');
+    ok(M.isPurgeable({up:'uploaded', origSize:10}) === false, 'uploaded but unverified is not');
+    ok(M.isPurgeable({up:'uploaded', origSize:10,
+        remote:{itemId:'x', verifiedAt:1, size:9}}) === false, 'size mismatch blocks purge');
+    ok(M.isPurgeable({up:'uploaded', origSize:10,
+        remote:{itemId:'x', verifiedAt:1, size:10}}) === true, 'verified and matching is purgeable');
+    ok(M.isPurgeable({up:'uploaded', origSize:10,
+        remote:{itemId:'x', verifiedAt:Date.now(), size:10}}, 86400000) === false,
+       'grace period holds back a just-verified file');
+  });
+
+  test('retry policy distinguishes temporary from permanent', function(){
+    ok(M.isRetryable({status:500}) === true, '500 is retryable');
+    ok(M.isRetryable({status:429}) === true, '429 is retryable');
+    ok(M.isRetryable({}) === true, 'a network failure with no status is retryable');
+    ok(M.isRetryable({status:400}) === false, '400 is not retryable');
+    ok(M.isRetryable({status:403}) === false, '403 is not retryable');
+    ok(M.backoffMs(1) < M.backoffMs(3), 'backoff grows with attempts');
+    ok(M.backoffMs(99) <= 30000, 'backoff is capped');
+  });
+
+  section('Media module — storage pressure');
+
+  test('pressure levels', function(){
+    eq(M.pressure(10, 100).level, 'ok', '10% is fine');
+    eq(M.pressure(75, 100).level, 'notice', '75% notices');
+    eq(M.pressure(90, 100).level, 'warn', '90% warns');
+    eq(M.pressure(97, 100).level, 'urgent', '97% is urgent');
+    eq(M.pressure(10, 0).level, 'unknown', 'no quota reported');
+  });
+
+  test('urgent message still promises photos will save', function(){
+    var m = M.pressureMessage(M.pressure(97, 100), 1048576);
+    ok(/still save/i.test(m), 'capture is never presented as blocked', m);
+  });
+
+  section('Media module — upload queue');
+
+  /* Fake transport: the queue is written against an interface, so its logic can
+     be proven now and the Graph implementation dropped in later unchanged. */
+  function harness(opts){
+    opts = opts || {};
+    var rec = {mid:'m1', up:'queued', upTries:0, origSize:100, origHash:'h'};
+    var calls = {upload:0, verify:0, saves:[]};
+    var q = M.createQueue({
+      transport: {
+        upload: function(){
+          calls.upload++;
+          if(opts.uploadFails) return Promise.reject(opts.uploadFails);
+          return Promise.resolve({itemId:'ITEM1', webUrl:'https://sp/x', size:100});
+        },
+        verify: function(){
+          calls.verify++;
+          return Promise.resolve({size: opts.verifySize === undefined ? 100 : opts.verifySize});
+        }
+      },
+      list: function(){ return Promise.resolve([rec]); },
+      save: function(r){ calls.saves.push(r.up); return Promise.resolve(); },
+      isOnline: function(){ return opts.offline ? false : true; },
+      wait: function(){ return Promise.resolve(); }     /* no real backoff in tests */
+    });
+    return {q:q, rec:rec, calls:calls};
+  }
+
+  var h1 = harness();
+  return h1.q.drain().then(function(res){
+    eq(res, 'done', 'queue drains to completion');
+    eq(h1.rec.up, 'uploaded', 'record ends up uploaded');
+    eq(h1.rec.remote.itemId, 'ITEM1', 'remote identity recorded');
+    ok(h1.rec.remote.verifiedAt > 0, 'verification timestamp recorded');
+    ok(h1.calls.verify === 1, 'upload is verified by an independent read');
+    ok(h1.calls.saves.indexOf('uploading') > -1,
+       'in-flight state is persisted, so an interrupted upload is recoverable');
+    ok(M.isPurgeable(h1.rec) === true, 'a verified record becomes purgeable');
+
+    /* a truncated upload that still reports success */
+    var h2 = harness({verifySize: 40});
+    return h2.q.drain().then(function(){
+      eq(h2.rec.up, 'failed', 'size mismatch is caught and the record fails');
+      ok(!h2.rec.remote, 'no remote identity is recorded for a bad upload');
+      ok(M.isPurgeable(h2.rec) === false, 'a failed upload is never purgeable');
+
+      /* a permanent error must not be retried forever */
+      var h3 = harness({uploadFails: {status: 400, message: 'bad request'}});
+      return h3.q.drain().then(function(){
+        eq(h3.rec.up, 'failed', 'permanent error leaves the record failed');
+        eq(h3.calls.upload, 1, '400 is attempted once, not retried');
+        ok(h3.rec.upRetryable === false, 'record is flagged as needing attention');
+
+        /* the "Try again" path a person triggers after fixing the cause */
+        M.requeue(h3.rec);
+        eq(h3.rec.up, 'queued', 'requeue puts a held-back record back in line');
+        eq(h3.rec.upTries, 0, 'requeue clears the attempt count');
+        ok(h3.rec.upRetryable === true, 'requeue clears the permanent flag');
+
+        /* a temporary error is retried up to the cap */
+        var h4 = harness({uploadFails: {status: 503, message: 'unavailable'}});
+        return h4.q.drain().then(function(){
+          eq(h4.calls.upload, M.MAX_TRIES, '503 retries up to the cap then stops');
+
+          /* offline must not burn attempts */
+          var h5 = harness({offline: true});
+          return h5.q.drain().then(function(res5){
+            eq(res5, 'offline', 'queue reports offline rather than failing');
+            eq(h5.calls.upload, 0, 'no attempt is made with no connection');
+            eq(h5.rec.up, 'queued', 'record stays queued for later');
+          });
+        });
+      });
+    });
+  }).then(function(){
+    section('Media module — integrity');
+    return M.sha256Hex(new Blob(['abc'])).then(function(hex){
+      eq(hex, 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+         'SHA-256 matches the known digest for "abc"');
+      return M.sha256Hex(null).then(function(n){
+        eq(n, null, 'no blob yields no hash rather than throwing');
+      });
+    });
+  }).then(function(){
+    test('originalOf falls back for single-copy files', function(){
+      var b = new Blob(['v']);
+      eq(M.originalOf({original: null, blob: b}), b, 'video/PDF: the stored blob is the original');
+      var o = new Blob(['o']);
+      eq(M.originalOf({original: o, blob: new Blob(['r'])}), o, 'photo: the untouched copy wins');
+    });
+  });
+}
+
 function finish(){
   var s = document.getElementById('summary');
   s.className = fail === 0 ? 'pass' : 'fail';
@@ -586,18 +794,32 @@ function finish(){
     : fail + ' of ' + (pass + fail) + ' assertions FAILED.';
 }
 
+/* The service worker caches index.html AND ds-media-sync.js and serves them
+   cache-first, so a harness running under its control can silently test the
+   previous build — which it did, reporting a fixed bug as still broken. Clearing
+   is not enough on its own: this page parses its own <script src> before any
+   clearing code runs. So clear, then navigate once, arriving uncontrolled with
+   every resource fetched fresh. The flag stops it looping. */
 var APPW = null;
+if(location.search.indexOf('cleared=1') === -1){
+  document.getElementById('summary').textContent = 'Clearing caches…';
+  clearWorkers().then(function(){
+    location.replace('tests.html?cleared=1&r=' + Date.now());
+  });
+} else {
 clearWorkers()
   .then(loadApp)
   .then(function(W){ APPW = W; return run(W); })
   .then(function(){ return crossCheckV111(APPW); })
   .then(function(){ return releaseChecks(APPW); })
+  .then(mediaModuleChecks)
   .then(finish)
   .catch(function(e){
     var s = document.getElementById('summary');
     s.className = 'fail';
     s.textContent = 'Harness error: ' + (e && e.message || e);
   });
+}
 </script>
 </body>
 </html>
