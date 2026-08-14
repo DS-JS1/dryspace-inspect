@@ -1,0 +1,5 @@
+# Normalise line endings so diffs show real changes, not CRLF churn.
+* text=auto eol=lf
+*.png binary
+*.pdf binary
+*.docx binary

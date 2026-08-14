@@ -1,0 +1,214 @@
+Dryspace Site Inspection App — Changelog
+========================================
+v1.0.0 — 20 July 2026
+- Initial release. Built from Site Inspection Form v4 (Project 2.1), all 12
+  sections and dynamic reveals preserved.
+- Offline-first PWA: installable on iPad / iPhone (Safari) and Android (Chrome).
+- Continuous autosave to on-device storage (IndexedDB); suspend/resume;
+  edit after completion; multiple concurrent draft inspections.
+- Photo compression (~1600px JPEG) with thumbnails; video/document storage;
+  per-item remove.
+- Send: self-contained HTML report (answers + embedded photos + hidden JSON
+  data block for Proposal Builder 3.0) via device share sheet; separate
+  "Share photo & video files" for full-size media; all-inspections JSON backup.
+- Versioning: bump APP_VER (index.html) and CACHE_VERSION (sw.js) each release.
+
+v1.1.0 — 20 July 2026
+- Office pre-fill / handover workflow: "Share draft (handover to field team)"
+  button exports a DS_Draft .json; "Import draft / report / backup" button on
+  the home screen imports it on any other device. Same-ID imports prompt to
+  replace or keep both.
+- Reports now embed raw field data (rawData) so a sent report .html can be
+  re-imported as an editable inspection on another device.
+- Backup files can now be restored via the same Import button.
+- Dryspace logo embedded (from logo_DrySpaceSolutions_2025_alone.png) — shown
+  in the app header, form header and at the top of every report; works offline.
+- Drafts now carry attached files: photos (compressed) and documents/floor
+  plans (PDF, images) travel inside the draft .json. Videos are excluded from
+  drafts (size) and listed by name — share those via OneDrive. Drafts over
+  20 MB prompt before export.
+- Version footer on the home screen now reads from APP_VER automatically.
+- Bumped APP_VER 1.1.1 / CACHE_VERSION ds-inspect-v1.1.1.
+NOTE: backups remain field-data only. Drafts carry photos/documents but not
+videos. Reports carry compressed photos; full-size media is shared via
+"Share photo & video files".
+
+v1.2.0 — 2 August 2026
+--------------------------------------------------------------------------
+BREAKING CHANGE TO DATA STORAGE (handled automatically — read this note)
+- Answers are no longer stored against field label text. Every control now
+  carries a permanent, build-time field id (data-fid, e.g. "s3.slab-design")
+  which never changes, even if the label is reworded or the field is moved to
+  a different section. This removes the single biggest fragility in v1.1.1,
+  where renaming a label silently orphaned that field's saved data.
+- Records saved on v1.1.1 are migrated automatically the first time they are
+  opened in v1.2: all 296 legacy keys are mapped to stable ids, the retired
+  "Basement construction type" dropdown is converted to ticked checkboxes in
+  the merged wall-construction list, and its free text is appended (never
+  overwritten) to the merged Other field. Anything unrecognised is preserved
+  under an "unmapped:" prefix rather than discarded. Migration is logged to
+  the record's audit trail and the user is prompted to review Section 03.
+- Records now carry: schema (2), stage, editedBy and an audit trail.
+- ACTION FOR PROJECT 3.0: report JSON now keys rawData by field id, not by
+  label. The Proposal Builder must be updated to map against these ids.
+
+Workflow, handover and version control
+- New stage tracker at the top of every inspection: Current stage (Office →
+  Field → Technical → Sales → Admin → Closed), Your name, last-updated
+  timestamp with the editor's name, and the date the record was created.
+- Audit trail inside each record: stage changes, completion, migration,
+  imports and forks are logged with who, when and at what stage. The trail
+  travels inside draft and report files, so history survives every handover.
+- Exported files are now stamped with inspection number, stage, timestamp and
+  the exporter's initials, e.g.
+  DS_Draft_INS-042_S02-FIELD_2026-08-02T1430_JS.json
+- Importing an inspection that already exists now shows both timestamps, both
+  stages and both editors side by side, warns when the copy already on the
+  device is the newer one, and relabels the second option as
+  "keep both (creates a fork)" with an explicit warning. Incoming timestamps
+  are preserved rather than overwritten with "now", so the comparison is real.
+- Companion document added: 03_Handover & Version Control Protocol.
+
+Form content (Section 01)
+- "HubSpot deal name" added as the first field.
+- Inspection date now shows the day beneath it, e.g. "Monday 20 July 2026".
+- "Quote number (Quotient)" added under Inspection number.
+- "Referred by" added alongside Lead source.
+- Contacts restructured into two clearly separated blocks — Primary contact
+  and Secondary contact — each with name, email, phone and role.
+- "Property listing / plans URL" added (manual paste at the office stage).
+- Photos moved to the foot of the section: "Title photo for reports (front of
+  property)" (single photo, used on the front of the proposal) plus a second
+  "Additional photos" field for everything else.
+
+Form content (Sections 02, 03, 07, 11)
+- 02: "History unknown" added to the better/worse/same list.
+- 03: block orientation option reworded to "(street at top)".
+- 03: "Basement construction type" dropdown merged into the checkbox list,
+  now "Basement wall construction & material(s)" with a single deduplicated
+  set of options.
+- 03: "Internal ceiling height" moved up to sit with the wall information,
+  under "Evidence of previous external waterproofing membrane?".
+- 03: "Raft slab with stepdown for wall" added to Slab design.
+- 07: Measurement schedule added — a repeating table of wall face, length,
+  height, calculated area, treatment, grade and notes, with linear-metre and
+  m2 totals. Feeds Proposal Builder 3.0 and Quote Assembly 4.0 directly, and
+  is rendered as readable lines in the report.
+- 11: video capture and transfer block — media folder link, per-clip video
+  log, and upload status, with on-screen device settings guidance.
+- 11: dedicated "Building / floor plans" upload plus a "Source of plans" field.
+
+New Section 03A — Safety, Access & Discharge
+- Safety: asbestos likelihood, suspected ACM locations, confined space
+  classification, 13-item hazard checklist, induction and SWMS requirements.
+- Access: parking, height restriction, carry distance, stairs, carry route,
+  lift details, power and water availability, waste and spoil removal, site
+  occupancy and working-hour restrictions.
+- Discharge point: identification status, destination, distance and fall,
+  existing sump/pump condition, pump power, licensed plumber requirement and
+  council legal-point-of-discharge notes.
+- Photo field for access route, discharge point and hazards.
+- Lettered 03A deliberately so Sections 04-12 keep their existing numbers and
+  no existing SOP or downstream reference has to be renumbered.
+
+Formatting and interface
+- Section headers are now white ALL CAPS on Dryspace navy.
+- The Dryspace logo is pinned to the top-right of the sticky bar beside SEND,
+  so it stays visible while scrolling.
+- Every field label carries a reference chip (e.g. 03.4) generated from its
+  live position, for unambiguous reference during reviews. The underlying data
+  id is separate and permanent, so moving a field renumbers the chip without
+  touching the stored data.
+- Tapping "+ New inspection" now opens with only Section 01 expanded.
+- The progress bar now reflects how much of the form has content, rather than
+  how many sections happen to be expanded.
+- Home screen tiles show Australian dates with the day name
+  ("Inspected Monday 20/7/2026"), plus the current stage and last editor.
+- Report header now carries stage, last editor, last-updated time, quote
+  number and the app version date.
+
+Versions
+- APP_VER 1.2.0 · FORM_VER 4.1 · VER_DATE 2 August 2026
+- CACHE_VERSION ds-inspect-v1.2.0
+
+Known limits unchanged from v1.1.1
+- No live cross-device sync; the draft file plus the SharePoint protocol is
+  the transfer mechanism.
+- Backups remain field-data only (no media).
+- Videos do not travel inside drafts or reports.
+- HEIC conversion: on iPhone/iPad iOS converts to JPEG at the file picker, so
+  it works. On Windows the browser cannot decode HEIC, and the original file
+  is stored unconverted. This is now stated accurately in the User Guide.
+
+v1.2.1 — 2 August 2026
+--------------------------------------------------------------------------
+Completion indicators (visual only — no change to stored data)
+- Each field reference chip (e.g. 03.4) turns green with a tick once that
+  field has content. Colour is paired with a glyph rather than used alone,
+  so it still reads in bright sun and with colour vision deficiency.
+- Photo blocks (03A and the three moisture-sign blocks in 04) turn green when
+  at least one photo is attached, rather than on a field value.
+- The "Longer video" block in Section 11 rolls up its nested fields — green
+  once any of them has content.
+- Each section header shows a completion count, e.g. 12/19, so gaps are
+  visible without expanding the section. Turns green when the section is full.
+- New "Highlight gaps" button in the top bar. OFF by default so the form looks
+  calm; switch it on and empty fields are flagged amber. The choice is
+  remembered per device. Reference chips print neutral either way.
+- Per-section completion counts now also appear on the exported report, both
+  in the visible heading and in the machine-readable data block.
+- The progress bar and these counts are independent: blanks remain legitimate
+  on this form, and the counts exist to find genuine gaps rather than to be
+  driven to 100%.
+
+"None apply" options
+- A nil option added to 18 checkbox groups, worded for each group rather than
+  generically: "None observed" (04 moisture signs), "None identified —
+  standard precautions only" (03A hazards), "None in the work area" (06
+  services), "None — ready to quote" (12 follow-up), and so on.
+- Deliberately NOT added to three groups where a blank already carries meaning:
+  01 Client / job history, 01 Current use of affected area, 03A Carry route.
+- Each is a new checkbox with its own permanent field id — additive, no
+  migration required.
+
+BS8102:2022 waterproofing grades  (resolves a standing question)
+- Section 03 replaced the BS8102:2009 grades (1 / 2 / 3) carried over from the
+  Dryspace Guide with the BS8102:2022 Table 2 classification:
+  Grade 1a, Grade 1b, Grade 2, Grade 3, plus TBC.
+- Reference chip changed from "Guide p.8" to "BS8102:2022 Table 2".
+- IMPORTANT: radio answers are stored as the option's text, so rewording an
+  option would silently orphan the answer and lose it on the next autosave.
+  A new VALUE_REMAP mechanism translates stored answers on upgrade:
+    old Grade 1 -> Grade 1a      old Grade 2 -> 2022 Grade 2 wording
+    old Grade 3 -> 2022 Grade 3 wording
+  The change is written to the record's audit trail and the user is prompted
+  to confirm the grade before the job goes to a client.
+- Record schema bumped to 3. ensureSchema() now runs 1->2 (field ids) and
+  2->3 (grade remap) in order, so a v1.1.1 record upgrades in a single pass.
+- OUTSTANDING: the Dryspace Guide to Basement Waterproofing Remediation (2022)
+  still shows the 2009 classification and now disagrees with the form.
+
+Versions
+- APP_VER 1.2.1 · FORM_VER 4.2 · schema 3 · CACHE_VERSION ds-inspect-v1.2.1
+
+Verification
+- 21 logic tests (grade remap, full v1.1.1 -> v1.2.1 chain, schema-2 upgrade
+  path, hasVal rules) — all passed.
+- All 296 v1.1.1 data keys still map to a stable field id — no regression.
+- All 154 reference chips confirmed to have either controls or a media field
+  behind them, so none can sit permanently grey.
+- JavaScript and service worker syntax checked; HTML structure balanced;
+  472 field ids, no non-radio duplicates.
+
+--------------------------------------------------------------------------
+FOLDER RENAME — 2 August 2026
+- This folder was renamed from "Dryspace Inspection App v1.1.2" to
+  "Dryspace Inspection App v1.2.1" so the folder name matches the app version
+  inside it (APP_VER 1.2.1 / FORM_VER 4.2). There was never a released v1.1.2
+  app — that was the working folder in which v1.2.0 and v1.2.1 were built, so
+  no release history was lost. v1.0 and v1.1 remain as separate folders.
+- app/field_ids_v1.2.json replaced by app/field_ids_v1.2.1.json (399 field ids).
+- 02_Claude Iteration Guide updated: source-of-truth paths now point at the
+  v1.2.1 folder, and a callout added requiring the folder name to match
+  APP_VER on every future release.
+- PROJECT_CONTEXT_BRIEF in the parent folder renamed to (as_at-V1.2.1).

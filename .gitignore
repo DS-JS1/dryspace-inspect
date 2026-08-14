@@ -1,0 +1,7 @@
+# Windows / OneDrive / macOS cruft
+Thumbs.db
+desktop.ini
+.DS_Store
+~$*
+# Local scratch
+*.tmp
