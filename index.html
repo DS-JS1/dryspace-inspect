@@ -483,7 +483,7 @@ input[type=text]:focus,input[type=date]:focus,select:focus,textarea:focus{outlin
           <label class="cbl"><input data-fid="s3.basement-wall-construction-and-materials::pile-construction-drilled-poured-or-driv" type="checkbox" data-legacy="t|s3|Basement construction type=Pile construction — drilled / poured or driven"> Pile construction — drilled / poured or driven</label>
           <label class="cbl"><input data-fid="s3.basement-wall-construction-and-materials::edge-beam-slab-edge-only" type="checkbox" data-legacy="c|s3|Retaining wall material(s)|Edge beam / slab edge only"> Edge beam / slab edge only</label>
           <label class="cbl"><input data-fid="s3.basement-wall-construction-and-materials::unknown" type="checkbox" data-legacy="c|s3|Retaining wall material(s)|Unknown"> Unknown</label>
-          <label class="cbl"><input data-fid="s3.basement-wall-construction-and-materials::other" type="checkbox" data-legacy="c|s3|Retaining wall material(s)|Other" onchange="togCb(this,'wallmat-oth')"> Other</label>
+          <label class="cbl"><input data-fid="s3.basement-wall-construction-and-materials::other" type="checkbox" data-legacy="c|s3|Retaining wall material(s)|Other;;t|s3|Basement construction type=Other" onchange="togCb(this,'wallmat-oth')"> Other</label>
         </div>
         <div class="other-input" id="wallmat-oth"><input data-fid="s3.basement-wall-construction-and-materials-other" type="text" data-legacy="t|s3|Retaining wall material(s) — Other" placeholder="Describe wall construction or material..."></div>
       </div>
@@ -1533,15 +1533,22 @@ function assignKeys(){
       if(LEGACY_TO_FID[lk] === undefined) LEGACY_TO_FID[lk] = fid;
 
       /* explicit overrides for fields renamed, merged or moved in v1.2 */
+      /* One control can carry more than one legacy rule — e.g. the merged "Other"
+         checkbox inherits both a v1.1.1 checkbox and a retired dropdown's "Other"
+         value. Rules are separated by ";;" because the keys themselves contain
+         "|" and "=". (v1.2.1 supported only one rule per control, which left the
+         retired dropdown's "Other" answer with no way to convert — see B4.) */
       var dl = el.dataset.legacy;
-      if(dl){
-        var eq = dl.indexOf('=');
-        if(eq > -1 && (dl.slice(0, eq).split('|').length === 3)){
-          VALUE_RULES.push({key: dl.slice(0, eq), value: dl.slice(eq + 1), fid: fid});
+      if(dl) dl.split(';;').forEach(function(rule){
+        rule = rule.trim();
+        if(!rule) return;
+        var eq = rule.indexOf('=');
+        if(eq > -1 && (rule.slice(0, eq).split('|').length === 3)){
+          VALUE_RULES.push({key: rule.slice(0, eq), value: rule.slice(eq + 1), fid: fid});
         } else {
-          LEGACY_TO_FID[dl] = fid;
+          LEGACY_TO_FID[rule] = fid;
         }
-      }
+      });
     });
   });
 }

@@ -430,6 +430,52 @@ function crossCheckV111(W){
   });
 }
 
+/* ---------- release readiness ----------
+   Version stamps live in four separate places and nothing keeps them in step.
+   A forgotten CACHE_VERSION bump is the worst of the failures because it is
+   silent: the push succeeds, the files change, and every installed device keeps
+   serving the previously cached app indefinitely. */
+function releaseChecks(W){
+  section('Release readiness');
+  var appVer = W.APP_VER, formVer = W.FORM_VER;
+  ok(!!appVer, 'APP_VER is set (' + appVer + ')');
+
+  var bust = '?r=' + Date.now();
+
+  return fetch('sw.js' + bust).then(function(r){ return r.text(); }).then(function(sw){
+    var m = sw.match(/CACHE_VERSION\s*=\s*'([^']+)'/);
+    ok(!!m, 'sw.js declares a CACHE_VERSION', 'none found');
+    if(m){
+      ok(m[1].indexOf(appVer) > -1,
+         'CACHE_VERSION carries APP_VER — installed devices will take this build',
+         'CACHE_VERSION is "' + m[1] + '" but APP_VER is "' + appVer +
+         '". Devices would silently keep running the previously cached app.');
+    }
+  }).catch(function(){ record(false, 'sw.js readable', 'fetch failed'); })
+
+  .then(function(){
+    return fetch('field_ids_v' + appVer + '.json' + bust)
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(j){
+        ok(!!j, 'field_ids_v' + appVer + '.json exists',
+           'no field id manifest named for this version — regenerate it on release');
+        if(j){
+          eq(j.appVersion, appVer, 'field id manifest declares this app version');
+          eq(j.formVersion, formVer, 'field id manifest declares this form version');
+        }
+      }).catch(function(){ record(false, 'field id manifest readable', 'fetch failed'); });
+  })
+
+  .then(function(){
+    return fetch('CHANGELOG.txt' + bust).then(function(r){ return r.text(); })
+      .then(function(t){
+        ok(t.indexOf(appVer) > -1,
+           'CHANGELOG.txt carries an entry for v' + appVer,
+           'no mention of ' + appVer + ' — changelog not updated for this release');
+      }).catch(function(){ record(false, 'CHANGELOG.txt readable', 'fetch failed'); });
+  });
+}
+
 function finish(){
   var s = document.getElementById('summary');
   s.className = fail === 0 ? 'pass' : 'fail';
@@ -438,10 +484,12 @@ function finish(){
     : fail + ' of ' + (pass + fail) + ' assertions FAILED.';
 }
 
+var APPW = null;
 clearWorkers()
   .then(loadApp)
-  .then(run)
-  .then(crossCheckV111)
+  .then(function(W){ APPW = W; return run(W); })
+  .then(function(){ return crossCheckV111(APPW); })
+  .then(function(){ return releaseChecks(APPW); })
   .then(finish)
   .catch(function(e){
     var s = document.getElementById('summary');
