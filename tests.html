@@ -314,6 +314,62 @@ function run(W){
     ok(rec.data && typeof rec.data === 'object', 'data object created');
   });
 
+  /* ===== media identity (v1.3) ===== */
+  section('Media identity');
+
+  var fileInputs = Array.prototype.slice.call(
+    D.querySelectorAll('#form-root input[type=file]'));
+
+  test('every media input has a stable id', function(){
+    var missing = fileInputs.filter(function(el){ return !el.dataset.mfid; });
+    ok(missing.length === 0,
+       'all ' + fileInputs.length + ' media inputs carry a data-mfid',
+       missing.length + ' without one — their photos would be keyed by DOM id and ' +
+       'orphan if that id ever changed: ' +
+       missing.map(function(e){ return e.id || '(no id)'; }).join(', '));
+  });
+
+  test('stable media ids are unique', function(){
+    var seen = {}, dupes = [];
+    fileInputs.forEach(function(el){
+      var m = el.dataset.mfid;
+      if(!m) return;
+      if(seen[m]) dupes.push(m); else seen[m] = 1;
+    });
+    ok(dupes.length === 0, 'no duplicate data-mfid', 'duplicated: ' + dupes.join(', '));
+  });
+
+  test('runtime maps are populated', function(){
+    eq(Object.keys(W.MFID_EL || {}).length, fileInputs.length,
+       'MFID_EL resolves every media input');
+    eq(Object.keys(W.LEGACY_MFID || {}).length, fileInputs.length,
+       'LEGACY_MFID can rekey every pre-v1.3 DOM id');
+  });
+
+  test('legacy ids map to their own input', function(){
+    var wrong = Object.keys(W.LEGACY_MFID || {}).filter(function(oldId){
+      var el = D.getElementById(oldId);
+      return !el || el.dataset.mfid !== W.LEGACY_MFID[oldId];
+    });
+    ok(wrong.length === 0, 'each pre-v1.3 id rekeys to its own input',
+       'mismatched: ' + wrong.join(', '));
+  });
+
+  test('preview containers are keyed by stable id', function(){
+    var keys = Object.keys(W.MEDIA_MAP || {});
+    var notStable = keys.filter(function(k){ return !W.MFID_EL[k]; });
+    ok(keys.length > 0 && notStable.length === 0,
+       'MEDIA_MAP is keyed by data-mfid (' + keys.length + ' entries)',
+       'still keyed by DOM id: ' + notStable.join(', '));
+  });
+
+  test('completion chips reference resolvable media ids', function(){
+    var broken = (W.COMP || []).filter(function(c){ return c.media && !W.MFID_EL[c.media]; });
+    ok(broken.length === 0,
+       'every photo block resolves to a real media input',
+       broken.length + ' chip(s) point at a media id that no longer exists');
+  });
+
   /* ===== hasVal ===== */
   section('hasVal content rules');
 
