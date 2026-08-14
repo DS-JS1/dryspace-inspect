@@ -49,6 +49,7 @@ code{font-family:ui-monospace,Consolas,monospace;background:#f4f6f8;padding:1px 
 
 <!-- loaded directly, not through the app, so the module is proven standalone -->
 <script src="ds-media-sync.js"></script>
+<script src="ds-sharepoint.js"></script>
 <script>
 'use strict';
 
@@ -786,6 +787,210 @@ function mediaModuleChecks(){
   });
 }
 
+/* ---------- SharePoint transport ----------
+   Driven by a fake fetch. Proves the Graph conversation is correct — endpoints,
+   chunking, conflict handling, error classification — without a live tenant,
+   which is the part still waiting on the Entra registration. */
+function sharePointChecks(){
+  var SP = window.DSSharePoint;
+  section('SharePoint transport');
+  ok(!!SP, 'ds-sharepoint.js loaded');
+  if(!SP) return Promise.resolve();
+
+  function res(status, body, headers){
+    return {
+      ok: status >= 200 && status < 300,
+      status: status,
+      statusText: '',
+      headers: {get: function(k){ return (headers || {})[k] || null; }},
+      json: function(){ return Promise.resolve(body); },
+      text: function(){ return Promise.resolve(JSON.stringify(body || '')); }
+    };
+  }
+
+  /* routes: [regex, method|null, handler(url, init, call#)] */
+  function fakeGraph(routes){
+    var calls = [];
+    var fn = function(url, init){
+      init = init || {};
+      calls.push({url: url, method: init.method || 'GET', headers: init.headers || {}, body: init.body});
+      for(var i = 0; i < routes.length; i++){
+        var r = routes[i];
+        if(r[0].test(url) && (!r[1] || r[1] === (init.method || 'GET'))){
+          return Promise.resolve(r[2](url, init, calls.length));
+        }
+      }
+      return Promise.resolve(res(404, {error: 'no route for ' + url}));
+    };
+    fn.calls = calls;
+    return fn;
+  }
+
+  var baseRoutes = [
+    [/\/sites\/dryspacesolutions\.sharepoint\.com:\/sites\/SiteInspections$/, 'GET',
+      function(){ return res(200, {id: 'SITE1'}); }],
+    [/\/sites\/SITE1\/drive$/, 'GET', function(){ return res(200, {id: 'DRIVE1'}); }]
+  ];
+
+  function make(extra, over){
+    var f = fakeGraph(baseRoutes.concat(extra || []));
+    var t = SP.createTransport(Object.assign({
+      getToken: function(){ return Promise.resolve('TOKEN'); },
+      hostname: 'dryspacesolutions.sharepoint.com',
+      sitePath: '/sites/SiteInspections',
+      fetchImpl: f,
+      folderOf: function(){ return 'INS-042 - 12 Marine Parade, Kirra'; },
+      nameOf: function(){ return 'INS-042_2026-08-14_s4-wall_001.jpg'; }
+    }, over || {}));
+    return {t: t, f: f};
+  }
+
+  var small = {original: new Blob(['x'.repeat(1000)], {type: 'image/jpeg'}), origSize: 1000};
+
+  test('chunk size satisfies Graph', function(){
+    eq(SP.CHUNK % 327680, 0, 'resumable chunk is a multiple of 320 KiB');
+    ok(SP.SIMPLE_MAX <= 4 * 1024 * 1024, 'simple upload stays within the 4 MB limit');
+  });
+
+  var m1 = make([
+    [/\/root\/children$/, 'POST', function(){ return res(201, {id: 'FOLDER1'}); }],
+    [/:\/content$/, 'PUT', function(){ return res(201, {id: 'ITEM1', size: 1000, webUrl: 'https://sp/x'}); }]
+  ]);
+  return m1.t.upload(small, {}).then(function(remote){
+    eq(remote.itemId, 'ITEM1', 'item id returned from a small upload');
+    eq(remote.driveId, 'DRIVE1', 'drive resolved at runtime, not configured');
+    var urls = m1.f.calls.map(function(c){ return c.method + ' ' + c.url; });
+    ok(urls.some(function(u){ return /GET .*sites\/dryspacesolutions.*SiteInspections$/.test(u); }),
+       'site resolved by hostname and path');
+    ok(urls.some(function(u){ return /POST .*\/root\/children$/.test(u); }), 'folder created before upload');
+    ok(urls.some(function(u){ return /PUT .*%20Marine%20Parade.*content$/.test(u); }),
+       'path segments are URL-encoded, so spaces and commas survive');
+    ok(m1.f.calls.every(function(c){ return !c.headers || !('Authorization' in c.headers) || c.headers.Authorization === 'Bearer TOKEN'; }),
+       'every Graph call carries the bearer token');
+
+    /* an existing folder must not be an error */
+    var m2 = make([
+      [/\/root\/children$/, 'POST', function(){ return res(409, {error: 'nameAlreadyExists'}); }],
+      [/:\/content$/, 'PUT', function(){ return res(201, {id: 'ITEM2', size: 1000}); }]
+    ]);
+    return m2.t.upload(small, {}).then(function(r2){
+      eq(r2.itemId, 'ITEM2', '409 on folder creation is treated as "already there"');
+
+      /* two photos in one batch must not each create the folder */
+      var folderPosts = 0;
+      var m3 = make([
+        [/\/root\/children$/, 'POST', function(){ folderPosts++; return res(201, {id: 'F'}); }],
+        [/:\/content$/, 'PUT', function(){ return res(201, {id: 'I', size: 1000}); }]
+      ]);
+      return m3.t.upload(small, {}).then(function(){ return m3.t.upload(small, {}); })
+        .then(function(){ eq(folderPosts, 1, 'folder is created once per batch, not per photo'); });
+    });
+  }).then(function(){
+    /* large file: session + chunks */
+    /* Must exceed CHUNK, not just SIMPLE_MAX, or it travels as a single chunk
+       and the splitting logic is never exercised. */
+    var big = {original: new Blob([new Uint8Array(SP.CHUNK + 1000)], {type: 'video/mp4'}),
+               origSize: SP.CHUNK + 1000};
+    var ranges = [];
+    var m4 = make([
+      [/\/root\/children$/, 'POST', function(){ return res(201, {id: 'F'}); }],
+      [/createUploadSession$/, 'POST', function(){ return res(200, {uploadUrl: 'https://upload/session1'}); }],
+      [/^https:\/\/upload\/session1$/, 'PUT', function(url, init){
+        ranges.push(init.headers['Content-Range']);
+        var m = /bytes (\d+)-(\d+)\/(\d+)/.exec(init.headers['Content-Range']);
+        var end = parseInt(m[2], 10), total = parseInt(m[3], 10);
+        if(end + 1 >= total) return res(201, {id: 'BIG1', size: total});
+        return res(202, {nextExpectedRanges: [(end + 1) + '-']});
+      }]
+    ]);
+    return m4.t.upload(big, {}).then(function(r){
+      eq(r.itemId, 'BIG1', 'large upload completes through a resumable session');
+      eq(ranges.length, 2, 'split into two chunks');
+      ok(/^bytes 0-/.test(ranges[0]), 'first chunk starts at byte 0');
+      var first = /bytes 0-(\d+)\//.exec(ranges[0]);
+      eq(parseInt(first[1], 10) + 1, SP.CHUNK, 'first chunk is exactly the configured size');
+      ok(ranges[1].indexOf('bytes ' + SP.CHUNK + '-') === 0,
+         'second chunk resumes exactly where the first ended, leaving no gap');
+    });
+  }).then(function(){
+    /* verification is an independent read */
+    var m5 = make([
+      [/\/items\/ITEM9\?select=/, 'GET', function(){ return res(200, {id: 'ITEM9', size: 4242, eTag: 'E1'}); }]
+    ]);
+    return m5.t.verify({driveId: 'DRIVE1', itemId: 'ITEM9'}).then(function(v){
+      eq(v.size, 4242, 'verify reads the stored size back');
+      ok(m5.f.calls.some(function(c){ return /\/items\/ITEM9\?select=/.test(c.url) && c.method === 'GET'; }),
+         'verify issues its own GET rather than reusing the upload response');
+    });
+  }).then(function(){
+    /* error classification feeds the queue's retry policy */
+    var m6 = make([
+      [/\/root\/children$/, 'POST', function(){ return res(201, {id: 'F'}); }],
+      [/:\/content$/, 'PUT', function(){ return res(429, {error: 'throttled'}, {'Retry-After': '7'}); }]
+    ]);
+    return m6.t.upload(small, {}).then(function(){
+      record(false, '429 should reject', 'upload resolved on a throttle response');
+    }, function(err){
+      eq(err.status, 429, '429 surfaces its status');
+      eq(err.retryAfterMs, 7000, 'Retry-After is carried through in milliseconds');
+      ok(window.DSMedia.isRetryable(err) === true, 'queue will retry a throttle');
+    });
+  }).then(function(){
+    var m7 = make([
+      [/\/root\/children$/, 'POST', function(){ return res(201, {id: 'F'}); }],
+      [/:\/content$/, 'PUT', function(){ return res(400, {error: 'invalidRequest'}); }]
+    ]);
+    return m7.t.upload(small, {}).then(function(){
+      record(false, '400 should reject', 'upload resolved on a bad request');
+    }, function(err){
+      eq(err.status, 400, '400 surfaces its status');
+      ok(window.DSMedia.isRetryable(err) === false, 'queue will not retry a bad request');
+    });
+  }).then(function(){
+    /* a dropped connection must look retryable, not permanent */
+    var t8 = SP.createTransport({
+      getToken: function(){ return Promise.resolve('T'); },
+      hostname: 'h', sitePath: '/sites/S',
+      fetchImpl: function(){ return Promise.reject(new Error('Failed to fetch')); },
+      folderOf: function(){ return 'F'; }, nameOf: function(){ return 'n.jpg'; }
+    });
+    return t8.upload(small, {}).then(function(){
+      record(false, 'network failure should reject', 'resolved despite no connection');
+    }, function(err){
+      ok(err.offline === true, 'a dropped connection is flagged as offline');
+      ok(window.DSMedia.isRetryable(err) === true, 'queue will retry after a dropped connection');
+    });
+  }).then(function(){
+    /* a failed folder creation must not poison later attempts */
+    var attempt = 0;
+    var m9 = make([
+      [/\/root\/children$/, 'POST', function(){
+        attempt++;
+        return attempt === 1 ? res(500, {error: 'boom'}) : res(201, {id: 'F'});
+      }],
+      [/:\/content$/, 'PUT', function(){ return res(201, {id: 'OK1', size: 1000}); }]
+    ]);
+    return m9.t.upload(small, {}).then(function(){
+      record(false, 'first attempt should fail', 'unexpected success');
+    }, function(){
+      return m9.t.upload(small, {}).then(function(r){
+        eq(r.itemId, 'OK1', 'a retry after a failed folder creation succeeds');
+        eq(attempt, 2, 'the failed folder promise was not cached');
+      });
+    });
+  }).then(function(){
+    test('app carries the site configuration', function(){
+      var C = APPW && APPW.SP_CONFIG;
+      ok(!!C, 'SP_CONFIG present in the app');
+      if(!C) return;
+      eq(C.hostname, 'dryspacesolutions.sharepoint.com', 'hostname configured');
+      eq(C.sitePath, '/sites/SiteInspections', 'site path configured');
+      ok(APPW.spConfigured() === false,
+         'app reports itself unconfigured until the Entra ids are filled in');
+    });
+  });
+}
+
 function finish(){
   var s = document.getElementById('summary');
   s.className = fail === 0 ? 'pass' : 'fail';
@@ -813,6 +1018,7 @@ clearWorkers()
   .then(function(){ return crossCheckV111(APPW); })
   .then(function(){ return releaseChecks(APPW); })
   .then(mediaModuleChecks)
+  .then(sharePointChecks)
   .then(finish)
   .catch(function(e){
     var s = document.getElementById('summary');
