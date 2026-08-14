@@ -250,3 +250,20 @@ Test harness (new)
 - Release gates: CACHE_VERSION must carry APP_VER (a forgotten bump is silent
   and leaves every device on the old app), the field id manifest must exist and
   agree, and the changelog must carry an entry for the current version.
+
+Media handling (v1.3, in progress)
+- New ds-media-sync.js: capture, naming, integrity and upload queueing, written
+  standalone so the planned job-update and silica-worksheet PWAs reuse it rather
+  than copying it.
+- Photos now keep THREE copies: a 240px thumbnail for previews, a 1600px copy so
+  emailed reports stay deliverable, and the untouched original as the evidence
+  copy. Video and PDFs keep one copy.
+- "Share photo & video files" now genuinely shares the originals. Before v1.3 it
+  shared the 1600px copies while describing itself as full-size media.
+- Every original is fingerprinted (SHA-256) when it is captured.
+- Uploads are verified by reading the stored file back and comparing its size,
+  never by trusting the upload response — which can report success on a
+  truncated write. Nothing on the device becomes safe to delete without that.
+- Storage warnings appear as originals accumulate, but capture is never blocked.
+  Running out of space is recoverable; an un-photographed defect is not.
+- Upload itself is not yet connected — that needs the Entra app registration.
