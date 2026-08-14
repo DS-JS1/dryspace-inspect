@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<title>Dryspace Inspection App — logic tests</title>
+<style>
+:root{--ok:#1e6b34;--okbg:#e0f2e4;--bad:#a12622;--badbg:#fbebea;--ink:#1a2733;--dim:#55606b}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:var(--ink);
+     max-width:960px;margin:0 auto;padding:24px;line-height:1.5}
+h1{font-size:20px;color:#123a5f;margin-bottom:4px}
+.sub{font-size:13px;color:var(--dim);margin-bottom:18px}
+#summary{font-size:15px;font-weight:600;padding:12px 14px;border-radius:8px;margin-bottom:16px}
+#summary.pass{background:var(--okbg);color:var(--ok)}
+#summary.fail{background:var(--badbg);color:var(--bad)}
+#summary.run{background:#e8f1fa;color:#1b5e9e}
+h2{font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);
+   margin:18px 0 6px;padding-bottom:4px;border-bottom:1px solid #e3e7eb}
+.t{display:flex;gap:10px;padding:5px 0;font-size:13px;border-bottom:1px solid #f0f2f4;align-items:baseline}
+.t .m{flex-shrink:0;font-weight:700;width:44px}
+.t.p .m{color:var(--ok)}
+.t.f .m{color:var(--bad)}
+.t .d{flex:1}
+.t .why{display:block;color:var(--bad);font-size:12px;margin-top:2px;font-family:ui-monospace,Consolas,monospace}
+footer{margin-top:22px;font-size:12px;color:var(--dim);border-top:1px solid #e3e7eb;padding-top:10px}
+code{font-family:ui-monospace,Consolas,monospace;background:#f4f6f8;padding:1px 4px;border-radius:3px}
+#app{position:absolute;width:1024px;height:800px;left:-10000px;top:0;border:0}
+</style>
+</head>
+<body>
+
+<h1>Dryspace Inspection App — logic tests</h1>
+<div class="sub">
+  Exercises the real functions inside <code>index.html</code> through a hidden iframe,
+  so these tests cannot drift from the shipping code.
+  Must be served over HTTP — <code>file://</code> blocks iframe access and IndexedDB.
+</div>
+
+<div id="summary" class="run">Loading app…</div>
+<div id="results"></div>
+
+<footer>
+  These tests are read-only with respect to stored data: they call pure functions on
+  plain objects and never write to IndexedDB. Service workers and caches are cleared
+  before loading so the code under test is always current.
+</footer>
+
+<iframe id="app" title="app under test"></iframe>
+
+<script>
+'use strict';
+
+/* ---------- tiny assert framework ---------- */
+var results = document.getElementById('results');
+var pass = 0, fail = 0, group = null;
+
+function section(name){
+  group = document.createElement('h2');
+  group.textContent = name;
+  results.appendChild(group);
+}
+function record(ok, desc, why){
+  var row = document.createElement('div');
+  row.className = 't ' + (ok ? 'p' : 'f');
+  row.innerHTML = '<span class="m">' + (ok ? 'PASS' : 'FAIL') + '</span><span class="d"></span>';
+  row.querySelector('.d').textContent = desc;
+  if(!ok && why){
+    var w = document.createElement('span');
+    w.className = 'why';
+    w.textContent = why;
+    row.querySelector('.d').appendChild(w);
+  }
+  results.appendChild(row);
+  ok ? pass++ : fail++;
+}
+function ok(cond, desc, why){ record(!!cond, desc, why); }
+function eq(actual, expected, desc){
+  var same = JSON.stringify(actual) === JSON.stringify(expected);
+  record(same, desc, same ? '' : 'expected ' + JSON.stringify(expected) + ', got ' + JSON.stringify(actual));
+}
+function test(desc, fn){
+  try { fn(); }
+  catch(e){ record(false, desc + ' — threw', String(e && e.message || e)); }
+}
+
+/* ---------- boot the app under test ---------- */
+function clearWorkers(){
+  var jobs = [];
+  if(navigator.serviceWorker && navigator.serviceWorker.getRegistrations){
+    jobs.push(navigator.serviceWorker.getRegistrations()
+      .then(function(rs){ return Promise.all(rs.map(function(r){ return r.unregister(); })); })
+      .catch(function(){}));
+  }
+  if(window.caches && caches.keys){
+    jobs.push(caches.keys()
+      .then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); })
+      .catch(function(){}));
+  }
+  return Promise.all(jobs);
+}
+
+function loadApp(){
+  return new Promise(function(res, rej){
+    var f = document.getElementById('app');
+    f.onload = function(){
+      /* init() runs on DOMContentLoaded; assignKeys/numberFields/buildCompletion
+         are synchronous inside it, so they have completed by the time onload fires. */
+      setTimeout(function(){
+        var w = f.contentWindow;
+        if(!w || typeof w.migrateData !== 'function'){
+          rej(new Error('app loaded but its functions are not reachable'));
+          return;
+        }
+        res(w);
+      }, 120);
+    };
+    f.onerror = function(){ rej(new Error('failed to load index.html')); };
+    f.src = 'index.html?undertest=' + Date.now();
+  });
+}
+
+/* ---------- the tests ---------- */
+function run(W){
+  var D = W.document;
+
+  /* ===== structure ===== */
+  section('Field id integrity');
+
+  var controls = Array.prototype.slice.call(
+    D.querySelectorAll('#form-root input, #form-root select, #form-root textarea')
+  ).filter(function(el){ return el.type !== 'file' && !el.classList.contains('nokey'); });
+
+  test('controls exist', function(){
+    ok(controls.length > 0, 'form exposes controls to test (' + controls.length + ' found)');
+  });
+
+  test('every control has data-fid', function(){
+    var missing = controls.filter(function(el){ return !el.dataset.fid; });
+    ok(missing.length === 0,
+       'every saveable control carries a data-fid',
+       missing.length + ' without one, first: ' + (missing[0] ? missing[0].outerHTML.slice(0,120) : ''));
+  });
+
+  test('every control got a runtime key', function(){
+    var nokey = controls.filter(function(el){ return !el.dataset.k; });
+    ok(nokey.length === 0,
+       'assignKeys() assigned a storage key to every control',
+       nokey.length + ' control(s) would silently never save');
+  });
+
+  test('no duplicate fids outside radio groups', function(){
+    var seen = {}, dupes = [];
+    controls.forEach(function(el){
+      var f = el.dataset.fid;
+      if(el.type === 'radio') return;
+      if(seen[f]) dupes.push(f); else seen[f] = 1;
+    });
+    ok(dupes.length === 0, 'no duplicate data-fid among non-radio controls',
+       'duplicated: ' + dupes.slice(0,5).join(', '));
+  });
+
+  test('radio groups are internally consistent', function(){
+    var byFid = {};
+    controls.filter(function(el){ return el.type === 'radio'; })
+            .forEach(function(el){ (byFid[el.dataset.fid] = byFid[el.dataset.fid] || []).push(el); });
+    var bad = Object.keys(byFid).filter(function(f){
+      var names = {};
+      byFid[f].forEach(function(el){ names[el.name] = 1; });
+      return Object.keys(names).length !== 1;
+    });
+    ok(bad.length === 0,
+       'each radio fid maps to exactly one input name (' + Object.keys(byFid).length + ' groups)',
+       'inconsistent: ' + bad.join(', '));
+  });
+
+  test('no reference chip is permanently grey', function(){
+    /* changelog claim: every .fref has either controls or a media field behind it */
+    var orphans = (W.COMP || []).filter(function(c){
+      return c.ctrls.length === 0 && !c.media;
+    });
+    ok(orphans.length === 0,
+       'every completion chip has controls or a media field behind it (' + (W.COMP||[]).length + ' chips)',
+       orphans.length + ' chip(s) can never turn green');
+  });
+
+  /* ===== legacy mapping ===== */
+  section('v1.1.1 legacy key mapping');
+
+  var L2F = W.LEGACY_TO_FID || {};
+
+  test('legacy map was built', function(){
+    ok(Object.keys(L2F).length > 0,
+       'LEGACY_TO_FID populated (' + Object.keys(L2F).length + ' legacy keys)');
+  });
+
+  /* Derive a real legacy key from the map rather than hardcoding label text,
+     so this test survives any future rewording. */
+  function legacyKeyFor(fid){
+    var keys = Object.keys(L2F);
+    for(var i = 0; i < keys.length; i++) if(L2F[keys[i]] === fid) return keys[i];
+    return null;
+  }
+
+  test('a known field is reachable from its legacy key', function(){
+    var k = legacyKeyFor('s1.client-names');
+    ok(k !== null, 's1.client-names has a legacy key', 'no legacy key maps to it');
+    if(k){
+      var out = W.migrateData({});
+      out = W.migrateData(Object.fromEntries([[k, 'Smith']]));
+      eq(out['s1.client-names'], 'Smith', 'legacy value lands on the right stable id');
+    }
+  });
+
+  test('unrecognised keys are preserved, not discarded', function(){
+    var out = W.migrateData({'t|s9|Some field that no longer exists': 'keep me'});
+    eq(out['unmapped:t|s9|Some field that no longer exists'], 'keep me',
+       'unknown key retained under unmapped: prefix');
+  });
+
+  test('migration never loses a key', function(){
+    var k = legacyKeyFor('s1.client-names') || 't|s1|unknown';
+    var input = {};
+    input[k] = 'A';
+    input['t|s9|ghost one'] = 'B';
+    input['t|s9|ghost two'] = 'C';
+    var out = W.migrateData(input);
+    eq(Object.keys(out).length, 3, 'three keys in, three keys out — nothing dropped');
+  });
+
+  test('merge rule appends rather than overwrites', function(){
+    var rule = (W.MERGE_RULES || [])[0];
+    ok(!!rule, 'a merge rule is defined');
+    if(!rule) return;
+    var intoLegacy = legacyKeyFor(rule.into);
+    var input = {};
+    input[rule.from] = 'rendered block';
+    if(intoLegacy) input[intoLegacy] = 'existing text';
+    var out = W.migrateData(input);
+    var v = String(out[rule.into] || '');
+    if(intoLegacy){
+      ok(v.indexOf('existing text') > -1 && v.indexOf('rendered block') > -1,
+         'both the existing and merged values survive', 'got: ' + v);
+    } else {
+      ok(v.indexOf('rendered block') > -1, 'merged value carried across', 'got: ' + v);
+    }
+    ok(out[rule.tick] === true, 'merge rule ticks its companion checkbox');
+    ok(out['unmapped:' + rule.from] === undefined,
+       'merged source key is not also left behind as unmapped');
+  });
+
+  /* ===== grade remap (schema 2 -> 3) ===== */
+  section('BS8102 grade remap');
+
+  var REMAP = W.VALUE_REMAP || [];
+
+  test('remap table present', function(){
+    eq(REMAP.length, 3, 'three grade translations defined');
+  });
+
+  REMAP.forEach(function(r, i){
+    test('grade remap ' + (i+1), function(){
+      var d = {};
+      d[r.fid] = r.from;
+      var hit = W.remapValues(d);
+      ok(hit === true, 'remap ' + (i+1) + ' reports a change');
+      eq(d[r.fid], r.to, 'remap ' + (i+1) + ' produced the 2022 wording');
+    });
+  });
+
+  test('remap leaves unrelated values alone', function(){
+    var d = {'r.grade': 'Grade 1a — already migrated'};
+    var hit = W.remapValues(d);
+    ok(hit === false, 'no change reported when nothing matches');
+    eq(d['r.grade'], 'Grade 1a — already migrated', 'value untouched');
+  });
+
+  /* ===== ensureSchema chain ===== */
+  section('ensureSchema upgrade chain');
+
+  test('v1.1.1 record (no schema) upgrades in one pass', function(){
+    var k = legacyKeyFor('s1.client-names');
+    var d = {};
+    if(k) d[k] = 'Nguyen';
+    d[legacyKeyFor('r.grade') || 'r|grade'] = REMAP[0] ? REMAP[0].from : '';
+    var rec = W.ensureSchema({id:'t1', data:d});
+    eq(rec.schema, 3, 'schema lands on 3');
+    if(k) eq(rec.data['s1.client-names'], 'Nguyen', 'field data migrated to stable id');
+    eq(rec.stage, 'office', 'stage defaulted to office');
+    ok(Array.isArray(rec.audit), 'audit trail initialised');
+  });
+
+  test('schema 2 record only runs the grade step', function(){
+    var d = {'s1.client-names': 'Already Migrated'};
+    if(REMAP[0]) d[REMAP[0].fid] = REMAP[0].from;
+    var rec = W.ensureSchema({id:'t2', schema:2, data:d});
+    eq(rec.schema, 3, 'schema advanced to 3');
+    eq(rec.data['s1.client-names'], 'Already Migrated',
+       'stable ids not re-migrated into unmapped:');
+    if(REMAP[0]) eq(rec.data[REMAP[0].fid], REMAP[0].to, 'grade translated');
+  });
+
+  test('schema 3 record is left alone', function(){
+    var rec = W.ensureSchema({id:'t3', schema:3, stage:'field', audit:[{a:1}],
+                              data:{'s1.client-names':'Untouched'}});
+    eq(rec.schema, 3, 'schema stays at 3');
+    eq(rec.data['s1.client-names'], 'Untouched', 'data untouched');
+    eq(rec.stage, 'field', 'existing stage preserved');
+    eq(rec.audit.length, 1, 'existing audit preserved');
+  });
+
+  test('ensureSchema tolerates a record with no data', function(){
+    var rec = W.ensureSchema({id:'t4'});
+    eq(rec.schema, 3, 'empty record still reaches schema 3');
+    ok(rec.data && typeof rec.data === 'object', 'data object created');
+  });
+
+  /* ===== hasVal ===== */
+  section('hasVal content rules');
+
+  test('text values', function(){
+    ok(W.hasVal({type:'text', value:'x'}) === true, 'non-empty text counts as filled');
+    ok(W.hasVal({type:'text', value:''}) === false, 'empty text does not');
+    ok(W.hasVal({type:'text', value:'   '}) === false, 'whitespace-only text does not');
+  });
+
+  test('tick boxes', function(){
+    ok(W.hasVal({type:'checkbox', checked:true}) === true, 'ticked checkbox counts');
+    ok(W.hasVal({type:'checkbox', checked:false}) === false, 'unticked checkbox does not');
+    ok(W.hasVal({type:'radio', checked:true}) === true, 'selected radio counts');
+    ok(W.hasVal({type:'radio', checked:false}) === false, 'unselected radio does not');
+  });
+
+  return W;
+}
+
+/* ---------- cross-check against the real v1.1.1 build ----------
+   Loads the shipped v1.1.1 index.html (extracted from commit ba103fd) and lets
+   ITS OWN assignKeys() stamp every control. That yields the complete set of keys
+   a real v1.1.1 record can contain — ground truth, not a reimplementation.
+   Every one of those keys must be accounted for by the v1.2 migration, or the
+   answer behind it lands in "unmapped:" and disappears from the form. */
+function crossCheckV111(W){
+  return new Promise(function(res){
+    var f = document.createElement('iframe');
+    f.id = 'legacy';
+    f.style.cssText = 'position:absolute;width:1024px;height:800px;left:-10000px;top:0;border:0';
+    f.onload = function(){
+      setTimeout(function(){ res(f.contentWindow); }, 150);
+    };
+    f.onerror = function(){ res(null); };
+    document.body.appendChild(f);
+    f.src = 'tests/fixtures/v1.1.1-index.html?undertest=' + Date.now();
+  }).then(function(LW){
+    section('v1.1.1 migration coverage (real legacy build)');
+
+    if(!LW || !LW.document){
+      record(false, 'load v1.1.1 fixture', 'fixture missing — expected tests/fixtures/v1.1.1-index.html');
+      return;
+    }
+
+    var LD = LW.document;
+    var legacyKeys = {};
+    LD.querySelectorAll('#form-root input, #form-root select, #form-root textarea')
+      .forEach(function(el){
+        if(el.type === 'file' || el.classList.contains('nokey')) return;
+        var k = el.dataset.k;
+        if(k) legacyKeys[k] = true;
+      });
+    var keys = Object.keys(legacyKeys);
+
+    ok(keys.length > 0, 'v1.1.1 build produced its own keys (' + keys.length + ' distinct)',
+       'assignKeys did not run in the fixture');
+    if(!keys.length) return;
+
+    var L2F = W.LEGACY_TO_FID || {};
+    var mergeFrom = {}, valueRuleKeys = {};
+    (W.MERGE_RULES || []).forEach(function(r){ mergeFrom[r.from] = true; });
+    (W.VALUE_RULES || []).forEach(function(r){ valueRuleKeys[r.key] = true; });
+
+    var mapped = [], merged = [], byValue = [], orphaned = [];
+    keys.forEach(function(k){
+      if(L2F[k] !== undefined) mapped.push(k);
+      else if(mergeFrom[k]) merged.push(k);
+      else if(valueRuleKeys[k]) byValue.push(k);
+      else orphaned.push(k);
+    });
+
+    ok(orphaned.length === 0,
+       'every v1.1.1 key is accounted for — ' + mapped.length + ' mapped to a stable id, ' +
+       merged.length + ' merged, ' + byValue.length + ' converted by value rule',
+       orphaned.length + ' key(s) have no migration path at all: ' +
+       orphaned.slice(0, 8).join('  |  '));
+
+    /* A retired dropdown migrates by translating each of its SELECTED VALUES into
+       a ticked checkbox. Coverage therefore has to be checked option by option —
+       a dropdown can be "handled" while individual answers still fall through. */
+    Object.keys(valueRuleKeys).forEach(function(key){
+      var sel = LD.querySelector('[data-k="' + key.replace(/"/g, '\\"') + '"]');
+      if(!sel || sel.tagName !== 'SELECT') return;
+      var covered = {};
+      (W.VALUE_RULES || []).forEach(function(r){ if(r.key === key) covered[r.value] = true; });
+      var opts = Array.prototype.slice.call(sel.options)
+        .map(function(o){ return o.textContent.trim(); })
+        .filter(function(t){ return t && t.indexOf('select') === -1; });
+      var uncovered = opts.filter(function(t){ return !covered[t]; });
+      ok(uncovered.length === 0,
+         'retired dropdown "' + key + '" — all ' + opts.length + ' options convert',
+         uncovered.length + ' of ' + opts.length + ' option(s) have no value rule, so choosing ' +
+         'them leaves the replacement field blank: ' + uncovered.join('  |  '));
+    });
+
+    /* A real record only ever holds keys for fields the user filled in, so the
+       migration must also survive the full set arriving at once. */
+    test('a maximal v1.1.1 record migrates without loss', function(){
+      var full = {};
+      keys.forEach(function(k, i){ full[k] = 'value-' + i; });
+      var out = W.migrateData(full);
+      ok(Object.keys(out).length >= keys.length - merged.length,
+         'all ' + keys.length + ' keys survive migration (' + Object.keys(out).length + ' out)',
+         'expected at least ' + (keys.length - merged.length));
+      /* Value-rule keys are preserved under unmapped: on purpose — the original
+         answer is kept verbatim while the tick is written alongside it. */
+      var unexpected = Object.keys(out)
+        .filter(function(k){ return k.indexOf('unmapped:') === 0; })
+        .filter(function(k){ return !valueRuleKeys[k.slice(9)]; });
+      ok(unexpected.length === 0,
+         'nothing lands in unmapped: beyond the keys value rules deliberately preserve',
+         unexpected.length + ' unexpected: ' + unexpected.slice(0, 5).join('  |  '));
+    });
+  });
+}
+
+function finish(){
+  var s = document.getElementById('summary');
+  s.className = fail === 0 ? 'pass' : 'fail';
+  s.textContent = fail === 0
+    ? 'All ' + pass + ' assertions passed.'
+    : fail + ' of ' + (pass + fail) + ' assertions FAILED.';
+}
+
+clearWorkers()
+  .then(loadApp)
+  .then(run)
+  .then(crossCheckV111)
+  .then(finish)
+  .catch(function(e){
+    var s = document.getElementById('summary');
+    s.className = 'fail';
+    s.textContent = 'Harness error: ' + (e && e.message || e);
+  });
+</script>
+</body>
+</html>
