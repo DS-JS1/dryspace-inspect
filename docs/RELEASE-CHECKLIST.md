@@ -35,14 +35,14 @@ is approved — but draft notes as you go so this is editing, not authoring.
 | `04_Project Context Brief` | Version numbers, feature list, technical summary |
 | `Training/` — flowchart, quick card, training module | Any change to the handover flow |
 
-### The .docx / .pdf drift hazard
+### Output format: PDF only
 
-Every document exists as **both** `.docx` and `.pdf`. Updating one without
-regenerating the other leaves two versions of the truth, and the PDF is usually
-the one staff actually open. Git cannot help here — both are binary and cannot
-be diffed.
+Guides and outputs are produced as **PDF only**. Other formats are generated
+manually if and when a specific need arises.
 
-**Rule: regenerate the PDF in the same sitting as the DOCX edit, never later.**
+This removes the dual-format drift that existed previously, where every document
+lived as both `.docx` and `.pdf` and updating one without regenerating the other
+left two versions of the truth — with the PDF usually being the one staff opened.
 
 ---
 
@@ -100,3 +100,36 @@ reconstructed.
 | 2 — Auth & upload | Setup Guide, Handover Protocol, Training — expect significant change: staff sign-in is new behaviour |
 | 3 — Handover integrity | Handover Protocol, Training flowchart and quick card |
 | 4 — Cleanups | *TBC* |
+
+---
+
+## Planned automation (TODO)
+
+Releases are irregular and months apart. Anything that depends on remembering
+detail between sessions will eventually be forgotten, so the goal is to make the
+checklist enforce itself rather than be recalled.
+
+**Already automated** — `tests.html` gates on `CACHE_VERSION` matching `APP_VER`,
+the field id manifest existing and agreeing, and `CHANGELOG.txt` carrying an
+entry for the current version. These fail loudly rather than waiting to be checked.
+
+**Still to build:**
+
+- [ ] **Document freshness check.** Extend `tests.html` to compare the server's
+      `Last-Modified` header for each Group B document against `index.html`.
+      Any doc older than the code it describes is flagged. Catches "the guide
+      still describes the previous version" without anyone having to notice.
+- [ ] **Release preflight page.** A single page that runs every gate and prints
+      a go / no-go, so releasing is one check rather than a remembered list.
+- [ ] **Scheduled reminder.** A recurring prompt to run preflight when a release
+      is pending — approved and actioned in one step rather than recalled.
+- [ ] **Shared module extraction.** Version stamps, release gates and the media
+      sync layer should live in one place once the second PWA exists, so a fix
+      lands everywhere rather than being ported by hand.
+
+### Why this matters more than it looks
+
+Additional PWAs are planned (job update / job record, silica exposure worksheet),
+eventually to be merged into a single native app. Every process that currently
+depends on memory gets multiplied by the number of apps. Automating the release
+gates once, now, is what stops that becoming unmanageable later.
