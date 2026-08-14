@@ -66,6 +66,11 @@ input[type=text],input[type=date],select,textarea{font-size:16px !important;padd
 .storage-note.sn-warn{color:#8a5a00;background:#fdf6e3;border:1px solid #e8d9ae;border-radius:var(--border-radius-md);padding:8px 10px}
 .upd-banner{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#e0f2e4;border:1px solid #a9d8b8;color:#1e6b34;border-radius:var(--border-radius-lg);padding:12px 14px;margin-bottom:14px;font-size:14px;font-weight:500}
 .upd-banner .ub-msg{flex:1;min-width:200px}
+.sync-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--color-background-info);border:1px solid var(--color-border-info);color:var(--color-text-info);border-radius:var(--border-radius-lg);padding:11px 13px;margin-top:12px;font-size:13px;line-height:1.5;text-align:left}
+.sync-bar.sy-busy{background:#fdf6e3;border-color:#e8d9ae;color:#8a5a00}
+.sync-bar.sy-bad{background:#fbebea;border-color:#e0b4b2;color:#a12622}
+.sync-bar .sy-msg{flex:1;min-width:200px}
+.sync-bar .sy-actions{display:flex;gap:6px;flex-wrap:wrap}
 .upd-status{font-size:12px;color:var(--color-text-tertiary);margin-top:8px;min-height:16px;line-height:1.5}
 .ver-note{font-size:12px;color:var(--color-text-tertiary);margin-top:6px;line-height:1.6}
 /* ---- form screen top bar ---- */
@@ -216,6 +221,10 @@ input[type=text]:focus,input[type=date]:focus,select:focus,textarea:focus{outlin
       </label>
       <button class="btn btn-ghost" onclick="exportBackup()">Download data backup (all inspections)</button>
       <button class="btn btn-ghost" id="btn-check-update" onclick="checkForUpdate()">Check for app update</button>
+      <div id="sync-bar" class="sync-bar" style="display:none">
+        <span class="sy-msg" id="sy-msg"></span>
+        <span class="sy-actions" id="sy-actions"></span>
+      </div>
       <div id="upd-status" class="upd-status"></div>
       <div id="storage-note" class="storage-note"></div>
       <div class="ver-note"><span id="app-ver-line"></span><br>Data stays on this device until you tap Send. Delete only after the report has been sent.</div>
@@ -2114,7 +2123,12 @@ function addMedia(input, containerId){
   var mfid = input.dataset.mfid || input.id;
   var files = Array.prototype.slice.call(input.files);
   input.value = '';
-  var chain = Promise.resolve();
+  var seqBase = 0, n = 0;
+  var chain = mediaFor(cur.id).then(function(existing){
+    /* Sequence within this field, fixed at capture so a filename never changes
+       between attempts and a retry replaces rather than duplicating. */
+    seqBase = existing.filter(function(r){ return r.field === mfid; }).length;
+  });
   files.forEach(function(f){
     chain = chain.then(function(){
       /* v1.3 — three renditions: thumb for previews, a 1600px copy so emailed
@@ -2128,6 +2142,7 @@ function addMedia(input, containerId){
                    original: r.derived ? r.original : null,
                    origSize: r.origSize, origHash: r.origHash,
                    up: 'local', upTries: 0, remote: null,
+                   seq: seqBase + (++n),
                    added: Date.now()};
         return dbPut('media', rec);
       });
@@ -2753,6 +2768,165 @@ function applyUpdate(){
   swReg.waiting.postMessage({type: 'SKIP_WAITING'});
 }
 
+/* ---------- v1.3: SharePoint sync ----------
+   Ties the three pieces together: ds-auth supplies a token, ds-sharepoint turns
+   it into Graph calls, ds-media-sync decides what to send and what to trust.
+   Each is separately tested; this is only the wiring. */
+var dsAuth = null, dsTransport = null, dsQueue = null, INSP_CACHE = {}, syncBusy = false;
+
+function refreshInspCache(){
+  return dbAll('inspections').then(function(list){
+    INSP_CACHE = {};
+    list.forEach(function(i){ INSP_CACHE[i.id] = i; });
+  });
+}
+
+/* Resolved at upload time rather than capture time: the inspection number and
+   address often arrive at the office stage, after the photos were taken. */
+function metaFor(rec){
+  var job = INSP_CACHE[rec.iid] || {};
+  var info = {inspNo: job.inspNo || '', address: job.address || '', client: job.client || '',
+              date: job.inspDate || DSMedia.today(rec.added), mediaFolder: job.mediaFolder};
+  var folder = DSMedia.resolveFolder(info);
+  if(job.id && job.mediaFolder !== folder){
+    job.mediaFolder = folder;      /* pin it, so a later address edit cannot move it */
+    dbPut('inspections', job);
+  }
+  return {folder: folder, name: DSMedia.fileName(info, rec.field, rec.seq || 1, rec.name, rec.type)};
+}
+
+function initSync(){
+  if(!spConfigured() || typeof DSAuth === 'undefined') return;
+  dsAuth = DSAuth.create({clientId: SP_CONFIG.clientId, tenantId: SP_CONFIG.tenantId,
+                          redirectUri: spRedirectUri()});
+  dsTransport = DSSharePoint.createTransport({
+    getToken: function(){ return dsAuth.getToken(); },
+    hostname: SP_CONFIG.hostname, sitePath: SP_CONFIG.sitePath,
+    folderOf: function(rec, meta){ return meta.folder; },
+    nameOf: function(rec, meta){ return meta.name; }
+  });
+  dsQueue = DSMedia.createQueue({
+    transport: dsTransport,
+    list: function(){ return dbAll('media'); },
+    save: function(r){ return dbPut('media', r); },
+    meta: metaFor,
+    onChange: function(){ if(!syncBusy) renderSyncBar(); }
+  });
+  dsAuth.handleRedirect()
+    .then(function(r){ if(r) setSync('Signed in as ' + ((r.account && r.account.name) || 'you') + '.'); })
+    .catch(function(e){ setSync('Sign-in did not complete: ' + e.message, 'bad'); })
+    .then(renderSyncBar);
+}
+
+function setSync(msg, cls){
+  var bar = document.getElementById('sync-bar');
+  if(!bar) return;
+  bar.style.display = '';
+  bar.className = 'sync-bar' + (cls ? ' sy-' + cls : '');
+  document.getElementById('sy-msg').textContent = msg;
+}
+
+function pendingUploads(all){
+  return all.filter(function(r){
+    var s = DSMedia.stateOf(r);
+    return s === 'local' || s === 'queued' || (s === 'failed' && r.upRetryable !== false);
+  });
+}
+function stuckUploads(all){
+  return all.filter(function(r){
+    return DSMedia.stateOf(r) === 'failed' && r.upRetryable === false;
+  });
+}
+
+function renderSyncBar(){
+  var bar = document.getElementById('sync-bar');
+  if(!bar) return;
+  if(!spConfigured() || !dsAuth){ bar.style.display = 'none'; return; }
+  if(syncBusy) return;                    /* do not overwrite live progress */
+  bar.style.display = '';
+  var acts = document.getElementById('sy-actions');
+
+  if(!dsAuth.isSignedIn()){
+    bar.className = 'sync-bar';
+    document.getElementById('sy-msg').textContent =
+      'Photos are on this device only. Sign in to upload them to SharePoint.';
+    acts.innerHTML = '<button class="btn btn-primary" onclick="signInToSharePoint()">Sign in</button>';
+    return;
+  }
+  dbAll('media').then(function(all){
+    var pend = pendingUploads(all), stuck = stuckUploads(all);
+    var acc = dsAuth.account() || {};
+    var who = acc.name || acc.username || 'you';
+    bar.className = 'sync-bar' + (stuck.length ? ' sy-bad' : '');
+    document.getElementById('sy-msg').textContent =
+      'Signed in as ' + who + '. ' +
+      (pend.length ? pend.length + ' file(s) waiting to upload.'
+                   : (all.length ? 'All photos uploaded.' : 'No photos yet.')) +
+      (stuck.length ? ' ' + stuck.length + ' need attention.' : '');
+    acts.innerHTML =
+      (pend.length ? '<button class="btn btn-primary" onclick="uploadNow()">Upload now</button>' : '') +
+      (stuck.length ? '<button class="btn" onclick="retryStuck()">Try again</button>' : '') +
+      '<button class="btn btn-ghost" onclick="signOutSharePoint()">Sign out</button>';
+  });
+}
+
+function signInToSharePoint(){
+  if(!dsAuth) return;
+  setSync('Opening Microsoft sign-in\u2026', 'busy');
+  dsAuth.signIn().catch(function(e){ setSync('Could not start sign-in: ' + e.message, 'bad'); });
+}
+function signOutSharePoint(){
+  if(!dsAuth) return;
+  dsAuth.signOut();
+  renderSyncBar();
+}
+function retryStuck(){
+  dbAll('media').then(function(all){
+    return Promise.all(stuckUploads(all).map(function(r){
+      DSMedia.requeue(r); return dbPut('media', r);
+    }));
+  }).then(uploadNow);
+}
+
+/* Everything local is queued first, then the queue drains. Marking is separate
+   from sending so an interrupted run resumes rather than starting over. */
+function markAllQueued(){
+  return dbAll('media').then(function(all){
+    var todo = all.filter(function(r){ return DSMedia.stateOf(r) === 'local'; });
+    return Promise.all(todo.map(function(r){
+      DSMedia.setState(r, 'queued'); return dbPut('media', r);
+    }));
+  });
+}
+
+function uploadNow(){
+  if(!dsQueue || syncBusy) return;
+  if(navigator.onLine === false){
+    setSync('No connection \u2014 photos stay on this device until you have signal.', 'bad');
+    return;
+  }
+  syncBusy = true;
+  setSync('Uploading\u2026', 'busy');
+  refreshInspCache()
+    .then(markAllQueued)
+    .then(function(){ return dsQueue.drain(); })
+    .then(function(result){
+      syncBusy = false;
+      if(result === 'offline'){
+        setSync('Lost connection \u2014 the rest will upload next time.', 'busy');
+      } else {
+        renderSyncBar();
+      }
+      renderHome();
+    })
+    .catch(function(e){
+      syncBusy = false;
+      setSync(e && e.needsSignIn
+        ? 'Please sign in again to continue uploading.'
+        : 'Upload stopped: ' + ((e && e.message) || e), 'bad');
+    });
+}
+
 /* ---------- Init ---------- */
 function init(){
   var ftl = document.getElementById('ft-logo');
@@ -2776,6 +2950,7 @@ function init(){
   document.querySelectorAll('.section-body.open').forEach(function(b){ b.style.display='block'; });
   document.querySelectorAll('.section-body:not(.open)').forEach(function(b){ b.style.display='none'; });
   renderHome();
+  initSync();
   show('home');
   if(navigator.storage && navigator.storage.persist){
     navigator.storage.persist().then(function(granted){
