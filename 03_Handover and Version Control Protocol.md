@@ -196,6 +196,28 @@ rollback and protection against deletion. Set them before rollout, not after.
    Delete removed, via a custom permission level.
 4. **Add shortcut to OneDrive.** So the folders are reachable from the OneDrive app
    on the iPad — still needed for video.
+5. **Add the index columns.** Library settings → Create column. Add these six as
+   **Single line of text**, and name them **exactly as written, with no spaces**:
+
+   | Column | Holds |
+   |---|---|
+   | `InspectionNo` | INS-2026-0142 |
+   | `Client` | Smith |
+   | `Address` | 12 Marine Parade, Kirra |
+   | `Stage` | S02-FIELD |
+   | `InspectionDate` | 2026-08-15 |
+   | `LastEditor` | Jamie Stone |
+
+   The app fills these in as it creates each inspection folder, so the folder
+   list becomes a searchable index of every job — no separate register to keep,
+   and nothing that can fall out of step with the folders themselves.
+
+   > **Spaces matter.** A column named "Inspection No" gets the internal name
+   > `Inspection_x0020_No`, which will not match and the write is rejected. Create
+   > them without spaces.
+
+   If the columns are missing the app carries on and simply does not fill them
+   in — an upload is never refused because the index could not be written.
 
 Together these answer the concern about someone accidentally or intentionally
 deleting inspection records: versioning restores overwrites, the recycle bin

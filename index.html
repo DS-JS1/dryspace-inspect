@@ -2795,7 +2795,25 @@ function metaFor(rec){
   /* Photos land in their own subfolder so they cannot drown current/ and
      archive/ — the two folders a person actually looks for at handover. */
   return {folder: folder + '/photos',
-          name: DSMedia.fileName(info, rec.field, rec.seq || 1, rec.name, rec.type)};
+          name: DSMedia.fileName(info, rec.field, rec.seq || 1, rec.name, rec.type),
+          tag: {path: folder, fields: spFields(job)}};
+}
+
+/* Library columns written onto the inspection folder, so the folder list itself
+   is the index — no generated document to maintain and nothing that can drift.
+   Blank values are omitted rather than sent as empty strings, so a field nobody
+   has filled in yet cannot overwrite something typed into SharePoint by hand. */
+function spFields(job){
+  var f = {
+    InspectionNo:   job.inspNo || '',
+    Client:         job.client || '',
+    Address:        job.address || '',
+    Stage:          job.stage ? stageDef(job.stage).short : '',
+    InspectionDate: job.inspDate || '',
+    LastEditor:     job.editedBy || ''
+  };
+  Object.keys(f).forEach(function(k){ if(!String(f[k]).trim()) delete f[k]; });
+  return f;
 }
 
 function initSync(){
@@ -2806,7 +2824,8 @@ function initSync(){
     getToken: function(){ return dsAuth.getToken(); },
     hostname: SP_CONFIG.hostname, sitePath: SP_CONFIG.sitePath,
     folderOf: function(rec, meta){ return meta.folder; },
-    nameOf: function(rec, meta){ return meta.name; }
+    nameOf: function(rec, meta){ return meta.name; },
+    tagOf: function(rec, meta){ return meta.tag; }
   });
   dsQueue = DSMedia.createQueue({
     transport: dsTransport,

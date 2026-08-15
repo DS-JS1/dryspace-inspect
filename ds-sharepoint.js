@@ -48,9 +48,12 @@ DSSharePoint.createTransport = function(opts){
   var folderOf = opts.folderOf;             /* (rec, meta) -> folder name */
   var nameOf = opts.nameOf;                 /* (rec, meta) -> file name */
 
+  var tagOf = opts.tagOf;                   /* (rec, meta) -> {path, fields} | null */
+
   var driveId = null;                       /* resolved once, then cached */
   var ensured = {};                         /* folder name -> Promise, so a batch
                                                of photos creates it only once */
+  var tagged = {};                          /* folder path -> true, likewise */
 
   function call(url, init){
     init = init || {};
@@ -130,6 +133,48 @@ DSSharePoint.createTransport = function(opts){
     return String(p).split('/').map(encodeURIComponent).join('/');
   }
 
+  /* Writes the inspection's identity onto the folder as library columns, so the
+     folder list IS the index — sortable, filterable, searchable — with nothing
+     to generate and nothing that can drift out of step.
+
+     Set at write time rather than reconciled afterwards: anything a scheduled
+     job reconciles is a thing that can fail quietly and be discovered weeks
+     later with folders missing.
+
+     Failure here is deliberately survivable. The columns are a convenience; the
+     photograph is evidence. If the columns do not exist on the library, or the
+     write is refused, the upload carries on regardless. */
+  function setFolderFields(path, fields){
+    var keys = Object.keys(fields || {});
+    if(!keys.length) return Promise.resolve(null);
+    return drive().then(function(id){
+      return json(GRAPH + '/drives/' + id + '/root:/' + encodePath(path));
+    }).then(function(item){
+      if(!item || !item.id) throw new Error('folder not found for tagging: ' + path);
+      return json(GRAPH + '/drives/' + driveId + '/items/' + encodeURIComponent(item.id) +
+                  '/listItem/fields', {
+        method: 'PATCH',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(fields)
+      });
+    });
+  }
+
+  function tagFolder(rec, meta){
+    if(!tagOf) return Promise.resolve(null);
+    var tag;
+    try { tag = tagOf(rec, meta); } catch(e){ return Promise.resolve(null); }
+    if(!tag || !tag.path || !tag.fields) return Promise.resolve(null);
+    if(tagged[tag.path]) return Promise.resolve(null);   /* once per batch */
+    tagged[tag.path] = true;
+    return setFolderFields(tag.path, tag.fields).catch(function(e){
+      delete tagged[tag.path];                            /* let a later photo retry */
+      console.warn('Folder columns not written — do they exist on the library? ' +
+                   ((e && e.message) || e));
+      return null;
+    });
+  }
+
   function simpleUpload(id, path, blob){
     return json(GRAPH + '/drives/' + id + '/root:/' + encodePath(path) + ':/content', {
       method: 'PUT',
@@ -191,6 +236,7 @@ DSSharePoint.createTransport = function(opts){
       var name = nameOf(rec, meta);
       var path = folder + '/' + name;
       return ensureFolder(folder)
+        .then(function(){ return tagFolder(rec, meta); })
         .then(function(){ return drive(); })
         .then(function(id){
           return blob.size > SIMPLE_MAX

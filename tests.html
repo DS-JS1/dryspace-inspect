@@ -880,6 +880,60 @@ function sharePointChecks(){
 
   var small = {original: new Blob(['x'.repeat(1000)], {type: 'image/jpeg'}), origSize: 1000};
 
+  /* ---- library columns written onto the inspection folder ---- */
+  function makeTagged(extra, tagFn){
+    return make((extra || []).concat([
+      [/:\/content$/, 'PUT', function(){ return res(201, {id: 'I', size: 1000}); }]
+    ]), {
+      tagOf: tagFn || function(){
+        return {path: 'INS-2026-0142 - Smith - 12 Marine Parade, Kirra',
+                fields: {InspectionNo: 'INS-2026-0142', Client: 'Smith', Stage: 'S02-FIELD'}};
+      }
+    });
+  }
+
+  var patched = [];
+  var mt = makeTagged([
+    [/\/root:\/[^:]+$/, 'GET', function(){ return res(200, {id: 'FOLDER-ITEM-1'}); }],
+    [/\/items\/FOLDER-ITEM-1\/listItem\/fields$/, 'PATCH', function(u, init){
+      patched.push(JSON.parse(init.body)); return res(200, {}); }]
+  ]);
+  return mt.t.upload(small, {}).then(function(){
+    eq(patched.length, 1, 'folder columns written once');
+    eq(patched[0].Client, 'Smith', 'client name written to the library column');
+    eq(patched[0].InspectionNo, 'INS-2026-0142', 'inspection number written');
+    var tagCalls = mt.f.calls.filter(function(c){ return /listItem\/fields$/.test(c.url); });
+    eq(tagCalls[0].method, 'PATCH', 'columns set with PATCH on the folder listItem');
+    ok(!/\/photos/.test(tagCalls.length ? mt.f.calls.filter(function(c){
+         return /root:\/[^:]+$/.test(c.url) && c.method === 'GET'; })[0].url : '/photos'),
+       'columns go on the INSPECTION folder, not the photos subfolder');
+
+    /* a second photo in the same batch must not re-write them */
+    return mt.t.upload(small, {}).then(function(){
+      eq(patched.length, 1, 'not re-written for every photo in the batch');
+    });
+  }).then(function(){
+    /* the index must never block the evidence */
+    var mf = makeTagged([
+      [/\/root:\/[^:]+$/, 'GET', function(){ return res(403, {error: 'no column access'}); }]
+    ]);
+    return mf.t.upload(small, {}).then(function(remote){
+      eq(remote.itemId, 'I', 'upload still succeeds when the columns cannot be written');
+    }, function(e){
+      record(false, 'column failure must not fail the upload', 'upload rejected: ' + e.message);
+    });
+  }).then(function(){
+    /* blank values are omitted, not sent as empty strings */
+    var W = APPW;
+    var f = W.spFields({inspNo: 'INS-2026-0142', client: '', address: '12 Marine Pde',
+                        stage: 'field', inspDate: '', editedBy: '  '});
+    ok(!('Client' in f), 'a blank client is omitted rather than blanking the column');
+    ok(!('InspectionDate' in f), 'a blank date is omitted');
+    ok(!('LastEditor' in f), 'whitespace-only values are omitted');
+    eq(f.Address, '12 Marine Pde', 'values that exist are sent');
+    eq(f.Stage, 'S02-FIELD', 'stage sent as its short code');
+  }).then(function(){
+
   test('chunk size satisfies Graph', function(){
     eq(SP.CHUNK % 327680, 0, 'resumable chunk is a multiple of 320 KiB');
     ok(SP.SIMPLE_MAX <= 4 * 1024 * 1024, 'simple upload stays within the 4 MB limit');
@@ -1035,6 +1089,7 @@ function sharePointChecks(){
       ok(guid.test(C.clientId), 'client id present and well formed');
       ok(guid.test(C.tenantId), 'tenant id present and well formed');
     });
+  });
   });
 }
 
