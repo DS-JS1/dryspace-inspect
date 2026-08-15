@@ -91,25 +91,39 @@ DSSharePoint.createTransport = function(opts){
   /* Graph does not create intermediate folders on upload; a missing folder is
      just a 404 at PUT time. Create it explicitly, treating "already exists" as
      success so concurrent photos do not fight over it. */
-  function ensureFolder(name){
-    if(ensured[name]) return ensured[name];
-    ensured[name] = drive().then(function(id){
-      return json(GRAPH + '/drives/' + id + '/root/children', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-          name: name,
-          folder: {},
-          '@microsoft.graph.conflictBehavior': 'fail'
-        })
-      }).then(function(f){ return f; }, function(err){
-        if(err && err.status === 409) return {name: name, existed: true};
-        throw err;
+  /* Handles a nested path ("INS-2026-0142 - 12 Marine Pde/photos"), creating each level
+     in turn — Graph will not create intermediate folders for you. */
+  function ensureFolder(path){
+    if(ensured[path]) return ensured[path];
+    var segs = String(path).split('/').filter(Boolean);
+    ensured[path] = drive().then(function(id){
+      var chain = Promise.resolve(), sofar = '';
+      segs.forEach(function(seg){
+        chain = chain.then(function(){
+          var parent = sofar;
+          sofar = sofar ? sofar + '/' + seg : seg;
+          var url = parent
+            ? GRAPH + '/drives/' + id + '/root:/' + encodePath(parent) + ':/children'
+            : GRAPH + '/drives/' + id + '/root/children';
+          return json(url, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+              name: seg,
+              folder: {},
+              '@microsoft.graph.conflictBehavior': 'fail'
+            })
+          }).then(function(f){ return f; }, function(err){
+            if(err && err.status === 409) return {name: seg, existed: true};
+            throw err;
+          });
+        });
       });
+      return chain;
     });
     /* A failed creation must not be cached, or every later photo inherits it. */
-    ensured[name] = ensured[name].catch(function(e){ delete ensured[name]; throw e; });
-    return ensured[name];
+    ensured[path] = ensured[path].catch(function(e){ delete ensured[path]; throw e; });
+    return ensured[path];
   }
 
   function encodePath(p){

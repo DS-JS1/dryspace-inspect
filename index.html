@@ -277,7 +277,7 @@ input[type=text]:focus,input[type=date]:focus,select:focus,textarea:focus{outlin
         <div class="field-group"><label class="fl">Inspector name</label><input data-fid="s1.inspector-name" type="text" placeholder="e.g. Jamie Stone"></div>
       </div>
       <div class="two-col">
-        <div class="field-group"><label class="fl">Inspection number</label><input data-fid="s1.inspection-number" type="text" placeholder="e.g. INS-042"></div>
+        <div class="field-group"><label class="fl">Inspection number</label><input data-fid="s1.inspection-number" type="text" placeholder="e.g. INS-2026-0142"></div>
         <div class="field-group"><label class="fl">Quote number (Quotient)</label><input data-fid="s1.quote-number-quotient" type="text" placeholder="e.g. 168 — add once the quote is raised"></div>
       </div>
       <div class="two-col">
@@ -2792,7 +2792,10 @@ function metaFor(rec){
     job.mediaFolder = folder;      /* pin it, so a later address edit cannot move it */
     dbPut('inspections', job);
   }
-  return {folder: folder, name: DSMedia.fileName(info, rec.field, rec.seq || 1, rec.name, rec.type)};
+  /* Photos land in their own subfolder so they cannot drown current/ and
+     archive/ — the two folders a person actually looks for at handover. */
+  return {folder: folder + '/photos',
+          name: DSMedia.fileName(info, rec.field, rec.seq || 1, rec.name, rec.type)};
 }
 
 function initSync(){

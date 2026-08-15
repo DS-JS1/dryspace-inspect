@@ -47,10 +47,11 @@ code{font-family:ui-monospace,Consolas,monospace;background:#f4f6f8;padding:1px 
 
 <iframe id="app" title="app under test"></iframe>
 
-<!-- loaded directly, not through the app, so the module is proven standalone -->
-<script src="ds-media-sync.js"></script>
-<script src="ds-sharepoint.js"></script>
-<script src="ds-auth.js"></script>
+<!-- The modules are NOT loaded by static <script src> tags. A plain tag is served
+     from the browser's HTTP cache, which silently ran a previous build's code and
+     reported a fixed bug as still broken. loadModules() fetches them with a
+     per-run cache-buster instead — and loading them here rather than through the
+     app also proves they stand alone. -->
 <script>
 'use strict';
 
@@ -103,6 +104,25 @@ function clearWorkers(){
   return Promise.all(jobs);
 }
 
+/* Loaded in order, each with a fresh query, so no cache layer can serve a
+   previous build. Order matters only in that all three must exist before the
+   module checks run. */
+function loadModules(){
+  var files = ['ds-media-sync.js', 'ds-sharepoint.js', 'ds-auth.js'];
+  var stamp = '?fresh=' + Date.now();
+  return files.reduce(function(chain, f){
+    return chain.then(function(){
+      return new Promise(function(res, rej){
+        var s = document.createElement('script');
+        s.src = f + stamp;
+        s.onload = res;
+        s.onerror = function(){ rej(new Error('could not load ' + f)); };
+        document.head.appendChild(s);
+      });
+    });
+  }, Promise.resolve());
+}
+
 function loadApp(){
   return new Promise(function(res, rej){
     var f = document.getElementById('app');
@@ -119,7 +139,12 @@ function loadApp(){
       }, 120);
     };
     f.onerror = function(){ rej(new Error('failed to load index.html')); };
-    f.src = 'index.html?undertest=' + Date.now();
+    /* nosw=1 stops the app under test registering a service worker. Without it,
+       the app's own registration activates and clients.claim() takes over THIS
+       page mid-run — after which every later fetch (the v1.1.1 fixture, the
+       modules) is served from the stale cache and the suite silently tests old
+       code. Clearing before the run is not enough; the app puts it straight back. */
+    f.src = 'index.html?nosw=1&undertest=' + Date.now();
   });
 }
 
@@ -612,17 +637,17 @@ function mediaModuleChecks(){
   });
 
   test('folder name carries the address', function(){
-    eq(M.folderName({inspNo:'INS-042', address:'12 Marine Parade, Kirra'}),
-       'INS-042 - 12 Marine Parade, Kirra', 'number and address combined');
+    eq(M.folderName({inspNo:'INS-2026-0142', address:'12 Marine Parade, Kirra'}),
+       'INS-2026-0142 - 12 Marine Parade, Kirra', 'number and address combined');
     eq(M.folderName({address:'12 Marine Parade'}), '12 Marine Parade', 'address alone when no number');
     eq(M.folderName({}), 'Unfiled', 'never produces an empty folder name');
   });
 
   test('file name is identifiable, not a camera default', function(){
-    eq(M.fileName({inspNo:'INS-042', date:'2026-08-14'}, 'm.s4.wall-moisture-signs', 3, 'IMG_1234.JPG'),
-       'INS-042_2026-08-14_s4-wall-moisture-signs_003.jpg', 'full name assembled');
-    eq(M.fileName({inspNo:'INS-042', date:'2026-08-14'}, 'm.s1.title-photo', 1, 'x.jpeg'),
-       'INS-042_2026-08-14_s1-title-photo_001.jpg', 'jpeg normalised to jpg');
+    eq(M.fileName({inspNo:'INS-2026-0142', date:'2026-08-14'}, 'm.s4.wall-moisture-signs', 3, 'IMG_1234.JPG'),
+       'INS-2026-0142_2026-08-14_s4-wall-moisture-signs_003.jpg', 'full name assembled');
+    eq(M.fileName({inspNo:'INS-2026-0142', date:'2026-08-14'}, 'm.s1.title-photo', 1, 'x.jpeg'),
+       'INS-2026-0142_2026-08-14_s1-title-photo_001.jpg', 'jpeg normalised to jpg');
   });
 
   test('extension falls back to the mime type', function(){
@@ -633,7 +658,7 @@ function mediaModuleChecks(){
   });
 
   test('folder is pinned once assigned', function(){
-    var job = {inspNo:'INS-042', address:'12 Marine Pde'};
+    var job = {inspNo:'INS-2026-0142', address:'12 Marine Pde'};
     var first = M.resolveFolder(job);
     job.address = '14 Marine Pde';                 /* a later correction */
     eq(M.resolveFolder(job), first,
@@ -827,21 +852,26 @@ function sharePointChecks(){
     return fn;
   }
 
+  /* Fallbacks. A folder path is now nested, so every upload creates two levels;
+     tests that care about folder behaviour override these, and the rest simply
+     need them to succeed. Per-test routes are matched FIRST — see make(). */
   var baseRoutes = [
     [/\/sites\/dryspacesolutions\.sharepoint\.com:\/sites\/SiteInspections$/, 'GET',
       function(){ return res(200, {id: 'SITE1'}); }],
-    [/\/sites\/SITE1\/drive$/, 'GET', function(){ return res(200, {id: 'DRIVE1'}); }]
+    [/\/sites\/SITE1\/drive$/, 'GET', function(){ return res(200, {id: 'DRIVE1'}); }],
+    [/\/root\/children$/, 'POST', function(){ return res(201, {id: 'F-ROOT'}); }],
+    [/\/root:\/[^:]+:\/children$/, 'POST', function(){ return res(201, {id: 'F-CHILD'}); }]
   ];
 
   function make(extra, over){
-    var f = fakeGraph(baseRoutes.concat(extra || []));
+    var f = fakeGraph((extra || []).concat(baseRoutes));
     var t = SP.createTransport(Object.assign({
       getToken: function(){ return Promise.resolve('TOKEN'); },
       hostname: 'dryspacesolutions.sharepoint.com',
       sitePath: '/sites/SiteInspections',
       fetchImpl: f,
-      folderOf: function(){ return 'INS-042 - 12 Marine Parade, Kirra'; },
-      nameOf: function(){ return 'INS-042_2026-08-14_s4-wall_001.jpg'; }
+      folderOf: function(){ return 'INS-2026-0142 - 12 Marine Parade, Kirra/photos'; },
+      nameOf: function(){ return 'INS-2026-0142_2026-08-14_s4-wall_001.jpg'; }
     }, over || {}));
     return {t: t, f: f};
   }
@@ -877,14 +907,27 @@ function sharePointChecks(){
     return m2.t.upload(small, {}).then(function(r2){
       eq(r2.itemId, 'ITEM2', '409 on folder creation is treated as "already there"');
 
-      /* two photos in one batch must not each create the folder */
-      var folderPosts = 0;
+      /* nested path: Graph creates no intermediate folders, so the inspection
+         folder and its photos/ subfolder must each be created, in order — and
+         only once for the whole batch */
+      var posts = [];
       var m3 = make([
-        [/\/root\/children$/, 'POST', function(){ folderPosts++; return res(201, {id: 'F'}); }],
+        [/\/root\/children$/, 'POST', function(u, init){
+          posts.push('root:' + JSON.parse(init.body).name); return res(201, {id: 'F1'}); }],
+        [/\/root:\/[^:]+:\/children$/, 'POST', function(u, init){
+          posts.push(decodeURIComponent(u.split('/root:/')[1].split(':/')[0]) +
+                     ' > ' + JSON.parse(init.body).name);
+          return res(201, {id: 'F2'}); }],
         [/:\/content$/, 'PUT', function(){ return res(201, {id: 'I', size: 1000}); }]
       ]);
       return m3.t.upload(small, {}).then(function(){ return m3.t.upload(small, {}); })
-        .then(function(){ eq(folderPosts, 1, 'folder is created once per batch, not per photo'); });
+        .then(function(){
+          eq(posts.length, 2, 'two levels created, and only once for the batch');
+          eq(posts[0], 'root:INS-2026-0142 - 12 Marine Parade, Kirra',
+             'inspection folder created at the library root');
+          eq(posts[1], 'INS-2026-0142 - 12 Marine Parade, Kirra > photos',
+             'photos subfolder created inside it, not at the root');
+        });
     });
   }).then(function(){
     /* large file: session + chunks */
@@ -1167,6 +1210,7 @@ if(location.search.indexOf('cleared=1') === -1){
   });
 } else {
 clearWorkers()
+  .then(loadModules)
   .then(loadApp)
   .then(function(W){ APPW = W; return run(W); })
   .then(function(){ return crossCheckV111(APPW); })

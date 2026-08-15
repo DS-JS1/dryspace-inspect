@@ -201,10 +201,10 @@ Only a record that has passed that check becomes eligible for its local original
 ```
 SharePoint site  (its own site, its own permission group)
 └── Shared Documents/
-    └── INS-042 - 12 Marine Parade, Kirra/
-        ├── INS-042_2026-08-14_s4-wall-moisture-signs_001.jpg
-        ├── INS-042_2026-08-14_s4-wall-moisture-signs_002.jpg
-        └── INS-042_2026-08-14_s3a-access-discharge-hazards_001.jpg
+    └── INS-2026-0142 - 12 Marine Parade, Kirra/
+        ├── INS-2026-0142_2026-08-14_s4-wall-moisture-signs_001.jpg
+        ├── INS-2026-0142_2026-08-14_s4-wall-moisture-signs_002.jpg
+        └── INS-2026-0142_2026-08-14_s3a-access-discharge-hazards_001.jpg
 ```
 
 **Folder** carries the human-readable identity (record number + address). **Filename** carries record number, date, which form field it came from, and a sequence.
