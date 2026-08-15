@@ -2397,7 +2397,11 @@ function stampName(){
   var d = new Date(), p = function(n){ return String(n).padStart(2, '0'); };
   var ts = d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + p(d.getMinutes());
   var ini = initials(cur.editedBy || userName());
-  return no + '_' + stageShort(cur.stage) + '_' + ts + (ini ? '_' + ini : '');
+  /* Same identity token as the photos, so a draft that has been emailed or
+     downloaded still says whose job it is. */
+  var tag = DSMedia.jobTag({client: cur.client || '', mediaTag: cur.mediaTag});
+  return no + (tag ? '_' + tag : '') + '_' + stageShort(cur.stage) + '_' + ts +
+         (ini ? '_' + ini : '');
 }
 function reportName(){ return 'DS_Report_' + stampName() + '.html'; }
 var SEC_COUNTS = {};
@@ -2786,10 +2790,16 @@ function refreshInspCache(){
 function metaFor(rec){
   var job = INSP_CACHE[rec.iid] || {};
   var info = {inspNo: job.inspNo || '', address: job.address || '', client: job.client || '',
-              date: job.inspDate || DSMedia.today(rec.added), mediaFolder: job.mediaFolder};
+              date: job.inspDate || DSMedia.today(rec.added),
+              mediaFolder: job.mediaFolder, mediaTag: job.mediaTag};
   var folder = DSMedia.resolveFolder(info);
-  if(job.id && job.mediaFolder !== folder){
-    job.mediaFolder = folder;      /* pin it, so a later address edit cannot move it */
+  var tag = DSMedia.jobTag(info);
+  /* Both are pinned on first upload: a later correction to the address or the
+     client name must not split one job across two folders, or name its photos
+     two different ways. */
+  if(job.id && (job.mediaFolder !== folder || job.mediaTag !== tag)){
+    job.mediaFolder = folder;
+    job.mediaTag = tag;
     dbPut('inspections', job);
   }
   /* Photos land in their own subfolder so they cannot drown current/ and

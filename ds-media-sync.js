@@ -57,16 +57,38 @@ DSMedia.folderName = function(job){
   return parts.join(' - ') || 'Unfiled';
 };
 
-/* Filename carries the identifiers; the folder already carries the address, and
-   repeating a full street address in every filename pushes paths over the limit. */
+/* A short, stable token identifying whose job this is, for filenames.
+   PINNED on first use, like the folder: photos uploaded before the office has
+   filled in the client name would otherwise be named differently from photos
+   uploaded afterwards, for the same job.
+
+   The client name is used rather than the address because it is a real field.
+   A suburb would have to be parsed out of a free-text address, and
+   "Unit 3/12 Marine Pde Kirra QLD 4225" has no reliable separator — guessing
+   there produces filenames containing "QLD 4225". */
+DSMedia.jobTag = function(job){
+  if(job && job.mediaTag !== undefined && job.mediaTag !== null) return job.mediaTag;
+  var t = DSMedia.sanitiseSegment(job && job.client || '', 24).replace(/\s+/g, '-');
+  if(job) job.mediaTag = t;
+  return t;
+};
+
+/* Filename carries the identifiers a person needs when the file has been
+   separated from its folder — downloaded, emailed, or sitting in Teams. The
+   folder still carries the full address; repeating that in every filename would
+   push long paths towards SharePoint's limit for no extra clarity. */
 DSMedia.fileName = function(job, mfid, seq, originalName, mime){
   job = job || {};
   var no = DSMedia.sanitiseSegment(job.inspNo || 'INS', 24) || 'INS';
+  var tag = DSMedia.jobTag(job);
   var date = /^\d{4}-\d{2}-\d{2}$/.test(job.date || '') ? job.date : DSMedia.today();
   var field = DSMedia.sanitiseSegment(String(mfid || 'media').replace(/^m\./, '').replace(/\./g, '-'), 48);
   var n = String(seq == null ? 1 : seq);
   while(n.length < 3) n = '0' + n;
-  return [no, date, field, n].join('_') + '.' + DSMedia.extFor(originalName, mime);
+  var parts = [no];
+  if(tag) parts.push(tag);            /* omitted entirely when not yet known */
+  parts.push(date, field, n);
+  return parts.join('_') + '.' + DSMedia.extFor(originalName, mime);
 };
 
 DSMedia.extFor = function(name, mime){

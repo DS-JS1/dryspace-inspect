@@ -67,6 +67,7 @@ Current and in force.
 | D21 | Permanent **`data-mfid`** on every file input | Media was the one place D20 had been skipped; renaming a file input's id orphaned every photo attached to it. | v1.3 |
 | D22 | Tests run the **real functions** through an iframe, never a copy | A copied function drifts, and a test that passes against a stale copy is worse than no test. | v1.3 |
 | D23 | The index is **library columns set at upload**, not a generated document | A generated register needs a trigger, and a trigger fails quietly — you find out weeks later with folders missing. Columns cannot drift, because they *are* the folder's metadata rather than a description of it. | v1.3 |
+| D25 | Filenames carry a **pinned client token** — `INS-2026-0142_Smith_2026-08-15_...` | A file separated from its folder (downloaded, emailed, dropped in Teams) was otherwise anonymous until someone looked the number up. The client name is used because it is a real field; a suburb would have to be parsed out of a free-text address, and "Unit 3/12 Marine Pde Kirra QLD 4225" has no reliable separator. Pinned on first use so a later correction does not rename earlier photos. Capped at 24 characters. | v1.3 |
 | D24 | Writing the index **never blocks an upload** | The columns are a convenience; the photograph is evidence. If they are missing or refused, the upload carries on. | v1.3 |
 
 ---
@@ -105,5 +106,4 @@ Each of these was once true. Reverting reintroduces a known problem.
 | Should the app be **publicly reachable**? | No | Currently public on GitHub Pages. Cloudflare Access with one-time PIN would make it staff-only, free, and matches the mental model. Decide before wider rollout. |
 | **Google Photos as secondary backup** | No | Scheduled server-side sync reading from SharePoint. No first-party Power Automate connector exists, so it needs a custom connector or script. |
 | **Analytics across records** | No | Cross-job querying needs a structured database downstream. The apps produce the data; they do not provide the querying. A SharePoint List, one item per inspection, is the agreed destination — see the Handover Protocol §10. |
-| Should **filenames** carry the client name? | No | Raised 15 Aug 2026. A photo detached from its folder — downloaded, emailed — shows only `INS-2026-0142_2026-08-15_s4-wall-moisture-signs_001.jpg`, so it is anonymous until someone looks the number up. Inside SharePoint the folder and columns answer it. Options were put and deferred. **Cheap to change now; awkward once uploads are under way**, since older files would keep the old form. |
 | **Who holds Global Administrator** | No, but material | If nobody at Dryspace does, that is a business risk well beyond this project — it controls every mailbox and SharePoint site. |

@@ -95,7 +95,7 @@
 
   <!-- filename -->
   <text class="sec" x="32" y="790">THE FILE NAMES ITSELF</text>
-  <text class="mono" x="32" y="810">DS_Draft_INS-2026-0142_S02-FIELD_2026-08-15T1430_JS.json</text>
+  <text class="mono" x="32" y="810">DS_Draft_INS-2026-0142_Smith_S02-FIELD_2026-08-15T1430_JS.json</text>
   <text class="monod" x="32" y="826">job  ·  stage  ·  when  ·  who      — so you can always see which copy is current</text>
 
   <text class="foot" x="563" y="826" text-anchor="end">Companion to 03_Handover and Version Control Protocol</text>

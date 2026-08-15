@@ -267,3 +267,26 @@ Media handling (v1.3, in progress)
 - Storage warnings appear as originals accumulate, but capture is never blocked.
   Running out of space is recoverable; an un-photographed defect is not.
 - Upload itself is not yet connected — that needs the Entra app registration.
+
+Filenames now identify the job (v1.3)
+- Photos and handover files carry a short client token, so a file that has been
+  downloaded, emailed or dropped into Teams still says whose job it is:
+    INS-2026-0142_Smith_2026-08-15_s4-wall-moisture-signs_001.jpg
+    DS_Draft_INS-2026-0142_Smith_S02-FIELD_2026-08-15T1430_JS.json
+  Previously the inspection number was the only identifier, which meant looking
+  it up before you knew whose photos you were holding.
+- The token is PINNED on first use. Photos uploaded before the office fills in
+  the client name would otherwise be named differently from photos uploaded
+  after, for the same job. A later correction to the name does not rename
+  earlier files.
+- The client name is used rather than the suburb because it is a real field.
+  A suburb would have to be parsed out of the free-text address, and
+  "Unit 3/12 Marine Pde Kirra QLD 4225" has no reliable separator.
+- Capped at 24 characters so a long body-corporate name cannot run away.
+
+Inspections are indexed by SharePoint library columns (v1.3)
+- The app writes InspectionNo, Client, Address, Stage, InspectionDate and
+  LastEditor onto each inspection folder, so the folder list is a sortable,
+  searchable index with nothing to generate and nothing that can drift.
+- Writing the index never blocks an upload. If the columns are missing or the
+  write is refused, the photograph is still stored.

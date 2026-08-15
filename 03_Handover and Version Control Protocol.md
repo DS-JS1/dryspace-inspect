@@ -74,9 +74,18 @@ Each subfolder does one job, and the discipline collapses if they are merged:
 The app names exported files for you. Do not rename them.
 
 ```
-DS_Draft_INS-2026-0142_S02-FIELD_2026-08-15T1430_JS.json
-         └ number ──┘ └ stage ─┘ └── when ────┘ └ who
+DS_Draft_INS-2026-0142_Smith_S02-FIELD_2026-08-15T1430_JS.json
+         └─ number ──┘ └who┘ └ stage ┘ └─── when ───┘ └ by
 ```
+
+Photos are named the same way, adding which part of the form they came from:
+
+```
+INS-2026-0142_Smith_2026-08-15_s4-wall-moisture-signs_001.jpg
+```
+
+So a file that has been downloaded or emailed still says whose job it is,
+without anyone having to look the number up.
 
 You can tell at a glance which file is current, who exported it, and from which
 stage — without opening anything.

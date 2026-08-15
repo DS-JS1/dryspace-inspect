@@ -646,10 +646,33 @@ function mediaModuleChecks(){
   });
 
   test('file name is identifiable, not a camera default', function(){
-    eq(M.fileName({inspNo:'INS-2026-0142', date:'2026-08-14'}, 'm.s4.wall-moisture-signs', 3, 'IMG_1234.JPG'),
-       'INS-2026-0142_2026-08-14_s4-wall-moisture-signs_003.jpg', 'full name assembled');
-    eq(M.fileName({inspNo:'INS-2026-0142', date:'2026-08-14'}, 'm.s1.title-photo', 1, 'x.jpeg'),
-       'INS-2026-0142_2026-08-14_s1-title-photo_001.jpg', 'jpeg normalised to jpg');
+    eq(M.fileName({inspNo:'INS-2026-0142', client:'Smith', date:'2026-08-14'},
+                  'm.s4.wall-moisture-signs', 3, 'IMG_1234.JPG'),
+       'INS-2026-0142_Smith_2026-08-14_s4-wall-moisture-signs_003.jpg',
+       'carries number, client, date, field and sequence');
+    eq(M.fileName({inspNo:'INS-2026-0142', client:'Smith', date:'2026-08-14'},
+                  'm.s1.title-photo', 1, 'x.jpeg'),
+       'INS-2026-0142_Smith_2026-08-14_s1-title-photo_001.jpg', 'jpeg normalised to jpg');
+    eq(M.fileName({inspNo:'INS-2026-0142', date:'2026-08-14'}, 'm.s1.title-photo', 1, 'x.jpg'),
+       'INS-2026-0142_2026-08-14_s1-title-photo_001.jpg',
+       'client omitted entirely when not yet known');
+  });
+
+  test('the identity token is short, safe and pinned', function(){
+    eq(M.jobTag({client:'Smith'}), 'Smith', 'a simple surname passes through');
+    eq(M.jobTag({client:'Anthology Body Corporate'}), 'Anthology-Body-Corporate',
+       'spaces become hyphens so the filename stays one token');
+    eq(M.jobTag({client:'A Body Corporate With A Very Long Name Indeed'}).length <= 24, true,
+       'capped so a long entity name cannot run away');
+    eq(M.jobTag({client:'Unit 3/12 Smith'}), 'Unit-3-12-Smith',
+       'a slash becomes a separator rather than running the words together');
+    eq(M.jobTag({}), '', 'no client yields no token rather than a placeholder');
+
+    /* pinning: a later correction must not rename an existing job's photos */
+    var job = {client:'Smith'};
+    var first = M.jobTag(job);
+    job.client = 'Smithe';
+    eq(M.jobTag(job), first, 'correcting the client name does not rename earlier photos');
   });
 
   test('extension falls back to the mime type', function(){
