@@ -46,10 +46,15 @@ DSMedia.sanitiseSegment = function(s, maxLen){
    The FULL path is capped well under SharePoint's ~400 character limit. */
 DSMedia.folderName = function(job){
   job = job || {};
-  var no = DSMedia.sanitiseSegment(job.inspNo || '', 40);
-  var where = DSMedia.sanitiseSegment(job.address || job.client || '', 90);
-  if(no && where) return no + ' - ' + where;
-  return no || where || 'Unfiled';
+  var parts = [];
+  var no    = DSMedia.sanitiseSegment(job.inspNo || '', 40);
+  var who   = DSMedia.sanitiseSegment(job.client || '', 40);
+  var where = DSMedia.sanitiseSegment(job.address || '', 80);
+  if(no) parts.push(no);
+  if(who) parts.push(who);      /* the client name makes a folder findable by
+                                   the thing people actually remember */
+  if(where) parts.push(where);
+  return parts.join(' - ') || 'Unfiled';
 };
 
 /* Filename carries the identifiers; the folder already carries the address, and

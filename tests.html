@@ -636,9 +636,11 @@ function mediaModuleChecks(){
     eq(M.sanitiseSegment('abc.defghi', 4), 'abc', 'truncation does not leave a trailing dot');
   });
 
-  test('folder name carries the address', function(){
+  test('folder name carries number, client and address', function(){
+    eq(M.folderName({inspNo:'INS-2026-0142', client:'Smith', address:'12 Marine Parade, Kirra'}),
+       'INS-2026-0142 - Smith - 12 Marine Parade, Kirra', 'all three parts combined');
     eq(M.folderName({inspNo:'INS-2026-0142', address:'12 Marine Parade, Kirra'}),
-       'INS-2026-0142 - 12 Marine Parade, Kirra', 'number and address combined');
+       'INS-2026-0142 - 12 Marine Parade, Kirra', 'client omitted when not yet known');
     eq(M.folderName({address:'12 Marine Parade'}), '12 Marine Parade', 'address alone when no number');
     eq(M.folderName({}), 'Unfiled', 'never produces an empty folder name');
   });
