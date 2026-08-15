@@ -1,0 +1,378 @@
+<title>Site Inspection App — Workflow</title>
+<style>
+  :root{
+    --ground:#F5F8FA;
+    --surface:#FFFFFF;
+    --ink:#14202B;
+    --ink-2:#54626F;
+    --ink-3:#8593A0;
+    --rule:#DDE5EC;
+    --navy:#123A5F;
+    --navy-fill:#E8F1FA;
+    --amber:#9A6410;
+    --amber-fill:#FDF6E3;
+    --amber-line:#D3AE62;
+    --green:#1E6B34;
+    --green-fill:#E0F2E4;
+    --green-line:#8CC79F;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,'SF Mono',Consolas,'Liberation Mono',monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ground:#0E1720;
+      --surface:#17222D;
+      --ink:#E8EEF3;
+      --ink-2:#A7B6C2;
+      --ink-3:#7B8B98;
+      --rule:#2A3945;
+      --navy:#7FB2DC;
+      --navy-fill:#16283A;
+      --amber:#E0A64A;
+      --amber-fill:#2C2416;
+      --amber-line:#6B5423;
+      --green:#77CE95;
+      --green-fill:#12291B;
+      --green-line:#2F5C3D;
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#0E1720;
+    --surface:#17222D;
+    --ink:#E8EEF3;
+    --ink-2:#A7B6C2;
+    --ink-3:#7B8B98;
+    --rule:#2A3945;
+    --navy:#7FB2DC;
+    --navy-fill:#16283A;
+    --amber:#E0A64A;
+    --amber-fill:#2C2416;
+    --amber-line:#6B5423;
+    --green:#77CE95;
+    --green-fill:#12291B;
+    --green-line:#2F5C3D;
+  }
+
+  *{box-sizing:border-box}
+  body{
+    background:var(--ground);
+    color:var(--ink);
+    font-family:var(--sans);
+    line-height:1.6;
+    margin:0;
+    padding:40px 20px 80px;
+  }
+  .wrap{max-width:920px;margin:0 auto;display:flex;flex-direction:column;gap:44px}
+
+  header{display:flex;flex-direction:column;gap:8px;border-bottom:2px solid var(--navy);padding-bottom:20px}
+  .eyebrow{
+    font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--navy);
+  }
+  h1{font-size:clamp(26px,4vw,36px);line-height:1.15;margin:0;font-weight:650;letter-spacing:-.02em;text-wrap:balance}
+  .lede{font-size:16px;color:var(--ink-2);max-width:62ch;margin:0}
+
+  section{display:flex;flex-direction:column;gap:14px}
+  h2{
+    font-size:19px;margin:0;font-weight:640;letter-spacing:-.01em;
+    display:flex;align-items:baseline;gap:10px;
+  }
+  h2 .n{font-family:var(--mono);font-size:12px;color:var(--navy);letter-spacing:.08em}
+  .intro{margin:0;color:var(--ink-2);max-width:66ch;font-size:15px}
+
+  figure{margin:0;background:var(--surface);border:1px solid var(--rule);border-radius:12px;padding:20px;overflow-x:auto}
+  figure svg{display:block;width:100%;height:auto;min-width:600px}
+  figcaption{margin-top:14px;font-size:13px;color:var(--ink-3);line-height:1.5;border-top:1px solid var(--rule);padding-top:10px}
+
+  .rules{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:12px}
+  .rules li{
+    background:var(--surface);border:1px solid var(--rule);border-left:3px solid var(--navy);
+    border-radius:8px;padding:13px 16px;font-size:15px;
+  }
+  .rules li.warn{border-left-color:var(--amber)}
+  .rules li strong{display:block;font-weight:640;margin-bottom:2px}
+  .rules li span{color:var(--ink-2);font-size:14px}
+
+  footer{font-size:13px;color:var(--ink-3);border-top:1px solid var(--rule);padding-top:16px}
+  code{font-family:var(--mono);font-size:.9em;background:var(--navy-fill);color:var(--navy);padding:1px 5px;border-radius:4px}
+</style>
+
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">Dryspace Solutions · Project 2.1</div>
+  <h1>Site Inspection App — how a job moves through it</h1>
+  <p class="lede">One inspection, six stages, five handovers. Every stage has exactly one owner at a time, and the record moves by file — there is no live sync.</p>
+</header>
+
+<section>
+  <h2><span class="n">01</span> The stage journey</h2>
+  <p class="intro">Each stage completes a defined part of the form and then hands the record on. The stage is recorded inside the record itself, so anyone opening it knows who holds it.</p>
+  <figure>
+    <svg viewBox="0 0 880 880" role="img" aria-label="Six stages from Office through Field, Technical, Sales and Admin to Closed, connected by a dashed handover rail.">
+      <defs>
+        <marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--navy)"/>
+        </marker>
+      </defs>
+
+      <!-- handover rail: dashed between stages -->
+      <g stroke="var(--navy)" stroke-width="2" stroke-dasharray="5 5" opacity="0.65">
+        <line x1="60" y1="92" x2="60" y2="183" marker-end="url(#ah)"/>
+        <line x1="60" y1="227" x2="60" y2="318" marker-end="url(#ah)"/>
+        <line x1="60" y1="362" x2="60" y2="453" marker-end="url(#ah)"/>
+        <line x1="60" y1="497" x2="60" y2="588" marker-end="url(#ah)"/>
+        <line x1="60" y1="632" x2="60" y2="723" marker-end="url(#ah)"/>
+      </g>
+
+      <!-- handover labels -->
+      <g font-family="var(--mono)" font-size="9.5" fill="var(--ink-3)" letter-spacing="0.06em">
+        <text x="74" y="141">HANDOVER</text>
+        <text x="74" y="276">HANDOVER</text>
+        <text x="74" y="411">HANDOVER</text>
+        <text x="74" y="546">HANDOVER</text>
+        <text x="74" y="681">HANDOVER</text>
+      </g>
+
+      <!-- STAGE 1 -->
+      <circle cx="60" cy="70" r="21" fill="var(--navy-fill)" stroke="var(--navy)" stroke-width="2"/>
+      <text x="60" y="75" text-anchor="middle" font-family="var(--mono)" font-size="13" font-weight="700" fill="var(--navy)">1</text>
+      <rect x="104" y="26" width="746" height="88" rx="9" fill="var(--navy-fill)" stroke="var(--navy)" stroke-width="1.2"/>
+      <text x="124" y="49" font-family="var(--mono)" font-size="11" letter-spacing="0.08em" fill="var(--navy)">S01-OFFICE</text>
+      <text x="124" y="72" font-family="var(--sans)" font-size="15.5" font-weight="640" fill="var(--ink)">Office / admin — at a desk, before anyone drives</text>
+      <text x="124" y="94" font-family="var(--sans)" font-size="13" fill="var(--ink-2)">Section 01 — client, property, both contacts, lead source, title photo</text>
+
+      <!-- STAGE 2 -->
+      <circle cx="60" cy="205" r="21" fill="var(--amber-fill)" stroke="var(--amber)" stroke-width="2"/>
+      <text x="60" y="210" text-anchor="middle" font-family="var(--mono)" font-size="13" font-weight="700" fill="var(--amber)">2</text>
+      <rect x="104" y="161" width="746" height="88" rx="9" fill="var(--amber-fill)" stroke="var(--amber)" stroke-width="1.4"/>
+      <text x="124" y="184" font-family="var(--mono)" font-size="11" letter-spacing="0.08em" fill="var(--amber)">S02-FIELD</text>
+      <rect x="222" y="172" width="126" height="16" rx="8" fill="none" stroke="var(--amber-line)" stroke-width="1"/>
+      <text x="285" y="184" text-anchor="middle" font-family="var(--mono)" font-size="9.5" fill="var(--amber)">ON SITE · NO SIGNAL</text>
+      <text x="124" y="207" font-family="var(--sans)" font-size="15.5" font-weight="640" fill="var(--ink)">Field inspector — the site visit itself</text>
+      <text x="124" y="229" font-family="var(--sans)" font-size="13" fill="var(--ink-2)">Sections 02–06 and 03A — brief, structure, safety and access, observations, assessment</text>
+
+      <!-- STAGE 3 -->
+      <circle cx="60" cy="340" r="21" fill="var(--navy-fill)" stroke="var(--navy)" stroke-width="2"/>
+      <text x="60" y="345" text-anchor="middle" font-family="var(--mono)" font-size="13" font-weight="700" fill="var(--navy)">3</text>
+      <rect x="104" y="296" width="746" height="88" rx="9" fill="var(--navy-fill)" stroke="var(--navy)" stroke-width="1.2"/>
+      <text x="124" y="319" font-family="var(--mono)" font-size="11" letter-spacing="0.08em" fill="var(--navy)">S03-TECH</text>
+      <text x="124" y="342" font-family="var(--sans)" font-size="15.5" font-weight="640" fill="var(--ink)">Technical team — the specification</text>
+      <text x="124" y="364" font-family="var(--sans)" font-size="13" fill="var(--ink-2)">Sections 07–09 — repair approach, measurement schedule, drainage design</text>
+
+      <!-- STAGE 4 -->
+      <circle cx="60" cy="475" r="21" fill="var(--navy-fill)" stroke="var(--navy)" stroke-width="2"/>
+      <text x="60" y="480" text-anchor="middle" font-family="var(--mono)" font-size="13" font-weight="700" fill="var(--navy)">4</text>
+      <rect x="104" y="431" width="746" height="88" rx="9" fill="var(--navy-fill)" stroke="var(--navy)" stroke-width="1.2"/>
+      <text x="124" y="454" font-family="var(--mono)" font-size="11" letter-spacing="0.08em" fill="var(--navy)">S04-SALES</text>
+      <text x="124" y="477" font-family="var(--sans)" font-size="15.5" font-weight="640" fill="var(--ink)">Sales — pricing and timeline</text>
+      <text x="124" y="499" font-family="var(--sans)" font-size="13" fill="var(--ink-2)">Section 10 — duration, availability, insurance, exclusions, provisional sums</text>
+
+      <!-- STAGE 5 -->
+      <circle cx="60" cy="610" r="21" fill="var(--navy-fill)" stroke="var(--navy)" stroke-width="2"/>
+      <text x="60" y="615" text-anchor="middle" font-family="var(--mono)" font-size="13" font-weight="700" fill="var(--navy)">5</text>
+      <rect x="104" y="566" width="746" height="88" rx="9" fill="var(--navy-fill)" stroke="var(--navy)" stroke-width="1.2"/>
+      <text x="124" y="589" font-family="var(--mono)" font-size="11" letter-spacing="0.08em" fill="var(--navy)">S05-ADMIN</text>
+      <text x="124" y="612" font-family="var(--sans)" font-size="15.5" font-weight="640" fill="var(--ink)">Admin — contract details and final checks</text>
+      <text x="124" y="634" font-family="var(--sans)" font-size="13" fill="var(--ink-2)">Record readied for issue to the client</text>
+
+      <!-- STAGE 6 -->
+      <circle cx="60" cy="745" r="21" fill="var(--green-fill)" stroke="var(--green)" stroke-width="2"/>
+      <text x="60" y="750" text-anchor="middle" font-family="var(--mono)" font-size="13" font-weight="700" fill="var(--green)">6</text>
+      <rect x="104" y="701" width="746" height="88" rx="9" fill="var(--green-fill)" stroke="var(--green)" stroke-width="1.2"/>
+      <text x="124" y="724" font-family="var(--mono)" font-size="11" letter-spacing="0.08em" fill="var(--green)">S06-CLOSED</text>
+      <text x="124" y="747" font-family="var(--sans)" font-size="15.5" font-weight="640" fill="var(--ink)">Nobody — issued to the client, read only</text>
+      <text x="124" y="769" font-family="var(--sans)" font-size="13" fill="var(--ink-2)">Feeds the proposal, then the quote, then the contract</text>
+
+      <!-- legend -->
+      <line x1="104" y1="826" x2="146" y2="826" stroke="var(--navy)" stroke-width="2" stroke-dasharray="5 5" opacity="0.65"/>
+      <text x="156" y="830" font-family="var(--sans)" font-size="12.5" fill="var(--ink-2)">Dashed = a handover. The record changes hands as a file, not by syncing.</text>
+    </svg>
+    <figcaption>Sections 01–06 and 03A are completed on site; 07–12 are completed afterwards in the office. Blank fields are normal — the form is deliberately broader than any single job.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2><span class="n">02</span> The handover — five steps, in this order</h2>
+  <p class="intro">Because the record lives on each device, a handover means exporting a file and importing it elsewhere. That means the record can be copied, and two copies can drift apart. One file is the live record at any moment, and it lives in SharePoint.</p>
+  <figure>
+    <svg viewBox="0 0 880 210" role="img" aria-label="Five handover steps: set your stage and name, export, upload to current folder, move previous to archive, then delete your device copy.">
+      <defs>
+        <marker id="ah2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--ink-3)"/>
+        </marker>
+      </defs>
+
+      <g stroke="var(--ink-3)" stroke-width="1.5">
+        <line x1="164" y1="70" x2="182" y2="70" marker-end="url(#ah2)"/>
+        <line x1="322" y1="70" x2="340" y2="70" marker-end="url(#ah2)"/>
+        <line x1="480" y1="70" x2="498" y2="70" marker-end="url(#ah2)"/>
+        <line x1="638" y1="70" x2="656" y2="70" marker-end="url(#ah2)"/>
+      </g>
+
+      <g>
+        <rect x="14" y="26" width="150" height="88" rx="9" fill="var(--navy-fill)" stroke="var(--navy)" stroke-width="1.2"/>
+        <text x="30" y="48" font-family="var(--mono)" font-size="11" fill="var(--navy)">STEP 1</text>
+        <text x="30" y="70" font-family="var(--sans)" font-size="13.5" font-weight="640" fill="var(--ink)">Set your stage</text>
+        <text x="30" y="88" font-family="var(--sans)" font-size="12" fill="var(--ink-2)">and your name</text>
+      </g>
+      <g>
+        <rect x="182" y="26" width="140" height="88" rx="9" fill="var(--navy-fill)" stroke="var(--navy)" stroke-width="1.2"/>
+        <text x="198" y="48" font-family="var(--mono)" font-size="11" fill="var(--navy)">STEP 2</text>
+        <text x="198" y="70" font-family="var(--sans)" font-size="13.5" font-weight="640" fill="var(--ink)">Export</text>
+        <text x="198" y="88" font-family="var(--sans)" font-size="12" fill="var(--ink-2)">Share draft</text>
+      </g>
+      <g>
+        <rect x="340" y="26" width="140" height="88" rx="9" fill="var(--navy-fill)" stroke="var(--navy)" stroke-width="1.2"/>
+        <text x="356" y="48" font-family="var(--mono)" font-size="11" fill="var(--navy)">STEP 3</text>
+        <text x="356" y="70" font-family="var(--sans)" font-size="13.5" font-weight="640" fill="var(--ink)">Upload it</text>
+        <text x="356" y="88" font-family="var(--sans)" font-size="12" fill="var(--ink-2)">to current/</text>
+      </g>
+      <g>
+        <rect x="498" y="26" width="140" height="88" rx="9" fill="var(--navy-fill)" stroke="var(--navy)" stroke-width="1.2"/>
+        <text x="514" y="48" font-family="var(--mono)" font-size="11" fill="var(--navy)">STEP 4</text>
+        <text x="514" y="70" font-family="var(--sans)" font-size="13.5" font-weight="640" fill="var(--ink)">Move the old</text>
+        <text x="514" y="88" font-family="var(--sans)" font-size="12" fill="var(--ink-2)">to archive/</text>
+      </g>
+      <g>
+        <rect x="656" y="26" width="196" height="88" rx="9" fill="var(--amber-fill)" stroke="var(--amber)" stroke-width="2"/>
+        <text x="672" y="48" font-family="var(--mono)" font-size="11" fill="var(--amber)">STEP 5 · ONLY AFTER 1–4</text>
+        <text x="672" y="70" font-family="var(--sans)" font-size="13.5" font-weight="640" fill="var(--ink)">Then delete</text>
+        <text x="672" y="88" font-family="var(--sans)" font-size="12" fill="var(--ink-2)">your device copy</text>
+      </g>
+
+      <rect x="14" y="140" width="838" height="52" rx="8" fill="none" stroke="var(--rule)" stroke-width="1"/>
+      <text x="34" y="163" font-family="var(--sans)" font-size="13.5" font-weight="640" fill="var(--ink)">One baton, never a copy.</text>
+      <text x="34" y="182" font-family="var(--sans)" font-size="12.5" fill="var(--ink-2)">Exactly one file is the live record. The copy on your device is a working scratch pad — delete it once the baton is passed.</text>
+    </svg>
+    <figcaption>Files are named automatically, e.g. <code>DS_Draft_INS-042_S02-FIELD_2026-08-02T1430_JS.json</code> — job, stage, when, who. Skipping step 5 is what creates two live copies that quietly disagree.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2><span class="n">03</span> What happens to a photo</h2>
+  <p class="intro">Photos are captured in the basement where there is no signal, and travel to SharePoint later. Nothing is ever deleted from the device on the strength of an upload that has not been read back and confirmed.</p>
+  <figure>
+    <svg viewBox="0 0 880 300" role="img" aria-label="Photo path: taken in the camera app, imported to the form, stored on the device in three sizes, then uploaded and verified in SharePoint when a connection is available.">
+      <defs>
+        <marker id="ah3" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--navy)"/>
+        </marker>
+      </defs>
+
+      <rect x="10" y="34" width="500" height="140" rx="10" fill="none" stroke="var(--rule)" stroke-width="1.5"/>
+      <text x="26" y="26" font-family="var(--mono)" font-size="10.5" letter-spacing="0.1em" fill="var(--ink-3)">ON THE DEVICE · NO SIGNAL NEEDED</text>
+
+      <rect x="558" y="34" width="312" height="140" rx="10" fill="none" stroke="var(--rule)" stroke-width="1.5" stroke-dasharray="4 4"/>
+      <text x="574" y="26" font-family="var(--mono)" font-size="10.5" letter-spacing="0.1em" fill="var(--ink-3)">NEEDS A CONNECTION</text>
+
+      <g>
+        <rect x="28" y="62" width="132" height="84" rx="8" fill="var(--navy-fill)" stroke="var(--navy)" stroke-width="1.2"/>
+        <text x="94" y="92" text-anchor="middle" font-family="var(--sans)" font-size="13.5" font-weight="640" fill="var(--ink)">Camera app</text>
+        <text x="94" y="112" text-anchor="middle" font-family="var(--sans)" font-size="11.5" fill="var(--ink-2)">not the browser</text>
+        <text x="94" y="129" text-anchor="middle" font-family="var(--sans)" font-size="11.5" fill="var(--ink-2)">— keeps a backup</text>
+      </g>
+      <line x1="164" y1="104" x2="188" y2="104" stroke="var(--navy)" stroke-width="1.5" marker-end="url(#ah3)"/>
+
+      <g>
+        <rect x="192" y="62" width="126" height="84" rx="8" fill="var(--navy-fill)" stroke="var(--navy)" stroke-width="1.2"/>
+        <text x="255" y="92" text-anchor="middle" font-family="var(--sans)" font-size="13.5" font-weight="640" fill="var(--ink)">Attach in</text>
+        <text x="255" y="110" text-anchor="middle" font-family="var(--sans)" font-size="13.5" font-weight="640" fill="var(--ink)">the form</text>
+        <text x="255" y="129" text-anchor="middle" font-family="var(--sans)" font-size="11.5" fill="var(--ink-2)">saved instantly</text>
+      </g>
+      <line x1="322" y1="104" x2="346" y2="104" stroke="var(--navy)" stroke-width="1.5" marker-end="url(#ah3)"/>
+
+      <g>
+        <rect x="350" y="62" width="144" height="84" rx="8" fill="var(--navy-fill)" stroke="var(--navy)" stroke-width="1.2"/>
+        <text x="422" y="86" text-anchor="middle" font-family="var(--sans)" font-size="13.5" font-weight="640" fill="var(--ink)">Kept 3 ways</text>
+        <text x="422" y="105" text-anchor="middle" font-family="var(--sans)" font-size="11.5" fill="var(--ink-2)">thumbnail · report</text>
+        <text x="422" y="122" text-anchor="middle" font-family="var(--sans)" font-size="11.5" fill="var(--ink-2)">copy · full original</text>
+        <text x="422" y="139" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="var(--ink-3)">STATE: LOCAL</text>
+      </g>
+
+      <line x1="498" y1="104" x2="574" y2="104" stroke="var(--navy)" stroke-width="1.5" marker-end="url(#ah3)"/>
+      <text x="536" y="96" text-anchor="middle" font-family="var(--mono)" font-size="9.5" fill="var(--ink-3)">UPLOAD</text>
+
+      <g>
+        <rect x="580" y="62" width="128" height="84" rx="8" fill="var(--navy-fill)" stroke="var(--navy)" stroke-width="1.2"/>
+        <text x="644" y="92" text-anchor="middle" font-family="var(--sans)" font-size="13.5" font-weight="640" fill="var(--ink)">SharePoint</text>
+        <text x="644" y="112" text-anchor="middle" font-family="var(--sans)" font-size="11.5" fill="var(--ink-2)">Site Inspections</text>
+        <text x="644" y="129" text-anchor="middle" font-family="var(--sans)" font-size="11.5" fill="var(--ink-2)">named by job</text>
+      </g>
+      <line x1="712" y1="104" x2="736" y2="104" stroke="var(--navy)" stroke-width="1.5" marker-end="url(#ah3)"/>
+
+      <g>
+        <rect x="740" y="62" width="112" height="84" rx="8" fill="var(--green-fill)" stroke="var(--green)" stroke-width="1.6"/>
+        <text x="796" y="92" text-anchor="middle" font-family="var(--sans)" font-size="13.5" font-weight="640" fill="var(--ink)">Read back</text>
+        <text x="796" y="110" text-anchor="middle" font-family="var(--sans)" font-size="11.5" fill="var(--ink-2)">and confirmed</text>
+        <text x="796" y="129" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="var(--green)">VERIFIED</text>
+      </g>
+
+      <rect x="10" y="204" width="842" height="76" rx="9" fill="var(--amber-fill)" stroke="var(--amber-line)" stroke-width="1.2"/>
+      <text x="32" y="230" font-family="var(--sans)" font-size="13.5" font-weight="640" fill="var(--ink)">Nothing is deleted on trust</text>
+      <text x="32" y="250" font-family="var(--sans)" font-size="12.5" fill="var(--ink-2)">An upload can report success even when the file arrived incomplete. So the app reads the stored file back and compares its exact</text>
+      <text x="32" y="268" font-family="var(--sans)" font-size="12.5" fill="var(--ink-2)">size before the original ever becomes eligible for removal — and removal is always a separate, deliberate action.</text>
+    </svg>
+    <figcaption>Full-resolution originals are evidence for warranty and disputes. The 1600px copy exists so an emailed report stays small enough to deliver.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2><span class="n">04</span> Where the record goes next</h2>
+  <p class="intro">The inspection sits at the front of the Critical Client Flow. Everything downstream reads from it, which is why a gap at inspection becomes a gap in the quote.</p>
+  <figure>
+    <svg viewBox="0 0 880 130" role="img" aria-label="The inspection feeds the Proposal Builder, then Quote Assembly, then QuotientApp, then the client.">
+      <defs>
+        <marker id="ah4" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--navy)"/>
+        </marker>
+      </defs>
+      <g>
+        <rect x="10" y="34" width="176" height="62" rx="8" fill="var(--navy)" stroke="var(--navy)"/>
+        <text x="98" y="60" text-anchor="middle" font-family="var(--sans)" font-size="13.5" font-weight="640" fill="#FFFFFF">Site Inspection App</text>
+        <text x="98" y="80" text-anchor="middle" font-family="var(--mono)" font-size="10.5" fill="#C8DCEE">2.1 · you are here</text>
+      </g>
+      <line x1="190" y1="65" x2="214" y2="65" stroke="var(--navy)" stroke-width="1.5" marker-end="url(#ah4)"/>
+      <g>
+        <rect x="218" y="34" width="150" height="62" rx="8" fill="var(--navy-fill)" stroke="var(--navy)" stroke-width="1.2"/>
+        <text x="293" y="60" text-anchor="middle" font-family="var(--sans)" font-size="13.5" font-weight="640" fill="var(--ink)">Proposal Builder</text>
+        <text x="293" y="80" text-anchor="middle" font-family="var(--mono)" font-size="10.5" fill="var(--ink-3)">3.0</text>
+      </g>
+      <line x1="372" y1="65" x2="396" y2="65" stroke="var(--navy)" stroke-width="1.5" marker-end="url(#ah4)"/>
+      <g>
+        <rect x="400" y="34" width="150" height="62" rx="8" fill="var(--navy-fill)" stroke="var(--navy)" stroke-width="1.2"/>
+        <text x="475" y="60" text-anchor="middle" font-family="var(--sans)" font-size="13.5" font-weight="640" fill="var(--ink)">Quote Assembly</text>
+        <text x="475" y="80" text-anchor="middle" font-family="var(--mono)" font-size="10.5" fill="var(--ink-3)">4.0</text>
+      </g>
+      <line x1="554" y1="65" x2="578" y2="65" stroke="var(--navy)" stroke-width="1.5" marker-end="url(#ah4)"/>
+      <g>
+        <rect x="582" y="34" width="130" height="62" rx="8" fill="var(--navy-fill)" stroke="var(--navy)" stroke-width="1.2"/>
+        <text x="647" y="68" text-anchor="middle" font-family="var(--sans)" font-size="13.5" font-weight="640" fill="var(--ink)">QuotientApp</text>
+      </g>
+      <line x1="716" y1="65" x2="740" y2="65" stroke="var(--navy)" stroke-width="1.5" marker-end="url(#ah4)"/>
+      <g>
+        <rect x="744" y="34" width="108" height="62" rx="8" fill="var(--green-fill)" stroke="var(--green)" stroke-width="1.4"/>
+        <text x="798" y="68" text-anchor="middle" font-family="var(--sans)" font-size="13.5" font-weight="640" fill="var(--ink)">Client</text>
+      </g>
+    </svg>
+    <figcaption>The sent report carries a hidden machine-readable data block, so the next system reads the answers directly and nothing is retyped.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2><span class="n">05</span> Rules worth knowing</h2>
+  <ul class="rules">
+    <li><strong>It works with no signal at all</strong><span>Everything is stored on the device and saved within half a second — every keystroke, tick and photo. Losing signal, locking the screen or a flat battery does not lose data.</span></li>
+    <li><strong>Blank fields are normal</strong><span>The form is deliberately broader than any single job. Most inspections leave a lot blank, and that is correct. The completion counts exist to find genuine gaps, not to be driven to 100%.</span></li>
+    <li class="warn"><strong>Use the installed icon, never a browser tab</strong><span>The app installs to the home screen. A browser tab may not keep its data the same way.</span></li>
+    <li class="warn"><strong>Delete your device copy only after the handover is complete</strong><span>Steps 1 to 4 first. Deleting early, or not at all, is how two versions of one job start to disagree.</span></li>
+    <li><strong>Long video goes via OneDrive, not the app</strong><span>Photos are compressed automatically so reports stay deliverable. Video is too large to travel inside a draft or a report.</span></li>
+  </ul>
+</section>
+
+<footer>
+  Dryspace Site Inspection App v1.3 · Form 4.2 · Project 2.1 — Contact to Contract.
+  Sections 01–06 and 03A on site; 07–12 in the office.
+</footer>
+
+</div>
