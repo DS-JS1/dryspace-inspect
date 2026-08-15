@@ -11,6 +11,24 @@ Everything below the form layer is deliberately independent of what the form ask
 **Source app:** Dryspace Site Inspection App v1.3 · Form 4.2 · Queensland, Australia
 **Planned siblings:** progress inspections · job completion reports · staff competency assessments · tool and equipment damage reports
 
+> ### Move this document when you build the second app
+>
+> It currently lives inside the Site Inspection App's folder, which is wrong for
+> what it is — it describes how Dryspace builds **any** field app, not this one.
+> The risk is concrete: when v1.4 ships and v1.3 is moved to Superseded, the
+> specification for four unbuilt apps goes with it.
+>
+> **Intended home:** `00_AI Tools in Development/_Shared/`, alongside the
+> Dryspace Context Brief, which is the same shape — it describes the business and
+> the trade, not this app.
+>
+> **Not done yet, deliberately.** Moving today breaks the cross-references in
+> `CLAUDE.md` and `02_Iteration Guide.md` and takes both documents out of the
+> repository, losing their history — for no benefit until a second app exists.
+> Set up `_Shared` as its own small repository at the same time, so they keep it.
+>
+> See `docs/DECISION-LOG.md` §4.
+
 ---
 
 ## 1. The constraint that shapes everything

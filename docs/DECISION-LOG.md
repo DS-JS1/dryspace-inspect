@@ -6,9 +6,10 @@ Why the app is the way it is. Read before proposing anything architectural.
 settled, often after real debugging. Reopening one without new information wastes
 a session, and worse, risks reintroducing a bug that a decision was made to fix.
 
-**Two sections matter most.** §3 records decisions that were *reversed* — reverting
-to any of those reintroduces a known problem. §4 records what is genuinely still
-open.
+**Three sections matter most.** §3 records decisions that were *reversed* —
+reverting to any of those reintroduces a known problem. §4 records work that is
+settled but waiting on a trigger, so it surfaces when it should rather than being
+rediscovered. §5 records what is genuinely still open.
 
 Append; do not rewrite. If a decision changes, mark the old one superseded and
 add a new entry saying what changed and why.
@@ -67,10 +68,10 @@ Current and in force.
 | D21 | Permanent **`data-mfid`** on every file input | Media was the one place D20 had been skipped; renaming a file input's id orphaned every photo attached to it. | v1.3 |
 | D22 | Tests run the **real functions** through an iframe, never a copy | A copied function drifts, and a test that passes against a stale copy is worse than no test. | v1.3 |
 | D23 | The index is **library columns set at upload**, not a generated document | A generated register needs a trigger, and a trigger fails quietly — you find out weeks later with folders missing. Columns cannot drift, because they *are* the folder's metadata rather than a description of it. | v1.3 |
+| D24 | Writing the index **never blocks an upload** | The columns are a convenience; the photograph is evidence. If they are missing or refused, the upload carries on. | v1.3 |
+| D25 | Filenames carry a **pinned client token** — `INS-2026-0142_Smith_2026-08-15_...` | A file separated from its folder (downloaded, emailed, dropped in Teams) was otherwise anonymous until someone looked the number up. The client name is used because it is a real field; a suburb would have to be parsed out of a free-text address, and "Unit 3/12 Marine Pde Kirra QLD 4225" has no reliable separator. Pinned on first use so a later correction does not rename earlier photos. Capped at 24 characters. | v1.3 |
 | D26 | **Guides are generated PDFs, versioned in the filename**; the markdown source is not versioned | The markdown lives in git, which already knows every version — renaming it each release churns history and breaks links. The PDF is a detached thing someone may hold weeks later with no way to tell it is current. Version in the name makes staleness visible to anyone: the app says v1.4, the PDF says v1.3. `tests.html` checks each exists for the current version, so a release cannot pass with stale guides. | v1.3 |
 | D27 | Numbered documents at root are **procedures a person follows**; `docs/` supports the build | Gives a clear rule for where a new document goes. The Release Protocol moved from `docs/` to `05_Release Protocol.md` under it. | v1.3 |
-| D25 | Filenames carry a **pinned client token** — `INS-2026-0142_Smith_2026-08-15_...` | A file separated from its folder (downloaded, emailed, dropped in Teams) was otherwise anonymous until someone looked the number up. The client name is used because it is a real field; a suburb would have to be parsed out of a free-text address, and "Unit 3/12 Marine Pde Kirra QLD 4225" has no reliable separator. Pinned on first use so a later correction does not rename earlier photos. Capped at 24 characters. | v1.3 |
-| D24 | Writing the index **never blocks an upload** | The columns are a convenience; the photograph is evidence. If they are missing or refused, the upload carries on. | v1.3 |
 
 ---
 
@@ -107,7 +108,48 @@ Each of these was once true. Reverting reintroduces a known problem.
 
 ---
 
-## 4. Open questions
+## 4. Deferred — decided, waiting on a trigger
+
+Not open questions. These are settled; they are simply not worth doing yet. Each
+records the event that should start it, so it surfaces at the right moment rather
+than being rediscovered.
+
+### Move the shared documents up a level
+
+**Trigger: starting the second app** (progress inspections, completion reports,
+competency assessments, or equipment damage).
+
+`docs/FIELD-APP-TEMPLATE.md` and `04_Project Context Brief.md` describe how
+Dryspace builds **any** field app, and the business and trade behind them. Neither
+is about the Site Inspection App, yet both live inside its folder.
+
+**The risk is concrete:** when v1.4 ships and v1.3 goes to Superseded, the
+specification for four unbuilt apps goes with it.
+
+**Intended shape:**
+
+```
+00_AI Tools in Development/
+    _Shared/                            ← applies to every app; its own repository
+        Field App Architecture Template.md
+        Dryspace Context Brief.md
+    01_Contact to Contract/
+        Dryspace Inspection App v1.3/   ← this app only
+```
+
+Above `01_Contact to Contract`, because the template reaches beyond that phase —
+the equipment damage app is not Contact-to-Contract at all.
+
+**Why not now.** Moving breaks cross-references in `CLAUDE.md` and
+`02_Iteration Guide.md`, and takes both documents out of version control — and the
+template is the document most likely to be revised as siblings are built, so
+losing its history costs most. Set `_Shared` up as its own small repository at the
+same time. Today it buys nothing; at app number two it costs the same and the
+benefit is real.
+
+---
+
+## 5. Open questions
 
 | Question | Blocking | Notes |
 |---|---|---|
