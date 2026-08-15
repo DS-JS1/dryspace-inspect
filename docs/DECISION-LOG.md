@@ -1,0 +1,106 @@
+# Decision Log
+
+Why the app is the way it is. Read before proposing anything architectural.
+
+**The point of this document:** most questions that look open have already been
+settled, often after real debugging. Reopening one without new information wastes
+a session, and worse, risks reintroducing a bug that a decision was made to fix.
+
+**Two sections matter most.** §3 records decisions that were *reversed* — reverting
+to any of those reintroduces a known problem. §4 records what is genuinely still
+open.
+
+Append; do not rewrite. If a decision changes, mark the old one superseded and
+add a new entry saying what changed and why.
+
+---
+
+## 1. Version history
+
+| Version | Date | What it did | Deployed |
+|---|---|---|---|
+| **1.0.0** | 20 Jul 2026 | First release, built from the paper Site Inspection Form v4. Offline PWA, autosave, photo compression, HTML report with embedded photos. | Yes |
+| **1.1.0** | 20 Jul 2026 | Office pre-fill and handover between devices — draft export/import, reports re-importable, logo embedded, drafts carry photos. | Yes |
+| **1.1.1** | 20 Jul 2026 | Version footer fix. | **Yes — this is what staff still run** |
+| **1.2.0** | 2 Aug 2026 | Permanent field ids (`data-fid`) replacing label-keyed storage; schema 1→2 migration; stage tracking and audit trail; Section 03A Safety, Access & Discharge; measurement schedule. | **No** |
+| **1.2.1** | 2 Aug 2026 | Completion indicators, "None apply" options, BS8102:2022 grades with `VALUE_REMAP`; schema 2→3. | **No** |
+| **1.3.0** | in development | Photos upload to SharePoint with verification; Microsoft sign-in; update detection; automated test suite; media keyed by `data-mfid`; unified inspection folder. | Not yet |
+
+### Why 1.2.0 and 1.2.1 were never deployed
+
+Both were completed in the working folder and never pushed. The photo-persistence
+problem made the app unusable in practice, so work moved straight on to v1.3
+rather than shipping an intermediate version that still had the blocking fault.
+
+**Consequence to remember:** every device in the field is on **1.1.1**. When v1.3
+ships, records migrate 1→2→3→4 in a single pass, in the field. That migration is
+covered by the test suite against the real v1.1.1 build.
+
+---
+
+## 2. Standing decisions
+
+Current and in force.
+
+| # | Decision | Why | Since |
+|---|---|---|---|
+| D1 | Storage is **SharePoint**, not Google Drive | The handover baton files already live there. Splitting one job across two clouds is the fragmentation the baton rule exists to prevent. Re-examined in Aug 2026 once media was isolated, and confirmed. | v1.3 |
+| D2 | **Per-user sign-in, no backend** (OAuth2 PKCE) | No secret to hold, so no server to build or secure. The app stays static. Uploads are attributed to a real person. | v1.3 |
+| D3 | **Three renditions** per photo — 240px thumb, 1600px report copy, untouched original | Each has a distinct job. The report copy keeps emailed reports deliverable; the original is warranty and dispute evidence. | v1.3 |
+| D4 | A local original is **purged only after verified upload**, never automatically | An upload can report success on a truncated write. Only an independent read-back proves what is stored. | v1.3 |
+| D5 | **Deferred upload queue**, never upload-on-tap | There is no signal at capture time. A synchronous upload fails in every basement. | v1.3 |
+| D6 | Photos are taken in the **native Camera app**, then imported | The camera roll is an independent backup, and EXIF location survives. Browser capture gives neither. | v1.3 |
+| D7 | The address label comes from **the form**, never GPS reverse-geocoding | GPS is routinely wrong by hundreds of metres, which matters when working on adjacent properties. | v1.3 |
+| D8 | Inspection media lives in its **own SharePoint site** | Client folders hold quotes and pricing. Delegated permissions mean uploading there would give field staff access to all of it. | v1.3 |
+| D9 | Media **never moves between libraries** | Graph item ids survive moves and renames *within* a library, but a cross-library move is a copy-and-delete and every stored link breaks. Filing elsewhere is done with a shortcut. | v1.3 |
+| D10 | The folder is **derived from the record**, with no picker and no manual step | Inspections happen ad hoc with no SharePoint access. Requiring a lookup would delay or block uploads. | v1.3 |
+| D11 | **One folder per inspection**, holding `current/`, `archive/` and `photos/` | One place for everything about a job. Photos in their own subfolder so they cannot drown the two folders a person looks for at handover. | v1.3 |
+| D12 | Inspection numbers are written **`INS-2026-0142`** | Year-based, sorts chronologically. Chosen over the short form the app previously prompted for. | v1.3 |
+| D13 | **Hand-written auth**, not MSAL | ~150 lines against ~200KB, in an app whose defining property is being self-contained. One tenant, one scope, one account per device — none of the cases MSAL exists for. | v1.3 |
+| D14 | Service worker is **cache-first** | Instant launch matters more than instant updates when the alternative is a hang in marginal signal. Updates are handled by explicit detection instead. | v1.3 |
+| D15 | Updates are **announced, not silent** | The worker waits rather than self-activating, and the app shows a banner. Silent updates are how v1.1.1 stayed live unnoticed. | v1.3 |
+| D16 | **Capture is never blocked** by storage pressure | Running out of space is recoverable; an un-photographed defect is not. | v1.3 |
+| D17 | Outputs are **PDF only** | Removes the docx/pdf drift where updating one left two versions of the truth. | v1.3 |
+| D18 | **One folder per minor version**, not per patch | Git holds every version and tags each release. Folder-per-patch creates snapshots nobody reads. | v1.3 |
+| D19 | Git internals live **outside the OneDrive sync root** | This folder is inside a synced SharePoint library, and syncing `.git` corrupts it. | v1.3 |
+| D20 | Permanent **`data-fid`** on every control | Storing against label text meant every rewording silently orphaned data. This is the single most valuable rule in the codebase. | v1.2 |
+| D21 | Permanent **`data-mfid`** on every file input | Media was the one place D20 had been skipped; renaming a file input's id orphaned every photo attached to it. | v1.3 |
+| D22 | Tests run the **real functions** through an iframe, never a copy | A copied function drifts, and a test that passes against a stale copy is worse than no test. | v1.3 |
+
+---
+
+## 3. Reversed decisions — do not revert to these
+
+Each of these was once true. Reverting reintroduces a known problem.
+
+| Was | Now | Why it changed |
+|---|---|---|
+| Field **labels are the data keys** | Permanent `data-fid` (D20) | Renaming a label silently orphaned that field's saved data. The single biggest fragility in v1.1.1. |
+| Media keyed by the file input's **DOM id** | Permanent `data-mfid` (D21) | Same fault, in the one place v1.2 missed. |
+| The folder name must match **`APP_VER` exactly** | Matches the **minor** version (D18) | Forced a folder rename and full copy for every patch. Predates the repository. |
+| Use **MSAL** for sign-in | Hand-written PKCE (D13) | Reversed during implementation: 200KB of third-party code for one flow, in a deliberately zero-dependency app. |
+| Photos live in **`media/`** under the job folder | Unified inspection folder in Site Inspections (D11) | The old structure sat where quotes and pricing live, and would have required giving field staff access to both. |
+| Service worker calls **`skipWaiting()`** on install | Waits to be applied (D15) | Swapped code underneath a running page, and made announcing an update impossible. |
+| **Renditions** were scheduled before the upload path | Shipped together (v1.3) | Storing originals with nowhere to send them would have filled iPad storage and made pressure worse, not better. |
+| A separate **A3 handover flowchart** alongside the workflow chart | One chart (Training v2.0) | Two documents describing one process is how they come to contradict each other — the old pack's own README warned of it. |
+
+### Also corrected along the way
+
+- **`Files.ReadWrite.All` delegated does not require admin consent by default.**
+  It was asserted here that it did. Microsoft's default for the *delegated* variant
+  is "no"; the *application* variant requires it. What actually forces admin
+  approval in this tenant is the user-consent policy for apps without a verified
+  publisher. Worth knowing if consent behaviour ever looks inconsistent.
+
+---
+
+## 4. Open questions
+
+| Question | Blocking | Notes |
+|---|---|---|
+| **Admin consent for the Entra app** | Yes — uploads cannot work without it | Requires Global Administrator, Privileged Role Administrator, Cloud Application Administrator or Application Administrator. Neither `jamie@dryspace.com.au` nor `jamie@wetlock.com.au` holds one; the latter owns the app registration, which is not the same thing. IT support engaged. |
+| **Does iOS preserve EXIF GPS through the Safari file picker?** | No | Decides whether the Google Photos Maps plan is achievable. Needs a real device test. |
+| Should the app be **publicly reachable**? | No | Currently public on GitHub Pages. Cloudflare Access with one-time PIN would make it staff-only, free, and matches the mental model. Decide before wider rollout. |
+| **Google Photos as secondary backup** | No | Scheduled server-side sync reading from SharePoint. No first-party Power Automate connector exists, so it needs a custom connector or script. |
+| **Analytics across records** | No | Cross-job querying needs a structured database downstream. The apps produce the data; they do not provide the querying. |
+| **Who holds Global Administrator** | No, but material | If nobody at Dryspace does, that is a business risk well beyond this project — it controls every mailbox and SharePoint site. |
