@@ -604,6 +604,33 @@ function releaseChecks(W){
            'CHANGELOG.txt carries an entry for v' + appVer,
            'no mention of ' + appVer + ' — changelog not updated for this release');
       }).catch(function(){ record(false, 'CHANGELOG.txt readable', 'fetch failed'); });
+  })
+
+  .then(function(){
+    /* The printed guides are the one thing a person can be holding weeks later
+       with no way to tell it is out of date. Each PDF carries the version in its
+       name, so checking is simply asking whether the current one exists. This is
+       the document-freshness gap that was previously left to memory. */
+    var GUIDES = [
+      '01_Setup and User Guide',
+      '02_Iteration Guide',
+      '03_Handover and Version Control Protocol',
+      '05_Release Protocol'
+    ];
+    return GUIDES.reduce(function(chain, name){
+      return chain.then(function(){
+        var path = 'Guides/' + name + '_v' + appVer + '.pdf';
+        return fetch(encodeURI(path) + bust, {method: 'HEAD'})
+          .then(function(r){
+            ok(r.ok, 'guide is current: ' + name,
+               'missing ' + path + ' — regenerate it from "' + name + '.md" ' +
+               '(Print → Save as PDF, background graphics ON)');
+          })
+          .catch(function(){
+            record(false, 'guide is current: ' + name, 'could not check ' + path);
+          });
+      });
+    }, Promise.resolve());
   });
 }
 

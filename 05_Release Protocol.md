@@ -1,6 +1,6 @@
 # Release Protocol
 
-Supersedes `RELEASE-CHECKLIST.md`. Invoked automatically via `CLAUDE.md`, which
+Invoked automatically via `CLAUDE.md`, which
 is loaded at the start of every session.
 
 The purpose is narrow: **make sure nothing that describes the app is left saying
@@ -40,6 +40,7 @@ current app", named for its minor version.
 - [ ] `CHANGELOG.txt` entry, written as the change is made, not reconstructed after
 - [ ] Committed with a message saying *why*, not just what
 - [ ] Tagged in git — `v1.3.2`
+- [ ] `Guides/` PDFs regenerated and renamed for the new version (§4a)
 
 ### Minor — the above, plus
 
@@ -89,6 +90,45 @@ disagreeing with its source.
 
 Generate with the browser's Print → Save as PDF. **Background graphics ON**, or
 navy headers and coloured panels print as empty white boxes.
+
+---
+
+## 4a. Guides — the generated PDFs
+
+Four documents are procedures a person follows away from a screen. Each has a PDF
+in `Guides/`, generated from the markdown and **never edited directly**:
+
+| Source (root) | Generated |
+|---|---|
+| `01_Setup and User Guide.md` | `Guides/01_Setup and User Guide_v1.3.pdf` |
+| `02_Iteration Guide.md` | `Guides/02_Iteration Guide_v1.3.pdf` |
+| `03_Handover and Version Control Protocol.md` | `Guides/03_Handover and Version Control Protocol_v1.3.pdf` |
+| `05_Release Protocol.md` | `Guides/05_Release Protocol_v1.3.pdf` |
+
+**The PDF carries the version; the markdown does not.** That asymmetry is the whole
+point:
+
+- The markdown is in git, which already knows every version. Renaming it each
+  release would churn the history and break every link pointing at it.
+- The PDF is a detached artefact someone may be holding weeks later. With the
+  version in its name, staleness is visible to anyone — the app's home screen says
+  `v1.4`, the PDF in your hand says `v1.3`, so it is out of date. No process and no
+  memory required, just two numbers that do not match.
+
+`tests.html` fetches each expected path and fails if it is missing, so a release
+cannot pass while the guides are stale.
+
+**Not given a PDF, deliberately:** `04_Project Context Brief` and
+`docs/FIELD-APP-TEMPLATE.md` exist to be pasted into an AI, and a PDF makes copying
+harder; `docs/DECISION-LOG.md` grows continuously and would be stale within a week.
+The gap at 04 in the Guides folder is expected, not an omission.
+
+### Generating them
+
+Open the markdown in a browser or editor and print to PDF. **Background graphics
+ON**, or coloured panels print as empty white boxes. Replace the previous version's
+PDF rather than keeping both — two versions on a shelf is how someone reads the
+wrong one.
 
 ---
 

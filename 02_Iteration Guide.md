@@ -20,7 +20,7 @@ what *else* must be updated when you do — that drifted, and now lives elsewher
 | Document | Covers |
 |---|---|
 | `CLAUDE.md` | The non-negotiables. **Loaded automatically at the start of every session** |
-| `docs/RELEASE-PROTOCOL.md` | What to update and when, tiered by change size |
+| `05_Release Protocol.md` | What to update and when, tiered by change size |
 | `docs/DECISION-LOG.md` | What was decided and why — **read before proposing anything architectural** |
 
 The decision log matters most. Many questions that look open are already settled,

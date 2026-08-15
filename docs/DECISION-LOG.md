@@ -67,6 +67,8 @@ Current and in force.
 | D21 | Permanent **`data-mfid`** on every file input | Media was the one place D20 had been skipped; renaming a file input's id orphaned every photo attached to it. | v1.3 |
 | D22 | Tests run the **real functions** through an iframe, never a copy | A copied function drifts, and a test that passes against a stale copy is worse than no test. | v1.3 |
 | D23 | The index is **library columns set at upload**, not a generated document | A generated register needs a trigger, and a trigger fails quietly — you find out weeks later with folders missing. Columns cannot drift, because they *are* the folder's metadata rather than a description of it. | v1.3 |
+| D26 | **Guides are generated PDFs, versioned in the filename**; the markdown source is not versioned | The markdown lives in git, which already knows every version — renaming it each release churns history and breaks links. The PDF is a detached thing someone may hold weeks later with no way to tell it is current. Version in the name makes staleness visible to anyone: the app says v1.4, the PDF says v1.3. `tests.html` checks each exists for the current version, so a release cannot pass with stale guides. | v1.3 |
+| D27 | Numbered documents at root are **procedures a person follows**; `docs/` supports the build | Gives a clear rule for where a new document goes. The Release Protocol moved from `docs/` to `05_Release Protocol.md` under it. | v1.3 |
 | D25 | Filenames carry a **pinned client token** — `INS-2026-0142_Smith_2026-08-15_...` | A file separated from its folder (downloaded, emailed, dropped in Teams) was otherwise anonymous until someone looked the number up. The client name is used because it is a real field; a suburb would have to be parsed out of a free-text address, and "Unit 3/12 Marine Pde Kirra QLD 4225" has no reliable separator. Pinned on first use so a later correction does not rename earlier photos. Capped at 24 characters. | v1.3 |
 | D24 | Writing the index **never blocks an upload** | The columns are a convenience; the photograph is evidence. If they are missing or refused, the upload carries on. | v1.3 |
 
@@ -94,6 +96,14 @@ Each of these was once true. Reverting reintroduces a known problem.
   is "no"; the *application* variant requires it. What actually forces admin
   approval in this tenant is the user-consent policy for apps without a verified
   publisher. Worth knowing if consent behaviour ever looks inconsistent.
+
+---
+
+> **Found by the guide-freshness check on its first run:** `APP_VER` was still
+> `1.2.1` while every document said v1.3. Bumped to `1.3.0` along with
+> `CACHE_VERSION` and the field id manifest. Worth noting because it is exactly
+> the drift the check exists to catch, and it had gone unnoticed through an
+> entire development cycle.
 
 ---
 

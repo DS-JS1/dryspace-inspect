@@ -1,12 +1,12 @@
 # Dryspace Site Inspection App — read this before changing anything
 
 This file is loaded automatically at the start of every session. It is short on
-purpose. The detail lives in the two documents it points at.
+purpose. The detail lives in the documents it points at.
 
 ## Before you touch the code
 
 1. **Classify the change first** — patch, minor, or major. It determines what else
-   has to be updated. See `docs/RELEASE-PROTOCOL.md` §1.
+   has to be updated. See `05_Release Protocol.md` §1.
 2. **Read `docs/DECISION-LOG.md`** before proposing anything architectural. Many
    questions that look open are already settled, with reasons. Reopening one
    without new information wastes a session and risks regressing a fix.
@@ -39,11 +39,12 @@ These exist because breaking one of them lost, or nearly lost, real data.
 | Media logic | `ds-media-sync.js` — renditions, naming, queue, state machine |
 | SharePoint | `ds-sharepoint.js` — Graph transport |
 | Sign-in | `ds-auth.js` — OAuth2 PKCE |
-| Tests | `tests.html` — 217 assertions, run over HTTP |
-| Protocol | `docs/RELEASE-PROTOCOL.md` — what to update, when |
+| Tests | `tests.html` — run over HTTP; expect zero failures |
+| Protocol | `05_Release Protocol.md` — what to update, when |
 | Decisions | `docs/DECISION-LOG.md` — what was decided and why |
 | Architecture | `docs/FIELD-APP-TEMPLATE.md` — for building sibling apps |
 | Staff material | `Training/` — cards, chart, module |
+| Printed guides | `Guides/` — generated PDFs, never edited directly |
 
 ## Working notes
 
