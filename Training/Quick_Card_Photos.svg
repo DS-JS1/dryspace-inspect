@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="210mm" height="297mm" viewBox="0 0 595 842"
+     role="img" aria-label="Photos quick card: take photos in the camera app, attach them in the form, and upload when you have signal.">
+  <style>
+    .h1{font:700 21px 'Segoe UI',Arial,sans-serif;fill:#FFFFFF}
+    .h2{font:400 10.5px 'Segoe UI',Arial,sans-serif;fill:#C6DCEE}
+    .brand{font:700 11px 'Segoe UI',Arial,sans-serif;fill:#FFFFFF;letter-spacing:.1em}
+    .ver{font:400 9px Consolas,monospace;fill:#9FC2DC}
+    .rule{font:700 15px 'Segoe UI',Arial,sans-serif;fill:#123A5F;letter-spacing:.03em}
+    .ruleb{font:400 11px 'Segoe UI',Arial,sans-serif;fill:#3C4C5A}
+    .sec{font:700 10px 'Segoe UI',Arial,sans-serif;fill:#123A5F;letter-spacing:.12em}
+    .num{font:700 12px Consolas,monospace;fill:#FFFFFF}
+    .st{font:700 13px 'Segoe UI',Arial,sans-serif;fill:#14202B}
+    .sd{font:400 10.5px 'Segoe UI',Arial,sans-serif;fill:#54626F}
+    .chip{font:700 9px Consolas,monospace;letter-spacing:.05em}
+    .mono{font:400 10.5px Consolas,monospace;fill:#14202B}
+    .monod{font:400 9.5px Consolas,monospace;fill:#6B7A87}
+    .warn{font:700 10.5px 'Segoe UI',Arial,sans-serif;fill:#9A6410}
+    .good{font:700 10.5px 'Segoe UI',Arial,sans-serif;fill:#1E6B34}
+    .qa{font:700 11px 'Segoe UI',Arial,sans-serif;fill:#14202B}
+    .qb{font:400 10.5px 'Segoe UI',Arial,sans-serif;fill:#54626F}
+    .foot{font:400 9px 'Segoe UI',Arial,sans-serif;fill:#8593A0}
+  </style>
+
+  <rect width="595" height="842" fill="#FFFFFF"/>
+
+  <!-- header -->
+  <rect x="0" y="0" width="595" height="88" fill="#123A5F"/>
+  <text class="brand" x="32" y="27">DRYSPACE SOLUTIONS</text>
+  <text class="h1" x="32" y="56">PHOTOS — QUICK CARD</text>
+  <text class="h2" x="32" y="74">Getting site photos off your device and into SharePoint</text>
+  <text class="ver" x="563" y="74" text-anchor="end">New in v1.3</text>
+
+  <!-- the rule -->
+  <rect x="32" y="106" width="531" height="58" rx="7" fill="#E8F1FA" stroke="#123A5F" stroke-width="1.4"/>
+  <text class="rule" x="48" y="130">TAKE PHOTOS IN THE CAMERA APP, NOT IN THE FORM</text>
+  <text class="ruleb" x="48" y="149">Then attach them. Your camera roll keeps a second copy, and location detail survives.</text>
+
+  <!-- on site -->
+  <text class="sec" x="32" y="196">ON SITE — NO SIGNAL NEEDED</text>
+  <rect x="32" y="206" width="531" height="122" rx="7" fill="#FBFCFD" stroke="#DDE5EC" stroke-width="1"/>
+
+  <circle cx="60" cy="240" r="14" fill="#123A5F"/>
+  <text class="num" x="60" y="245" text-anchor="middle">1</text>
+  <text class="st" x="86" y="237">Photograph what you need, using the Camera app</text>
+  <text class="sd" x="86" y="253">Take as many as you like. Nothing is uploading yet, so nothing is waiting on signal.</text>
+
+  <circle cx="60" cy="294" r="14" fill="#123A5F"/>
+  <text class="num" x="60" y="299" text-anchor="middle">2</text>
+  <text class="st" x="86" y="291">Attach them to the right field in the form</text>
+  <text class="sd" x="86" y="307">Tap the upload box in that section and pick them from your Photo Library.</text>
+
+  <!-- back in signal -->
+  <text class="sec" x="32" y="366">BACK IN SIGNAL — CAR, OFFICE OR WIFI</text>
+  <rect x="32" y="376" width="531" height="176" rx="7" fill="#FBFCFD" stroke="#DDE5EC" stroke-width="1"/>
+
+  <circle cx="60" cy="410" r="14" fill="#123A5F"/>
+  <text class="num" x="60" y="415" text-anchor="middle">3</text>
+  <text class="st" x="86" y="407">Sign in, once</text>
+  <text class="sd" x="86" y="423">Home screen → Sign in. Use your Dryspace Microsoft account. It remembers you.</text>
+
+  <circle cx="60" cy="464" r="14" fill="#123A5F"/>
+  <text class="num" x="60" y="469" text-anchor="middle">4</text>
+  <text class="st" x="86" y="461">Tap “Upload now”</text>
+  <text class="sd" x="86" y="477">The home screen tells you how many files are waiting. Leave it running until it finishes.</text>
+
+  <circle cx="60" cy="518" r="14" fill="#1E6B34"/>
+  <text class="num" x="60" y="523" text-anchor="middle">5</text>
+  <text class="st" x="86" y="515">Check it says “All photos uploaded”</text>
+  <text class="sd" x="86" y="531">That is your confirmation. Until it does, the photos exist only on your device.</text>
+
+  <!-- what the app does -->
+  <text class="sec" x="32" y="590">WHAT THE APP DOES BY ITSELF</text>
+  <rect x="32" y="600" width="531" height="94" rx="7" fill="#E8F1FA" stroke="#9DC3E6" stroke-width="1"/>
+  <text class="sd" x="48" y="622" fill="#14202B">Keeps a full-quality original for evidence, plus a smaller copy so reports stay emailable.</text>
+  <text class="sd" x="48" y="640" fill="#14202B">Names every file by job, date and which part of the form it came from.</text>
+  <text class="sd" x="48" y="658" fill="#14202B">Files them into the inspection’s own photos/ folder — you never choose a location.</text>
+  <text class="good" x="48" y="682">Reads every upload back and checks it arrived complete before counting it as done.</text>
+
+  <!-- if something looks wrong -->
+  <text class="sec" x="32" y="722">IF SOMETHING LOOKS WRONG</text>
+
+  <text class="qa" x="32" y="744">“No connection”</text>
+  <text class="qb" x="200" y="744">Normal in a basement. Try again when you have signal.</text>
+
+  <text class="qa" x="32" y="764">“Please sign in again”</text>
+  <text class="qb" x="200" y="764">Tap Sign in. Nothing is lost — the photos are still on the device.</text>
+
+  <text class="qa" x="32" y="784">“Need attention”</text>
+  <text class="qb" x="200" y="784">Tap Try again. If it repeats, tell the office before deleting anything.</text>
+
+  <text class="warn" x="32" y="812">Never delete an inspection until the home screen says all photos are uploaded.</text>
+  <text class="foot" x="563" y="826" text-anchor="end">Dryspace Site Inspection App v1.3</text>
+</svg>

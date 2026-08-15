@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Site Inspection App — Training Module</title>
+<style>
+  :root{
+    --ground:#F5F8FA; --surface:#FFFFFF; --ink:#14202B; --ink-2:#54626F; --ink-3:#8593A0;
+    --rule:#DDE5EC; --navy:#123A5F; --navy-fill:#E8F1FA;
+    --amber:#9A6410; --amber-fill:#FDF6E3; --amber-line:#D3AE62;
+    --green:#1E6B34; --green-fill:#E0F2E4; --green-line:#8CC79F;
+    --red:#A12622; --red-fill:#FBEBEA; --red-line:#E0B4B2;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,'SF Mono',Consolas,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --ground:#0E1720; --surface:#17222D; --ink:#E8EEF3; --ink-2:#A7B6C2; --ink-3:#7B8B98;
+      --rule:#2A3945; --navy:#7FB2DC; --navy-fill:#16283A;
+      --amber:#E0A64A; --amber-fill:#2C2416; --amber-line:#6B5423;
+      --green:#77CE95; --green-fill:#12291B; --green-line:#2F5C3D;
+      --red:#E88A85; --red-fill:#2B1615; --red-line:#5F2E2B;
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#0E1720; --surface:#17222D; --ink:#E8EEF3; --ink-2:#A7B6C2; --ink-3:#7B8B98;
+    --rule:#2A3945; --navy:#7FB2DC; --navy-fill:#16283A;
+    --amber:#E0A64A; --amber-fill:#2C2416; --amber-line:#6B5423;
+    --green:#77CE95; --green-fill:#12291B; --green-line:#2F5C3D;
+    --red:#E88A85; --red-fill:#2B1615; --red-line:#5F2E2B;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);
+       line-height:1.6;padding:32px 18px 90px}
+  .wrap{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:34px}
+
+  header{border-bottom:2px solid var(--navy);padding-bottom:18px;display:flex;
+         flex-direction:column;gap:6px}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--navy)}
+  h1{margin:0;font-size:clamp(24px,4vw,32px);line-height:1.15;font-weight:650;letter-spacing:-.02em}
+  .lede{margin:0;color:var(--ink-2);font-size:16px}
+  .meta{font-size:13px;color:var(--ink-3)}
+
+  section{background:var(--surface);border:1px solid var(--rule);border-radius:12px;padding:22px}
+  h2{margin:0 0 4px;font-size:19px;font-weight:640;letter-spacing:-.01em;display:flex;gap:10px;align-items:baseline}
+  h2 .n{font-family:var(--mono);font-size:12px;color:var(--navy)}
+  p{margin:10px 0;font-size:15px}
+  p.tight{margin:6px 0}
+  strong{font-weight:640}
+
+  .callout{border-left:3px solid var(--navy);background:var(--navy-fill);padding:12px 15px;
+           border-radius:0 8px 8px 0;margin:14px 0;font-size:14.5px}
+  .callout.warn{border-left-color:var(--amber);background:var(--amber-fill)}
+  .callout.good{border-left-color:var(--green);background:var(--green-fill)}
+  .callout b{display:block;margin-bottom:2px}
+
+  ol.steps{margin:12px 0;padding-left:0;list-style:none;counter-reset:s;display:flex;
+           flex-direction:column;gap:9px}
+  ol.steps li{counter-increment:s;display:flex;gap:12px;align-items:flex-start;font-size:14.5px}
+  ol.steps li::before{content:counter(s);flex-shrink:0;width:24px;height:24px;border-radius:50%;
+    background:var(--navy);color:var(--surface);font-family:var(--mono);font-size:12px;font-weight:700;
+    display:flex;align-items:center;justify-content:center;margin-top:1px}
+  ol.steps li.last::before{background:var(--amber)}
+  ol.steps li span{color:var(--ink-2);display:block;font-size:13.5px}
+
+  .exercise{border:1px dashed var(--rule);border-radius:10px;padding:16px;margin-top:16px}
+  .exercise h3{margin:0 0 4px;font-size:15px;font-weight:640}
+  .exercise .hint{font-size:13.5px;color:var(--ink-2);margin:0 0 12px}
+  .opts{display:flex;flex-direction:column;gap:8px}
+  button.opt{font-family:inherit;font-size:14.5px;text-align:left;padding:11px 14px;
+    border:1px solid var(--rule);background:var(--surface);color:var(--ink);border-radius:8px;
+    cursor:pointer;display:flex;gap:10px;align-items:center}
+  button.opt:hover:not(:disabled){border-color:var(--navy)}
+  button.opt:focus-visible{outline:2px solid var(--navy);outline-offset:2px}
+  button.opt .pos{font-family:var(--mono);font-size:11px;color:var(--ink-3);min-width:16px}
+  button.opt.picked{background:var(--navy-fill);border-color:var(--navy)}
+  button.opt.right{background:var(--green-fill);border-color:var(--green-line)}
+  button.opt.wrong{background:var(--red-fill);border-color:var(--red-line)}
+  button.opt:disabled{cursor:default}
+  .verdict{margin-top:12px;font-size:14px;font-weight:600;min-height:20px}
+  .verdict.ok{color:var(--green)} .verdict.no{color:var(--red)}
+
+  .qa{margin-bottom:22px}
+  .qa:last-of-type{margin-bottom:0}
+  .q{font-weight:640;font-size:15px;margin-bottom:9px}
+  .fb{margin-top:8px;font-size:13.5px;color:var(--ink-2);display:none}
+  .fb.show{display:block}
+
+  .btn{font-family:inherit;font-size:14.5px;font-weight:600;padding:11px 20px;border-radius:8px;
+       border:1px solid var(--navy);background:var(--navy);color:#fff;cursor:pointer}
+  .btn.ghost{background:transparent;color:var(--navy)}
+  .btn:focus-visible{outline:2px solid var(--navy);outline-offset:2px}
+  .score{margin-top:18px;padding:16px;border-radius:10px;background:var(--navy-fill);
+         border:1px solid var(--rule);display:none}
+  .score.show{display:block}
+  .score .big{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums}
+
+  footer{font-size:13px;color:var(--ink-3);border-top:1px solid var(--rule);padding-top:16px}
+  code{font-family:var(--mono);font-size:.9em;background:var(--navy-fill);color:var(--navy);
+       padding:1px 5px;border-radius:4px}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">Dryspace Solutions · Training</div>
+  <h1>Site Inspection App — handover &amp; photos</h1>
+  <p class="lede">About 12 minutes. Two things to get right: passing a job on without losing it, and getting your photos off the device.</p>
+  <div class="meta">App v1.3 · Works offline · Nothing you do here is saved or sent anywhere.</div>
+</header>
+
+<section>
+  <h2><span class="n">01</span> Why this matters</h2>
+  <p>Everything Dryspace quotes comes from the inspection. The proposal reads it, the quote reads the proposal, the contract reads the quote. A gap at inspection becomes a gap in the quote — and usually a phone call to you, days later, asking what you saw.</p>
+  <p>The app removes most of that risk. What it cannot do is stop two people editing two different copies of the same job, or stop photos sitting on a device that later gets wiped. Those are the two things this module is about.</p>
+</section>
+
+<section>
+  <h2><span class="n">02</span> The baton</h2>
+  <p>The app does not sync. There is no server quietly keeping everyone in step. The record lives on <em>your</em> device until you deliberately hand it on.</p>
+  <div class="callout">
+    <b>One baton, never a copy.</b>
+    At any moment exactly one file is the live record, and it lives in SharePoint. The copy on your device is a working scratch pad.
+  </div>
+  <p class="tight">Six stages, each with exactly one owner:</p>
+  <p class="tight"><code>OFFICE</code> → <code>FIELD</code> → <code>TECH</code> → <code>SALES</code> → <code>ADMIN</code> → <code>CLOSED</code></p>
+  <p>Set the stage <strong>before</strong> you export — the stage is part of the filename, so it is how anyone can tell which file is current without opening it.</p>
+</section>
+
+<section>
+  <h2><span class="n">03</span> The handover — five steps</h2>
+  <ol class="steps">
+    <li><div><strong>Set your stage and your name</strong><span>Top of the inspection. Stamps the filename and the audit trail.</span></div></li>
+    <li><div><strong>Tap “Share draft”</strong><span>Foot of the form. The app names the file — do not rename it.</span></div></li>
+    <li><div><strong>Upload it into <code>current/</code></strong><span>The inspection’s own folder in the Site Inspections library.</span></div></li>
+    <li><div><strong>Move the previous file into <code>archive/</code></strong><span>Straight away, so <code>current/</code> holds exactly one file again.</span></div></li>
+    <li class="last"><div><strong>Then delete your device copy</strong><span>Only after steps 3 and 4. Send a link to the folder — never the file.</span></div></li>
+  </ol>
+  <div class="callout warn">
+    <b>Step 5 is the one people skip.</b>
+    Keeping your copy “just in case” is how one job ends up being edited in two places, with nobody sure which version the client was quoted from.
+  </div>
+
+  <div class="exercise">
+    <h3>Quick check — put the handover in order</h3>
+    <p class="hint">Tap the steps in the order you would actually do them.</p>
+    <div class="opts" id="order-opts"></div>
+    <div class="verdict" id="order-verdict"></div>
+    <p style="margin-top:12px"><button class="btn ghost" id="order-reset" type="button">Start again</button></p>
+  </div>
+</section>
+
+<section>
+  <h2><span class="n">04</span> Photos — new in v1.3</h2>
+  <p>Photos used to travel only inside the draft and the report, which meant the full-quality originals lived nowhere but your device. Now they upload to SharePoint on their own.</p>
+  <div class="callout">
+    <b>Take photos in the Camera app, then attach them.</b>
+    Not through the form’s own camera. Your camera roll keeps a second copy, and the location detail survives — neither is true if you shoot inside the app.
+  </div>
+  <p class="tight"><strong>On site</strong>, with no signal: photograph what you need, then attach each one to the right field. Nothing uploads yet, so nothing is waiting on a connection.</p>
+  <p class="tight"><strong>Back in signal</strong> — car, office, wifi: sign in once with your Dryspace Microsoft account, then tap <strong>Upload now</strong>. The home screen tells you how many files are waiting.</p>
+  <p>Wait until it says <strong>“All photos uploaded”</strong>. Until it does, those photos exist only on your device.</p>
+  <div class="callout good">
+    <b>You cannot lose a photo by uploading.</b>
+    The app reads every file back out of SharePoint and checks it arrived complete before counting it as done. Nothing is removed from your device on the strength of an upload that has not been confirmed.
+  </div>
+</section>
+
+<section>
+  <h2><span class="n">05</span> Where everything lives</h2>
+  <p class="tight">One folder per inspection, holding all of it:</p>
+  <p class="tight"><code>Site Inspections ▸ INS-2026-0142 - 12 Marine Pde, Kirra/</code></p>
+  <ol class="steps" style="margin-top:10px">
+    <li><div><strong><code>current/</code></strong><span>One file, ever. The live record.</span></div></li>
+    <li><div><strong><code>archive/</code></strong><span>Every past handover, in order.</span></div></li>
+    <li><div><strong><code>photos/</code></strong><span>The app puts these here by itself. You never choose a location.</span></div></li>
+  </ol>
+  <div class="callout warn">
+    <b>Two files in <code>current/</code> means something has gone wrong.</b>
+    Do not guess which is right. Check the timestamp and the initials in the filename, and ask before overwriting anything.
+  </div>
+</section>
+
+<section>
+  <h2><span class="n">06</span> When something looks wrong</h2>
+  <p class="tight"><strong>“No connection”</strong> — normal in a basement. Try again when you have signal. The app is not broken and nothing is lost.</p>
+  <p class="tight"><strong>“Please sign in again”</strong> — tap Sign in. Losing signal does not sign you out; this only appears if the sign-in has genuinely expired.</p>
+  <p class="tight"><strong>“Need attention”</strong> — tap Try again. If it keeps failing, tell the office <em>before</em> deleting anything.</p>
+  <p class="tight"><strong>“A new version is ready”</strong> — tap Update. It only appears on the home screen, never mid-inspection.</p>
+  <div class="callout warn">
+    <b>Never delete an inspection that still has photos waiting.</b>
+    The home screen tells you. If in doubt, do not delete — nobody has ever been in trouble for keeping a job too long.
+  </div>
+</section>
+
+<section>
+  <h2><span class="n">07</span> Knowledge check</h2>
+  <p>Six questions. Answer them and you will see where you stand — nothing is recorded.</p>
+  <div id="quiz"></div>
+  <p style="margin-top:6px">
+    <button class="btn" id="quiz-mark" type="button">Mark my answers</button>
+    <button class="btn ghost" id="quiz-reset" type="button">Reset</button>
+  </p>
+  <div class="score" id="score"></div>
+</section>
+
+<footer>
+  Dryspace Site Inspection App v1.3 · Form 4.2 — companion to 03_Handover and Version Control Protocol.
+  Keep the two quick cards where you work: one in the vehicle, one at the desk.
+</footer>
+
+</div>
+
+<script>
+'use strict';
+
+/* ---------- ordering exercise ---------- */
+var ORDER = [
+  {id:1, t:'Set your stage and your name'},
+  {id:2, t:'Tap “Share draft”'},
+  {id:3, t:'Upload it into current/'},
+  {id:4, t:'Move the previous file into archive/'},
+  {id:5, t:'Delete your device copy'}
+];
+var shuffled = ORDER.slice().sort(function(a,b){ return a.t.localeCompare(b.t); });
+var picked = [];
+
+function renderOrder(){
+  var box = document.getElementById('order-opts');
+  box.innerHTML = '';
+  shuffled.forEach(function(step){
+    var pos = picked.indexOf(step.id);
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'opt' + (pos > -1 ? ' picked' : '');
+    b.innerHTML = '<span class="pos"></span><span class="lbl"></span>';
+    b.querySelector('.pos').textContent = pos > -1 ? (pos + 1) + '.' : '·';
+    b.querySelector('.lbl').textContent = step.t;
+    b.onclick = function(){
+      if(picked.indexOf(step.id) > -1) return;
+      picked.push(step.id);
+      if(picked.length === ORDER.length) judgeOrder();
+      renderOrder();
+    };
+    box.appendChild(b);
+  });
+}
+function judgeOrder(){
+  var v = document.getElementById('order-verdict');
+  var right = picked.every(function(id, i){ return id === ORDER[i].id; });
+  v.className = 'verdict ' + (right ? 'ok' : 'no');
+  if(right){
+    v.textContent = 'Correct — and note that deleting your copy comes last, not first.';
+  } else {
+    var firstWrong = picked.findIndex(function(id, i){ return id !== ORDER[i].id; });
+    v.textContent = 'Not quite. Position ' + (firstWrong + 1) + ' should be: ' +
+                    ORDER[firstWrong].t + '. Start again.';
+  }
+  document.querySelectorAll('#order-opts .opt').forEach(function(b){ b.disabled = true; });
+}
+document.getElementById('order-reset').onclick = function(){
+  picked = [];
+  document.getElementById('order-verdict').textContent = '';
+  document.getElementById('order-verdict').className = 'verdict';
+  renderOrder();
+};
+renderOrder();
+
+/* ---------- knowledge check ---------- */
+var QS = [
+  {q:'“One baton, never a copy” means what, in practice?',
+   a:['Exactly one file is the live record, and it lives in SharePoint',
+      'Everyone keeps their own copy so nothing can be lost',
+      'The app syncs all devices automatically',
+      'Only the office is allowed to edit an inspection'],
+   c:0,
+   why:'The app does not sync. One file is live; your device copy is a scratch pad.'},
+
+  {q:'When do you delete your copy from your device?',
+   a:['As soon as you have exported it',
+      'Only after it is uploaded to current/ and the old file is archived',
+      'Never — always keep a copy in case',
+      'When the office tells you the job is closed'],
+   c:1,
+   why:'Steps 3 and 4 first. Deleting early risks losing work; never deleting creates two live copies.'},
+
+  {q:'Where should you take site photos?',
+   a:['Inside the form, using its camera',
+      'In the Camera app, then attach them to the form',
+      'Either — it makes no difference',
+      'On a separate camera, then transfer them later'],
+   c:1,
+   why:'The camera roll keeps an independent second copy, and location detail survives.'},
+
+  {q:'You attach twelve photos in a basement with no signal. What happens?',
+   a:['They upload as soon as you tap the field',
+      'They are lost unless you find signal within an hour',
+      'They save to the device and upload later when you tap Upload now',
+      'The form will not let you attach them'],
+   c:2,
+   why:'Nothing uploads on site. The app is built to work with no connection at all.'},
+
+  {q:'What does “All photos uploaded” on the home screen tell you?',
+   a:['The files were sent, and the app confirmed each one arrived complete',
+      'The files were sent, but nobody has checked they arrived',
+      'The photos have been deleted from your device',
+      'The report has been emailed to the client'],
+   c:0,
+   why:'The app reads every file back and checks its size before counting it as done.'},
+
+  {q:'You open current/ and find two files. What do you do?',
+   a:['Delete the older one',
+      'Open both and merge them',
+      'Upload yours as a third and let the office sort it out',
+      'Stop, check the timestamps and initials, and ask before overwriting'],
+   c:3,
+   why:'Two files means the baton was dropped somewhere. Guessing risks quoting from the wrong version.'}
+];
+var answers = {};
+
+function renderQuiz(){
+  var box = document.getElementById('quiz');
+  box.innerHTML = '';
+  QS.forEach(function(item, qi){
+    var wrap = document.createElement('div');
+    wrap.className = 'qa';
+    var q = document.createElement('div');
+    q.className = 'q';
+    q.textContent = (qi + 1) + '. ' + item.q;
+    wrap.appendChild(q);
+    var opts = document.createElement('div');
+    opts.className = 'opts';
+    item.a.forEach(function(text, ai){
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'opt' + (answers[qi] === ai ? ' picked' : '');
+      b.textContent = text;
+      b.onclick = function(){ answers[qi] = ai; renderQuiz(); };
+      opts.appendChild(b);
+    });
+    wrap.appendChild(opts);
+    var fb = document.createElement('div');
+    fb.className = 'fb';
+    fb.id = 'fb-' + qi;
+    fb.textContent = item.why;
+    wrap.appendChild(fb);
+    box.appendChild(wrap);
+  });
+  document.getElementById('score').className = 'score';
+}
+
+document.getElementById('quiz-mark').onclick = function(){
+  var got = 0;
+  QS.forEach(function(item, qi){
+    var buttons = document.querySelectorAll('#quiz .qa')[qi].querySelectorAll('.opt');
+    buttons.forEach(function(b, ai){
+      b.disabled = true;
+      b.classList.remove('picked');
+      if(ai === item.c) b.classList.add('right');
+      else if(answers[qi] === ai) b.classList.add('wrong');
+    });
+    document.getElementById('fb-' + qi).classList.add('show');
+    if(answers[qi] === item.c) got++;
+  });
+  var s = document.getElementById('score');
+  s.className = 'score show';
+  s.innerHTML = '<div class="big"></div><div class="msg"></div>';
+  s.querySelector('.big').textContent = got + ' / ' + QS.length;
+  s.querySelector('.msg').textContent = got === QS.length
+    ? 'All correct. Keep the two quick cards where you work.'
+    : (got >= 4
+        ? 'Close. Read the explanations above, then run it again.'
+        : 'Worth going back through sections 03 and 04 before the next inspection.');
+  s.scrollIntoView({behavior:'smooth', block:'nearest'});
+};
+
+document.getElementById('quiz-reset').onclick = function(){
+  answers = {};
+  renderQuiz();
+  document.getElementById('score').className = 'score';
+};
+renderQuiz();
+</script>
+</body>
+</html>

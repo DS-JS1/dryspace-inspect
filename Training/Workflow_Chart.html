@@ -95,6 +95,20 @@
 
   footer{font-size:13px;color:var(--ink-3);border-top:1px solid var(--rule);padding-top:16px}
   code{font-family:var(--mono);font-size:.9em;background:var(--navy-fill);color:var(--navy);padding:1px 5px;border-radius:4px}
+
+  /* Print: A3 landscape, one section per sheet, so any single part can be
+     pinned up on its own. Colours are kept — they carry meaning here. */
+  @media print{
+    @page{ size: A3 landscape; margin: 12mm; }
+    body{background:#fff;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .wrap{max-width:none;gap:22px}
+    section{break-inside:avoid;break-after:page}
+    section:last-of-type{break-after:auto}
+    figure{break-inside:avoid;overflow:visible}
+    figure svg{min-width:0}
+    .rules li{break-inside:avoid}
+    footer{break-before:avoid}
+  }
 </style>
 
 <div class="wrap">
