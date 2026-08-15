@@ -5,8 +5,15 @@ purpose. The detail lives in the documents it points at.
 
 ## Before you touch the code
 
+**Say which tier you think this change is, in your first reply, before editing
+anything.** That is how the user knows this file was actually loaded — a session
+that starts editing without naming a tier has not read it, and they should stop
+and point you here.
+
 1. **Classify the change first** — patch, minor, or major. It determines what else
-   has to be updated. See `05_Release Protocol.md` §1.
+   has to be updated. See `05_Release Protocol.md` §1. If the user has not said
+   enough to tell, ask; do not guess, because the tier decides which documents
+   must be updated alongside the code.
 2. **Read `docs/DECISION-LOG.md`** before proposing anything architectural. Many
    questions that look open are already settled, with reasons. Reopening one
    without new information wastes a session and risks regressing a fix.
