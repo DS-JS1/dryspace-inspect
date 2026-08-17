@@ -199,13 +199,17 @@ One-time library settings on the **Site Inspections** site. These are what give 
 rollback and protection against deletion. Set them before rollout, not after.
 
 1. **Versioning.** Library settings → Versioning settings → create major versions,
-   keep 50. Every overwrite becomes a restorable version.
-2. **Recycle bin.** Confirm site recycle bin retention (93 days by default).
-3. **Restrict delete.** Give field and technical staff Contribute permissions with
-   Delete removed, via a custom permission level.
-4. **Add shortcut to OneDrive.** So the folders are reachable from the OneDrive app
+   **keep 100**. Every overwrite becomes a restorable version. *(Done 15 Aug 2026.)*
+2. **Recycle bin.** 93 days — the Microsoft default, and not adjustable. Deletions
+   are recoverable within that window. *(Confirmed 15 Aug 2026.)*
+3. **Restrict delete.** A custom permission level named **Contribute - No Delete**,
+   assigned to field and technical staff. They can upload and edit but cannot
+   delete. *(Created and assigned to Julie and Mike, 15 Aug 2026.)*
+4. **Documents in the left navigation.** So the library is one click from the site
+   home rather than buried. *(Done 15 Aug 2026.)*
+5. **Add shortcut to OneDrive.** So the folders are reachable from the OneDrive app
    on the iPad — still needed for video.
-5. **Add the index columns.** Library settings → Create column. Add these six as
+6. **Add the index columns.** Library settings → Create column. Add these six as
    **Single line of text**, and name them **exactly as written, with no spaces**:
 
    | Column | Holds |
@@ -225,8 +229,15 @@ rollback and protection against deletion. Set them before rollout, not after.
    > `Inspection_x0020_No`, which will not match and the write is rejected. Create
    > them without spaces.
 
+   *(Created 15 Aug 2026 and added to the default All Documents view.)*
+
    If the columns are missing the app carries on and simply does not fill them
    in — an upload is never refused because the index could not be written.
+
+> **Verify the permission level with a real person, not on paper.** Ask someone on
+> *Contribute - No Delete* to upload a file and then try to delete it. A permission
+> level that looks right in settings and does not bite in practice is worse than
+> none, because it is trusted.
 
 Together these answer the concern about someone accidentally or intentionally
 deleting inspection records: versioning restores overwrites, the recycle bin
