@@ -27,6 +27,12 @@ except ImportError:
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "Guides")
 
+# A4 cards live in Training/ and are rendered from their SVG sources.
+CARDS = [
+    "Quick_Card_Handover",
+    "Quick_Card_Photos",
+]
+
 GUIDES = [
     "01_Setup and User Guide",
     "02_Iteration Guide",
@@ -262,6 +268,18 @@ def build(name, version):
     return dst, os.path.getsize(dst)
 
 
+def build_card(name, version):
+    """Render an A4 card from its SVG source. The SVG is the editable original;
+       this only ever produces the printable copy."""
+    from svglib.svglib import svg2rlg
+    from reportlab.graphics import renderPDF
+    src = os.path.join(ROOT, "Training", name + ".svg")
+    dst = os.path.join(ROOT, "Training", "%s_v%s.pdf" % (name, version))
+    drawing = svg2rlg(src)
+    renderPDF.drawToFile(drawing, dst)
+    return dst, os.path.getsize(dst)
+
+
 if __name__ == "__main__":
     v = app_version()
     if not os.path.isdir(OUT):
@@ -274,5 +292,16 @@ if __name__ == "__main__":
         except Exception as e:
             print("  %-46s FAILED: %s" % (g, e))
             raise
+
+    for c in CARDS:
+        try:
+            path, size = build_card(c, v)
+            print("  %-46s %6.1f KB" % (os.path.basename(path), size / 1024.0))
+        except ImportError:
+            print("  %-46s SKIPPED — pip install --user svglib" % c)
+        except Exception as e:
+            print("  %-46s FAILED: %s" % (c, e))
+            raise
+
     print("\nStale PDFs from earlier versions are not removed automatically —")
     print("delete them so nobody reads the wrong one.")
