@@ -2151,6 +2151,8 @@ function addMedia(input, containerId){
   chain.then(function(){
     renderMedia(mfid, containerId);
     refreshMediaState().then(refreshCompletion);
+    renderSyncBar();   /* without this the bar keeps saying "No photos yet" and
+                          the Upload button never appears */
     setSaveStatus('Saved ' + new Date().toLocaleTimeString());
   }).catch(function(e){ alert('Could not save one or more files: ' + e); });
 }
@@ -2177,6 +2179,7 @@ function renderMedia(field, containerId){
           dbDel('media', r.mid).then(function(){
             renderMedia(field, containerId);
             refreshMediaState().then(refreshCompletion);
+            renderSyncBar();
           });
       };
       wrap.appendChild(x);
@@ -2224,7 +2227,12 @@ function show(id){
 }
 function goHome(){
   var fin = savePending ? saveNow() : Promise.resolve();
-  fin.then(function(){ cur = null; renderHome(); show('home'); });
+  fin.then(function(){
+    cur = null;
+    renderHome();
+    renderSyncBar();   /* the count of waiting photos has almost certainly changed */
+    show('home');
+  });
 }
 function updateFormTitle(){
   var t = document.getElementById('ft-title');

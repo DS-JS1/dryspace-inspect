@@ -465,7 +465,17 @@ function crossCheckV111(W){
     f.id = 'legacy';
     f.style.cssText = 'position:absolute;width:1024px;height:800px;left:-10000px;top:0;border:0';
     f.onload = function(){
-      setTimeout(function(){ res(f.contentWindow); }, 150);
+      /* Poll for the fixture's own assignKeys() to have stamped the controls.
+         A fixed wait was intermittently too short, which reported "0 distinct
+         keys" and looked like a migration fault rather than a timing one. */
+      var tries = 0;
+      (function wait(){
+        var w = f.contentWindow;
+        var ready = w && w.document &&
+                    w.document.querySelector('#form-root input[data-k]');
+        if(ready || tries++ > 40) return res(w);
+        setTimeout(wait, 50);
+      })();
     };
     f.onerror = function(){ res(null); };
     document.body.appendChild(f);

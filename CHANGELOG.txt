@@ -290,3 +290,16 @@ Inspections are indexed by SharePoint library columns (v1.3)
   searchable index with nothing to generate and nothing that can drift.
 - Writing the index never blocks an upload. If the columns are missing or the
   write is refused, the photograph is still stored.
+
+Fixed before release (v1.3.0)
+- The "Upload now" button never appeared. The sync bar read the number of
+  waiting photos once at start-up and never again, so after attaching a photo it
+  still said "No photos yet" and offered nothing to press. It now refreshes when
+  a photo is attached, when one is removed, and on returning to the home screen.
+  Found by using the app, not by the tests - the upload logic underneath was
+  correct and fully covered; nothing ever asked whether the button was reachable.
+
+Printed guides are now generated, not hand-made
+- tools/make_guides.py builds the four Guides/ PDFs from their markdown, reading
+  the version from APP_VER so the filenames always match what tests.html checks.
+  Bump the version, re-run it, and the release gate goes green.
