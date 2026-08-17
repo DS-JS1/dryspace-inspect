@@ -27,6 +27,16 @@ Training_Module.html       Self-paced module, about 12 minutes. Works offline,
                            stores nothing, needs no login. Ends with a knowledge
                            check that can be re-run any time.
 
+Setup_and_Use_Presentation.pptx
+                           Slide deck for walking a group through setup and use.
+                           This is the EDITABLE SOURCE — a deck has no plain-text
+                           original, so the .pptx is what you change.
+
+Setup_and_Use_Presentation_v1.3.0.pdf
+                           Generated from the .pptx for sending and printing. Do
+                           not edit it. Regenerate and rename on each release,
+                           the same as the guides.
+
 
 MAKING PDFs
 ---------------------------------------------------------------------------
