@@ -268,6 +268,23 @@ def build(name, version):
     return dst, os.path.getsize(dst)
 
 
+def check_fits(path, margin=20):
+    """Does any text run off the printed page?
+
+       Measuring this in a browser is not enough — the browser and the PDF use
+       different fonts, and svglib does not parse the CSS `font:` shorthand, so
+       text can look right on screen and run 100pt off the page in print. This
+       measures the artefact that actually gets printed."""
+    try:
+        import pdfplumber
+    except ImportError:
+        return None
+    with pdfplumber.open(path) as pdf:
+        page = pdf.pages[0]
+        return [w["text"] for w in page.extract_words()
+                if w["x1"] > page.width - margin or w["x0"] < 0]
+
+
 def build_card(name, version):
     """Render an A4 card from its SVG source. The SVG is the editable original;
        this only ever produces the printable copy."""
@@ -277,6 +294,13 @@ def build_card(name, version):
     dst = os.path.join(ROOT, "Training", "%s_v%s.pdf" % (name, version))
     drawing = svg2rlg(src)
     renderPDF.drawToFile(drawing, dst)
+
+    spill = check_fits(dst)
+    if spill:
+        raise RuntimeError("%d word(s) run off the page — e.g. %s. "
+                           "Check the SVG uses font-size/font-family longhand, "
+                           "not the `font:` shorthand, which svglib ignores."
+                           % (len(spill), ", ".join(spill[:3])))
     return dst, os.path.getsize(dst)
 
 
