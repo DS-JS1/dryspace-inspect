@@ -39,6 +39,28 @@ covered by the test suite against the real v1.1.1 build.
 
 ---
 
+### Verified against the live tenant — 17 August 2026
+
+The full chain ran end to end for the first time: sign-in, token to Graph, nested
+folder creation, folder and filename generation, chunked upload, **independent
+read-back verification**, and the library columns.
+
+```
+Site Inspections ▸ Documents ▸
+    INS-2026-9999 - Client Name Test - 99 Test St, Testville#1/
+```
+| InspectionNo | Client | Address | Stage | InspectionDate |
+|---|---|---|---|---|
+| INS-2026-9999 | Client Name Test | 99 Test St, Testville#1 | S01-OFFICE | 2026-08-17 |
+
+The app reported *"All photos uploaded"*, which is only shown after each file has
+been read back out of SharePoint and its stored size confirmed — so the
+verification path ran, not merely the upload.
+
+Everything below had until this point been proven only against a fake Graph.
+
+---
+
 ## 2. Standing decisions
 
 Current and in force.

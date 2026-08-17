@@ -303,3 +303,11 @@ Printed guides are now generated, not hand-made
 - tools/make_guides.py builds the four Guides/ PDFs from their markdown, reading
   the version from APP_VER so the filenames always match what tests.html checks.
   Bump the version, re-run it, and the release gate goes green.
+
+Verified against the live tenant — 17 August 2026
+- Sign-in, upload, verification and the library columns all ran end to end
+  against the real Site Inspections site for the first time. The folder was
+  created with the right name, the photo landed in photos/, and all six columns
+  populated. "All photos uploaded" confirms the read-back check ran.
+- The update banner also proved itself: the v1.3.0 build was picked up by
+  tapping "Update now" rather than by clearing caches by hand.
