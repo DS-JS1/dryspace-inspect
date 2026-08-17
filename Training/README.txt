@@ -38,14 +38,22 @@ Setup_and_Use_Presentation_v1.3.0.pdf
                            the same as the guides.
 
 
+Onboarding_Emails.md       Two email templates for inviting a new inspector.
+                           Copy, paste, change the names. Send the second only
+                           after they confirm the app is installed.
+
+
 MAKING PDFs
 ---------------------------------------------------------------------------
-The .svg and .html files are the editable sources. PDFs are generated from them
-and are not kept in this folder, so there is only ever one version of anything.
+The .svg and .html files are the editable sources. PDFs are generated from them.
 
-To produce a PDF:
-  Cards      Open the .svg in a browser, then Print → Save as PDF → A4 portrait,
-             margins "None", background graphics ON.
+  python tools\make_guides.py
+
+That produces the four guides in Guides\ and both A4 cards here, all named for
+the current APP_VER. Run it whenever the version changes — tests.html fails
+until the guides match.
+
+Still done by hand:
   Chart      Open Workflow_Chart.html, then Print → Save as PDF → A3 landscape,
              background graphics ON.
 
