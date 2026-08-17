@@ -311,3 +311,10 @@ Verified against the live tenant — 17 August 2026
   populated. "All photos uploaded" confirms the read-back check ran.
 - The update banner also proved itself: the v1.3.0 build was picked up by
   tapping "Update now" rather than by clearing caches by hand.
+
+DEPLOYED — 17 August 2026
+- v1.3.0 pushed to main and serving live. Verified by fetching the deployed
+  index.html and confirming APP_VER, FORM_VER, VER_DATE and CACHE_VERSION all
+  moved, and that the three new modules return 200.
+- Devices still on v1.1.1 have no update banner and must be fully closed and
+  reopened once. Every release after this announces itself.

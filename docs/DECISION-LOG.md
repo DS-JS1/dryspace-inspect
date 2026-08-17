@@ -25,7 +25,7 @@ add a new entry saying what changed and why.
 | **1.1.1** | 20 Jul 2026 | Version footer fix. | **Yes — this is what staff still run** |
 | **1.2.0** | 2 Aug 2026 | Permanent field ids (`data-fid`) replacing label-keyed storage; schema 1→2 migration; stage tracking and audit trail; Section 03A Safety, Access & Discharge; measurement schedule. | **No** |
 | **1.2.1** | 2 Aug 2026 | Completion indicators, "None apply" options, BS8102:2022 grades with `VALUE_REMAP`; schema 2→3. | **No** |
-| **1.3.0** | in development | Photos upload to SharePoint with verification; Microsoft sign-in; update detection; automated test suite; media keyed by `data-mfid`; unified inspection folder. | Not yet |
+| **1.3.0** | 17 Aug 2026 | Photos upload to SharePoint with verification; Microsoft sign-in; update detection; automated test suite; media keyed by `data-mfid`; unified inspection folder; library-column indexing. | **Yes — live, verified served** |
 
 ### Why 1.2.0 and 1.2.1 were never deployed
 
@@ -33,9 +33,13 @@ Both were completed in the working folder and never pushed. The photo-persistenc
 problem made the app unusable in practice, so work moved straight on to v1.3
 rather than shipping an intermediate version that still had the blocking fault.
 
-**Consequence to remember:** every device in the field is on **1.1.1**. When v1.3
-ships, records migrate 1→2→3→4 in a single pass, in the field. That migration is
-covered by the test suite against the real v1.1.1 build.
+**Consequence to remember:** every device still on **1.1.1** migrates schema
+1→2→3→4 in a single pass the first time it opens v1.3, in the field. That
+migration is covered by the test suite against the real v1.1.1 build.
+
+Those devices have no update banner — it cannot be added to a build already
+deployed — so each needs the app **fully closed and reopened once**. From v1.3
+onward every release announces itself.
 
 ---
 
