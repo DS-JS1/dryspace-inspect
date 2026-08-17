@@ -697,7 +697,7 @@ function mediaModuleChecks(){
 
   test('the identity token is short, safe and pinned', function(){
     eq(M.jobTag({client:'Smith'}), 'Smith', 'a simple surname passes through');
-    eq(M.jobTag({client:'Anthology Body Corporate'}), 'Anthology-Body-Corporate',
+    eq(M.jobTag({client:'Example Body Corporate'}), 'Example-Body-Corporate',
        'spaces become hyphens so the filename stays one token');
     eq(M.jobTag({client:'A Body Corporate With A Very Long Name Indeed'}).length <= 24, true,
        'capped so a long entity name cannot run away');
@@ -1229,7 +1229,7 @@ function authChecks(){
   }).then(function(){
     /* full code exchange */
     var sent = null;
-    var idToken = 'x.' + btoa(JSON.stringify({preferred_username: 'jamie@dryspace.com.au', name: 'Jamie Stone'})) + '.y';
+    var idToken = 'x.' + btoa(JSON.stringify({preferred_username: 'inspector@example.com', name: 'Test Inspector'})) + '.y';
     var m = make(function(url, init){ sent = init.body;
       return Promise.resolve(res(200, {access_token: 'AT1', refresh_token: 'RT1',
                                        expires_in: 3600, id_token: idToken})); });
@@ -1239,7 +1239,7 @@ function authChecks(){
       ok(sent.indexOf('grant_type=authorization_code') > -1, 'authorization_code grant used');
       eq(saved.accessToken, 'AT1', 'access token stored');
       eq(saved.refreshToken, 'RT1', 'refresh token stored');
-      eq(m.a.account().name, 'Jamie Stone', 'account name read from the id token');
+      eq(m.a.account().name, 'Test Inspector', 'account name read from the id token');
       ok(m.a.isSignedIn() === true, 'reports signed in');
       ok(!m.st.getItem('ds-auth-CID-pending'), 'the one-time verifier is discarded after use');
     });

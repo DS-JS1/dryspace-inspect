@@ -175,9 +175,9 @@ benefit is real.
 
 | Question | Blocking | Notes |
 |---|---|---|
-| **Admin consent for the Entra app** | Yes — uploads cannot work without it | Requires Global Administrator, Privileged Role Administrator, Cloud Application Administrator or Application Administrator. Neither `jamie@dryspace.com.au` nor `jamie@wetlock.com.au` holds one; the latter owns the app registration, which is not the same thing. IT support engaged. |
+| ~~Admin consent for the Entra app~~ | **Resolved 17 Aug 2026** | Granted tenant-wide. Note for sibling apps: each new app registration needs its own consent, and it requires a tenant administrator. |
 | **Does iOS preserve EXIF GPS through the Safari file picker?** | No | Decides whether the Google Photos Maps plan is achievable. Needs a real device test. |
 | Should the app be **publicly reachable**? | No | Currently public on GitHub Pages. Cloudflare Access with one-time PIN would make it staff-only, free, and matches the mental model. Decide before wider rollout. |
 | **Google Photos as secondary backup** | No | Scheduled server-side sync reading from SharePoint. No first-party Power Automate connector exists, so it needs a custom connector or script. |
 | **Analytics across records** | No | Cross-job querying needs a structured database downstream. The apps produce the data; they do not provide the querying. A SharePoint List, one item per inspection, is the agreed destination — see the Handover Protocol §10. |
-| **Who holds Global Administrator** | No, but material | If nobody at Dryspace does, that is a business risk well beyond this project — it controls every mailbox and SharePoint site. |
+| ~~Who holds Global Administrator~~ | **Resolved 17 Aug 2026** | Now held internally. Worth reviewing periodically — a tenant whose only administrator is unreachable is a business risk well beyond this project. |
