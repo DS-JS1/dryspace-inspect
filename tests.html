@@ -906,6 +906,46 @@ function run(W){
       });
     })());
 
+  /* v1.4.0 patch - the folder pins on first upload, so that is the last moment
+     the inspection number can decide where photos file. Asked there, never at
+     capture: capture is never blocked. */
+  test('an inspection is nudged only while its folder can still change', function(){
+    ok(typeof W.inspectionsNeedingFiling === 'function', 'inspectionsNeedingFiling() defined');
+    ok(typeof W.confirmFilingBeforeFirstUpload === 'function', 'the nudge runs before the first upload');
+    if(typeof W.inspectionsNeedingFiling !== 'function') return;
+
+    var realCache = W.INSP_CACHE;
+    W.INSP_CACHE = {
+      blank:  {id: 'blank',  client: '', address: '', inspNo: '', inspDate: '', editedBy: ''},
+      pinned: {id: 'pinned', client: '', address: '', inspNo: '', inspDate: '', editedBy: '',
+               mediaFolder: 'INS-2026-0001 - already pinned'},
+      full:   {id: 'full',   client: 'Smith', address: '12 Marine Pde', inspNo: 'INS-2026-0142',
+               inspDate: '2026-08-19', editedBy: 'Jamie Stone'}
+    };
+    W.FILING_NUDGED = {};
+
+    var got = W.inspectionsNeedingFiling([
+      {mid: 'a', iid: 'blank',  up: 'local'},
+      {mid: 'b', iid: 'pinned', up: 'local'},
+      {mid: 'c', iid: 'full',   up: 'queued'}
+    ]).map(function(x){ return x.job.id; });
+    eq(got, ['blank'],
+       'only the one that is missing fields AND not yet pinned is worth asking about');
+
+    /* The marking belongs to the asking, not to the query - a function that
+       answers a question should not also change the answer for next time. */
+    W.FILING_NUDGED = {blank: true};
+    var twice = W.inspectionsNeedingFiling([{mid: 'a', iid: 'blank', up: 'local'}]);
+    eq(twice.length, 0, 'once asked, it is not asked again on every upload');
+
+    W.FILING_NUDGED = {};
+    var done = W.inspectionsNeedingFiling([{mid: 'd', iid: 'blank', up: 'uploaded'}]);
+    eq(done.length, 0, 'a photo that has already uploaded is past the point of asking');
+
+    W.INSP_CACHE = realCache;
+    W.FILING_NUDGED = {};
+  });
+
   test('the per-file status panel exists and starts empty', function(){
     var box = D.getElementById('sy-detail');
     ok(!!box, 'sy-detail panel present in the sync bar');

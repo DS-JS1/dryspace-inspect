@@ -3636,6 +3636,60 @@ function markAllQueued(){
   });
 }
 
+/* v1.4.0 patch \u2014 the folder name is fixed on FIRST upload: metaFor() pins
+   mediaFolder and mediaTag so a later correction cannot split one job across two
+   folders. That makes the first upload the last moment the inspection number can
+   still decide where the photos file, and nothing said so.
+
+   Deliberately here and not at capture. CAPTURE IS NEVER BLOCKED, and a prompt
+   standing between somebody and the photo in front of them is exactly what this
+   app does not do. The first upload is the decision point; the camera is not.
+
+   Asked once per inspection per session, and never once the folder is pinned,
+   because after that it changes nothing and a warning that cannot be acted on is
+   one people learn to dismiss. */
+var FILING_NUDGED = {};
+
+function inspectionsNeedingFiling(all){
+  var seen = {}, out = [];
+  all.forEach(function(r){
+    var st = DSMedia.stateOf(r);
+    if(st !== 'local' && st !== 'queued' && st !== 'failed') return;
+    var job = INSP_CACHE[r.iid];
+    if(!job || job.mediaFolder) return;          /* pinned already \u2014 too late to matter */
+    if(seen[job.id] || FILING_NUDGED[job.id]) return;
+    var missing = missingFilingFields(job);
+    if(!missing.length) return;
+    seen[job.id] = true;
+    out.push({job: job, missing: missing});
+  });
+  return out;
+}
+
+function confirmFilingBeforeFirstUpload(){
+  return refreshInspCache()
+    .then(function(){ return dbAll('media'); })
+    .then(function(all){
+      return inspectionsNeedingFiling(all).every(function(p){
+        FILING_NUDGED[p.job.id] = true;
+        var folder = DSMedia.resolveFolder({
+          inspNo: p.job.inspNo || '', address: p.job.address || '',
+          client: p.job.client || '',
+          date: p.job.inspDate || DSMedia.today(p.job.createdAt)
+        });
+        return confirm(
+          'Before these photos upload \u2014 ' +
+          (p.job.client || p.job.address || 'this inspection') + '\n\n' +
+          'Still blank:\n' +
+          p.missing.map(function(f){ return '  \u2022 ' + f.label + ' \u2014 ' + f.why; }).join('\n') +
+          '\n\nThe folder name is fixed by the first upload, so filling these in ' +
+          'afterwards will not move or rename anything. It would file as:\n\n  ' +
+          folder + '\n\nOK to upload anyway, or Cancel to fill them in first.');
+      });
+    })
+    .catch(function(){ return true; });   /* never block an upload on the nudge */
+}
+
 function uploadNow(){
   if(!dsQueue || syncBusy) return;
   if(navigator.onLine === false){
@@ -3644,7 +3698,16 @@ function uploadNow(){
   }
   syncBusy = true;
   setSync('Uploading\u2026', 'busy');
-  refreshInspCache()
+  confirmFilingBeforeFirstUpload()
+    .then(function(go){
+      if(!go){
+        syncBusy = false;
+        setSync('Upload held \u2014 fill in the filing fields, then upload.', 'busy');
+        renderSyncBar();
+        throw {held: true};
+      }
+    })
+    .then(refreshInspCache)
     .then(markAllQueued)
     .then(function(){ return dsQueue.drain(); })
     .then(function(result){
@@ -3658,6 +3721,9 @@ function uploadNow(){
     })
     .catch(function(e){
       syncBusy = false;
+      /* Cancelling the filing nudge is a choice, not a fault: its message is
+         already on screen and an error over the top would contradict it. */
+      if(e && e.held) return;
       /* B6 — say which file and why. "Upload stopped" with no subject was
          unactionable: nobody could tell a bad photo from a dead connection. */
       var cur = dsQueue.current && dsQueue.current();

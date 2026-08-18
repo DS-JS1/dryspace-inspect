@@ -490,7 +490,12 @@ into "Waiting", which proved the uploading state had never been written.
   createFolder already knew and listFolder did not. Found by the owner
   clicking the button out of curiosity; it had never been exercised end to
   end against real Graph, only against mocks that answered the path form.
-- 417 assertions, up from 387. CACHE_VERSION -> ds-inspect-v1.4.0-6.
+- The filing nudge (D46). The folder name is fixed by the FIRST upload, which
+  makes that the last moment the inspection number can decide where photos
+  file - and nothing said so. Uploading now asks once per inspection, naming
+  what is blank and the folder it would file as, with Cancel to go back and
+  fill them in. Not at capture: capture is never blocked.
+- 422 assertions, up from 387. CACHE_VERSION -> ds-inspect-v1.4.0-7.
 
 The architectural change: the record now travels the same road as the photos,
 and in-progress work is backed up without anyone having to remember to do it.
