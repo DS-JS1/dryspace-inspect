@@ -65,20 +65,63 @@ tree **before doing anything else**. If `git status` shows the whole repository
 deleted, you have moved the folder without updating the path — do not commit
 that, just fix the path.
 
-### 3.2 `_Shared` needs history, or an explicit decision that it does not
+### 3.2 `_Shared` history — decided: start fresh
 
-Copying the two files into a new repository starts their history at zero. The
-template is the document most likely to be revised as sibling apps are built, so
-its history is the one that costs most to lose (D-log §4 says exactly this).
+**This was settled on 18 Aug 2026, after looking at what the history actually
+contains. Do not reopen it; just do it.**
 
-Two honest options — **pick one and record it**:
+D-log §4 assumed the template's history was worth preserving. Checking it shows
+otherwise:
 
-- **Preserve history** with `git filter-repo` (or `git subtree split`) to extract
-  just those two paths into the new repository. More work, keeps the record.
-- **Start fresh**, with the first commit message stating where the files came
-  from and that the prior history is in `dryspace-inspect` up to a named commit.
+```
+docs/FIELD-APP-TEMPLATE.md          6 commits, only 2 about the template
+  77a135c  Add field app architecture and reuse template        <- about it
+  d1a9ecc  Record the deferred move of the shared documents     <- about it
+  c380a13  Unify inspection folder; adopt INS-2026-0142 numbering
+  00b637f  Update Handover Protocol for v1.3; add client name to folder
+  fe32e63  Filenames carry a pinned client token
+  2ef0089  v1.4 - the record moves through SharePoint, and four ways an upload could hang
 
-Do not silently do the second while implying the first.
+04_Project Context Brief.md         2 commits, neither meaningful
+  d29949c  Carry the remaining documents into v1.3   <- a bulk move
+  2ef0089  v1.4 - ...                                <- the release commit
+```
+
+**So a `filter-repo` extraction would produce a documentation repository whose
+log is mostly commit messages about SharePoint upload internals.** Technically
+preserved, semantically wrong, and confusing to anyone who opens it later asking
+why the template says what it says.
+
+**Nothing is lost by starting fresh.** Every one of those commits stays in
+`dryspace-inspect` for ever. This is a decision not to *duplicate* history into a
+place where it reads as noise — and the history that actually matters for these
+two documents has not been written yet, because it is the revisions that come as
+sibling apps get built.
+
+**Do this:** `git init` in `_Shared`, and make the first commit say where the
+files came from and where their prior history lives. Something like:
+
+```
+Establish _Shared as its own repository
+
+Two documents that describe how Dryspace builds ANY field app, moved out of the
+Site Inspection App's folder so they do not go to Superseded with it:
+
+  Field App Architecture Template.md   was docs/FIELD-APP-TEMPLATE.md
+  Dryspace Context Brief.md            was 04_Project Context Brief.md
+
+Their prior history stays in the dryspace-inspect repository, up to commit
+f50955d. It was not carried across deliberately: of the six commits touching the
+template, only two were about the template - the rest were app changes that
+happened to edit it, and would read here as noise. Nothing is lost; it is simply
+not duplicated.
+
+History from this point is about these documents alone, which is the history that
+matters as sibling apps are built.
+```
+
+**Record it in `docs/DECISION-LOG.md` §4** as the decision made, with the reason —
+§4's premise that the history was worth preserving is what changed.
 
 ### 3.3 Things outside this folder point at the v1.3 path
 
@@ -124,7 +167,7 @@ grep -rn "App v1\.3" --include="*.md" .
 ## 5. Definition of done
 
 - [ ] `git status` clean, in the renamed folder, with history intact (`git log` shows the v1.4 work)
-- [ ] `_Shared` exists as its own repository, with a first commit and a decision recorded about history
+- [ ] `_Shared` exists as its own repository, first commit written per §3.2 (naming the source commit), and the decision recorded in decision-log §4
 - [ ] `docs/FIELD-APP-TEMPLATE.md` and `04_Project Context Brief.md` no longer in the app folder
 - [ ] The template's "move this document" note is gone
 - [ ] `launch.json` and `settings.local.json` updated to the new path
