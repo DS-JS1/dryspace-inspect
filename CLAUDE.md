@@ -44,7 +44,8 @@ decision log.
 
 **Two things are still owed before it can ship:**
 
-- **The folder restructure.** v1.3 to `Superseded`, a new v1.4 folder, and
+- **The folder restructure** — start a fresh session and follow
+  `docs/HANDOFF-folder-restructure.md`, which carries the sharp edges. v1.3 to `Superseded`, a new v1.4 folder, and
   `_Shared` for `docs/FIELD-APP-TEMPLATE.md` and `04_Project Context Brief.md`
   — see the decision log §4. Do this *with* the restructure, not after it, or the
   specification for four unbuilt apps ends up inside an archived folder.
