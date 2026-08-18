@@ -20,6 +20,14 @@ and point you here.
 3. **Run the tests** — serve the folder over HTTP and open `tests.html`. Expect
    zero failures before you start and zero when you finish.
 
+## Work in progress
+
+**v1.3.0 is live but photo upload does not work on mobile.** Read
+`docs/v1.4-plan.md` before touching anything — it carries the field-test findings,
+one already-diagnosed bug (B5), and ranked hypotheses for the mobile hang.
+
+Start with Batch 0 in that plan unless told otherwise.
+
 ## Non-negotiables
 
 These exist because breaking one of them lost, or nearly lost, real data.
@@ -49,6 +57,7 @@ These exist because breaking one of them lost, or nearly lost, real data.
 | Tests | `tests.html` — run over HTTP; expect zero failures |
 | Protocol | `05_Release Protocol.md` — what to update, when |
 | Decisions | `docs/DECISION-LOG.md` — what was decided and why |
+| Open work | `docs/v1.4-plan.md` — field findings and the next build |
 | Architecture | `docs/FIELD-APP-TEMPLATE.md` — for building sibling apps |
 | Staff material | `Training/` — cards, chart, module |
 | Printed guides | `Guides/` — generated PDFs, never edited directly |

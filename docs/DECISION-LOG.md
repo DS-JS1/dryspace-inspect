@@ -65,6 +65,30 @@ Everything below had until this point been proven only against a fake Graph.
 
 ---
 
+### Field testing found upload broken on mobile — 18 August 2026
+
+v1.3.0 works on desktop and does not work on iPhone or iPad. Four confirmed
+faults, recorded here so they survive the session that found them:
+
+- **B5** — `pendingUploads()` excludes the `uploading` state and nothing resets
+  interrupted uploads at start-up, so a record caught mid-upload is stranded
+  permanently and invisible to both the queue and the button. **Diagnosed by
+  reading the code, not yet fixed.**
+- **B6** — the queue has no request timeout and no per-file status, so a hang
+  shows as *"Uploading…"* forever with nothing to read.
+- **B7** — everything except photos (report, draft, media share, print) uses the
+  OS share sheet rather than SharePoint. On mobile that offers WhatsApp.
+- **B8** — Import Draft reads the device, not SharePoint, so the baton can be put
+  down but not picked up.
+
+**Strongest hypothesis for the hang:** the chunked upload path above 4 MB has
+never run against real Graph — every successful test used a file under 200 KB.
+Real phone photos are 2–5 MB.
+
+Full detail and batching in `docs/v1.4-plan.md`.
+
+---
+
 ## 2. Standing decisions
 
 Current and in force.
