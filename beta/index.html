@@ -3436,7 +3436,10 @@ function initSync(){
     save: function(r){ return dbPut('media', r); },
     meta: metaFor,
     onChange: function(rec){
-      if(rec && DSMedia.stateOf(rec) !== 'uploading') delete UP_PROGRESS[rec.mid];
+      if(rec && DSMedia.stateOf(rec) !== 'uploading'){
+        delete UP_PROGRESS[rec.mid];
+        delete UP_STEP[rec.mid];
+      }
       /* The detail list is live even mid-drain — that is the whole point of it.
          Only the headline message is left alone while syncBusy. */
       refreshSyncDetail();
@@ -3444,6 +3447,10 @@ function initSync(){
     },
     onProgress: function(rec, frac){
       UP_PROGRESS[rec.mid] = frac;
+      refreshSyncDetail();
+    },
+    onStep: function(rec, name){
+      UP_STEP[rec.mid] = name;
       refreshSyncDetail();
     }
   });
@@ -3482,6 +3489,10 @@ function recoverInterruptedUploads(){
    hang, which is exactly the complaint from the field. Progress lives in memory
    only; it is a view of an attempt, not part of the record. */
 var UP_PROGRESS = {};
+/* Which step the in-flight attempt is on. Same reasoning as UP_PROGRESS: it is
+   a view of an attempt, not part of the record, so it lives in memory and dies
+   with the page. */
+var UP_STEP = {};
 
 var UP_LABEL = {local: 'On this device', queued: 'Waiting', uploading: 'Uploading',
                 uploaded: 'Uploaded', failed: 'Failed', purged: 'Uploaded'};
@@ -3509,15 +3520,34 @@ function renderSyncDetail(all){
     /* The reason is shown, not logged. A failure nobody can read is the same as
        no failure message at all. */
     var why = (st === 'failed' && r.upErr) ? ' — ' + esc(r.upErr) : '';
+    /* "Uploading" alone cannot be told from a stall - that is B6. The step says
+       which part is taking the time, so a frozen row names itself on screen
+       instead of needing a round trip to the field to find out. */
+    var doing = (st === 'uploading' && UP_STEP[r.mid] && !pct)
+                  ? ' — ' + esc(UP_STEP[r.mid]) : '';
     return '<div class="sy-row st-' + st + '">' +
              '<span class="sy-file">' + esc(r.name || 'photo') + '</span>' +
-             '<span class="sy-state">' + UP_LABEL[st] + pct + why + '</span>' +
+             '<span class="sy-state">' + UP_LABEL[st] + pct + doing + why + '</span>' +
            '</div>';
   }).join('');
 }
 
+/* This used to end in an empty catch. That cost a whole round trip with the
+   field: the percentage is drawn here, so when this failed the panel simply
+   stopped repainting and a frozen row looked like a stalled upload. A status
+   panel that cannot be trusted to update is worse than none, so a failure to
+   render now says so. */
 function refreshSyncDetail(){
-  return dbAll('media').then(renderSyncDetail).catch(function(){});
+  return dbAll('media').then(renderSyncDetail).catch(function(e){
+    var box = document.getElementById('sy-detail');
+    if(box){
+      box.style.display = '';
+      box.innerHTML = '<div class="sy-row st-failed"><span class="sy-file">Status</span>' +
+        '<span class="sy-state">could not be read — ' +
+        esc((e && e.message) || String(e)) + '</span></div>';
+    }
+    console.warn('refreshSyncDetail failed', e);
+  });
 }
 
 function pendingUploads(all){

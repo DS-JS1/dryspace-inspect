@@ -360,6 +360,12 @@ function runUpload(){
     label = 'synthetic 5.00 MB file';
   }
   line('upload', 'File under test', label);
+  /* This was declared below its own uses. var hoists the name but not the
+     value, so it read as undefined and the page always announced "simple
+     PUT - under 4 MB", in red, while actually running a chunked session.
+     A diagnostic that misreports which path it is testing is worse than
+     one that does not run: it sends the reader after the wrong fault. */
+  var usedSession = blob.size > DSSharePoint.SIMPLE_MAX;
   line('upload', 'Path Graph will take',
        usedSession
          ? (blob.size > 5 * 1024 * 1024
@@ -369,7 +375,6 @@ function runUpload(){
          : 'simple PUT — under 4 MB. This does NOT test the chunked path.',
        usedSession ? (blob.size > 5 * 1024 * 1024 ? 'ok' : 'warn') : 'bad');
 
-  var usedSession = blob.size > DSSharePoint.SIMPLE_MAX;
   var t = makeTransport();
   var stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   var rec = {mid: 'diag', original: blob, origSize: blob.size};
