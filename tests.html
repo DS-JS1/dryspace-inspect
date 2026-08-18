@@ -780,25 +780,57 @@ function run(W){
        'and it is still not "pending" — the queue already has it, so no second attempt is offered');
   });
 
-  later('the sync banner says uploading, not "All photos uploaded"',
-    Promise.resolve().then(function(){
+  /* Both banner scenarios run in one chain on purpose: each stubs dbAll and
+     renderSyncBar is asynchronous, so as separate later() blocks they raced and
+     one read the other's data. */
+  later('the sync banner never overstates what has landed',
+    (function(){
       var msg = D.getElementById('sy-msg');
       var realAll = W.dbAll, realAuth = W.dsAuth;
-      W.dbAll = function(){ return Promise.resolve([{mid:'a', name:'IMG_1.jpg', up:'uploading'}]); };
-      W.dsAuth = {isSignedIn: function(){ return true; },
-                  account: function(){ return {name: 'Test User'}; }};
-      W.renderSyncBar();
-      return new Promise(function(r){ setTimeout(r, 60); }).then(function(){
-        var said = msg ? msg.textContent : '';
-        W.dbAll = realAll; W.dsAuth = realAuth;
-        ok(!/All photos uploaded/.test(said),
-           'does not claim completion while a file is uploading',
-           'banner said: ' + said);
-        ok(/uploading now/.test(said),
-           'it reports the upload in progress instead',
-           'banner said: ' + said);
-      });
-    }));
+      /* App start-up is asynchronous and ends by reassigning dsAuth inside
+         initSync() and rendering again with the real one, which clobbered a
+         stub set once up front. So the stub is re-applied on every attempt and
+         the banner is polled until it is ours. */
+      function withMedia(recs){
+        var tries = 0;
+        return (function attempt(){
+          W.dbAll = function(){ return Promise.resolve(recs); };
+          W.dsAuth = {isSignedIn: function(){ return true; },
+                      account: function(){ return {name: 'Test User'}; }};
+          W.renderSyncBar();
+          return new Promise(function(r){ setTimeout(r, 30); }).then(function(){
+            var said = msg ? msg.textContent : '';
+            if(/Test User/.test(said) || tries++ > 40) return said;
+            return attempt();
+          });
+        })();
+      }
+      return withMedia([{mid:'a', name:'IMG_1.jpg', up:'uploading'}])
+        .then(function(said){
+          ok(!/All photos uploaded/.test(said),
+             'does not claim completion while a file is uploading',
+             'banner said: ' + said);
+          ok(/uploading now/.test(said),
+             'it reports the upload in progress instead',
+             'banner said: ' + said);
+          /* Found on the device: two files failed and non-retryable, and the
+             banner still opened with "All photos uploaded. 2 need attention."
+             The first sentence is false and it is the one read first. */
+          return withMedia([
+            {mid:'a', name:'IMG_1.jpg', up:'failed', upRetryable:false, upErr:'x'},
+            {mid:'b', name:'IMG_2.jpg', up:'failed', upRetryable:false, upErr:'x'}
+          ]);
+        })
+        .then(function(said){
+          ok(!/All photos uploaded/.test(said),
+             'stuck files are never described as uploaded',
+             'banner said: ' + said);
+          ok(/attention/i.test(said),
+             'and it still says they need attention',
+             'banner said: ' + said);
+          W.dbAll = realAll; W.dsAuth = realAuth;
+        });
+    })());
 
   test('the per-file status panel exists and starts empty', function(){
     var box = D.getElementById('sy-detail');

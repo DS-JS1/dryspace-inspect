@@ -456,7 +456,11 @@ into "Waiting", which proved the uploading state had never been written.
 - The summary counters now count 'uploading'. The sync banner says "N file(s)
   uploading now" and the inspection card says "N uploading", instead of both
   claiming completion over a panel that says otherwise.
-- 400 assertions, up from 387. The new ones fail against the previous build.
+- The banner still opened with "All photos uploaded" when files were stuck
+  (failed and non-retryable) - caught on the device by the very screenshot
+  that was meant to confirm the first fix. Completion is now claimed only
+  when nothing is outstanding at all. CACHE_VERSION -> ds-inspect-v1.4.0-3.
+- 402 assertions, up from 387. The new ones fail against the previous build.
 
 The architectural change: the record now travels the same road as the photos,
 and in-progress work is backed up without anyone having to remember to do it.
