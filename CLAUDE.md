@@ -22,11 +22,33 @@ and point you here.
 
 ## Work in progress
 
-**v1.3.0 is live but photo upload does not work on mobile.** Read
-`docs/v1.4-plan.md` before touching anything — it carries the field-test findings,
-one already-diagnosed bug (B5), and ranked hypotheses for the mobile hang.
+**v1.3.0 is live. Photo upload still does not work on mobile.** Read
+`docs/v1.4-plan.md` before touching anything — it carries the field-test findings
+and ranked hypotheses for the mobile hang.
 
-Start with Batch 0 in that plan unless told otherwise.
+**v1.4.0 is built and not released.** Batches 0–3 of `docs/v1.4-plan.md` are done:
+upload recovery and deadlines (D28–D33), the record moving through SharePoint
+(D34–D38), and automatic backup of work in progress (D39–D42).
+
+**It is a major release** — record schema 3 → 4, and a new storage target for the
+record. Numbered 1.4.0 rather than 2.0.0 deliberately; the reasoning is in the
+decision log.
+
+**Two things are still owed before it can ship:**
+
+- **The mobile hang is unproven.** Three real ways an upload could hang for ever
+  were found by reading and fixed; none is confirmed as *the* cause. Run
+  `diagnostics.html` on the iPhone or iPad that fails, signed in, with a real
+  photo from the camera roll — it names the hypothesis when it confirms one. Do
+  not describe the hang as solved until someone has.
+- **Batch 4 and the major-tier document set** — `01_Setup and User Guide`,
+  `04_Project Context Brief`, `Training/` as a set, `02_Iteration Guide`,
+  `docs/FIELD-APP-TEMPLATE.md`, then the new `v1.4` folder with this one moved to
+  `Superseded`. `03_Handover and Version Control Protocol.md` §4 is already done,
+  because the change made it factually wrong.
+
+**Do not let this reach a field device before that document set exists.** The
+buttons staff are trained on have changed.
 
 ## Non-negotiables
 
@@ -55,6 +77,7 @@ These exist because breaking one of them lost, or nearly lost, real data.
 | SharePoint | `ds-sharepoint.js` — Graph transport |
 | Sign-in | `ds-auth.js` — OAuth2 PKCE |
 | Tests | `tests.html` — run over HTTP; expect zero failures |
+| Device diagnostics | `diagnostics.html` — run on the phone that fails; names the hypothesis |
 | Protocol | `05_Release Protocol.md` — what to update, when |
 | Decisions | `docs/DECISION-LOG.md` — what was decided and why |
 | Open work | `docs/v1.4-plan.md` — field findings and the next build |

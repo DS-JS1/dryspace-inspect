@@ -5,7 +5,7 @@ produce training material — presentations, animations, videos — about the Dr
 Site Inspection App. It assumes the reader knows nothing about the business, the
 trade, or the app.
 
-**Current version:** App v1.3 · Form 4.2
+**Current version:** App v1.4 · Form 4.2
 **Live app:** https://ds-js1.github.io/dryspace-inspect/
 
 ---
@@ -122,6 +122,13 @@ The things worth conveying to a non-technical audience:
 - **Staff sign in once** *(v1.3)* with their Dryspace Microsoft account. Losing
   signal does not sign anyone out.
 - **The app announces its own updates** *(v1.3)* rather than changing silently.
+- **The record itself moves through SharePoint** *(v1.4)*, not by emailing a file.
+  Handing over uploads it to the inspection's `current/` folder and archives the
+  previous version; taking it on downloads it. This is what made handover work on
+  a phone at all — the share sheet there offers WhatsApp, not SharePoint.
+- **Work in progress is backed up automatically** *(v1.4)* to a `wip/` folder
+  every few minutes while editing, so a lost or broken device no longer means a
+  lost day. A working copy is deliberately kept distinct from the live record.
 - **Sending** builds a single self-contained report file — every answer plus the
   photos embedded — which can be emailed or filed to SharePoint. It also carries a
   hidden machine-readable data block that the next system reads directly, so
@@ -146,23 +153,28 @@ Each inspection has exactly one owner at a time. The app tracks this as a **stag
 
 ## 7. The handover rule
 
-Because the app stores data on each device, handover happens by exporting a file and
-importing it elsewhere — which means the record could be copied, and two copies can
-drift apart. The governing rule is:
+Because the app stores data on each device, the record could be copied, and two
+copies can drift apart. The governing rule is:
 
 > **One baton, never a copy.** At any moment exactly one file is the live record,
 > and it lives in SharePoint. The copy on your device is a working scratch pad.
 
-Five steps at every handover: set your stage and name → export → upload to the
-inspection's `current/` folder → move the previous file to `archive/` → **then**
-delete your device copy.
+**From v1.4 the app performs the handover itself.** Set your stage and name, tap
+*Hand over through SharePoint*, and it uploads the record to `current/` and moves
+the previous version to `archive/`. Then you tell the next person and delete your
+device copy — that last step stays human, because deleting somebody's only copy of
+a day's work on their behalf is not something the app should do.
 
-From v1.3, everything for one inspection lives in **one folder**:
+If two people have been working the same inspection, the app says so and asks
+before continuing. It archives the other version rather than deleting it.
+
+Everything for one inspection lives in **one folder**:
 
 ```
 Site Inspections ▸ INS-2026-0142 - Smith - 12 Marine Parade, Kirra/
-    current/   the live record
+    current/   the live record — exactly one file, ever
     archive/   every past handover
+    wip/       automatic backups of work in progress (v1.4) — never the baton
     photos/    uploaded by the app itself
 ```
 
@@ -182,6 +194,9 @@ downloaded or emailed still says whose job it is:
 - **v1.2.1** — completion indicators, "None apply" options, BS8102:2022 grades
 - **v1.3** — photos upload to SharePoint with verification; Microsoft sign-in;
   update detection; automated test suite; one folder per inspection
+- **v1.4** — the record itself moves through SharePoint, both directions;
+  automatic backup of work in progress; per-file upload status and request
+  deadlines; protection against two devices overwriting each other
 
 > v1.2 and v1.2.1 were completed but never deployed — the photo problem made the app
 > unusable in practice, so work moved straight to v1.3. Field devices went from

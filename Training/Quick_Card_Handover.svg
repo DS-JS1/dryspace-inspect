@@ -25,7 +25,7 @@
   <text class="brand" x="32" y="27">DRYSPACE SOLUTIONS</text>
   <text class="h1" x="32" y="56">HANDOVER — QUICK CARD</text>
   <text class="h2" x="32" y="74">Passing an inspection to the next person, without losing it</text>
-  <text class="ver" x="563" y="74" text-anchor="end">App v1.3 · Form 4.2</text>
+  <text class="ver" x="563" y="74" text-anchor="end">App v1.4 · Form 4.2</text>
 
   <!-- the rule -->
   <rect x="32" y="106" width="531" height="58" rx="7" fill="#E8F1FA" stroke="#123A5F" stroke-width="1.4"/>
@@ -33,7 +33,7 @@
   <text class="ruleb" x="48" y="149">One file is the live record. It lives in SharePoint. Your device copy is a scratch pad.</text>
 
   <!-- steps -->
-  <text class="sec" x="32" y="196">EVERY HANDOVER — FIVE STEPS, IN THIS ORDER</text>
+  <text class="sec" x="32" y="196">EVERY HANDOVER — FOUR STEPS, IN THIS ORDER</text>
   <rect x="32" y="206" width="531" height="286" rx="7" fill="#FBFCFD" stroke="#DDE5EC" stroke-width="1"/>
 
   <circle cx="60" cy="240" r="14" fill="#123A5F"/>
@@ -43,25 +43,23 @@
 
   <circle cx="60" cy="294" r="14" fill="#123A5F"/>
   <text class="num" x="60" y="299" text-anchor="middle">2</text>
-  <text class="st" x="86" y="291">Tap “Share draft”</text>
-  <text class="sd" x="86" y="307">At the foot of the form. The app names the file for you — do not rename it.</text>
+  <text class="st" x="86" y="291">Tap “Hand over through SharePoint”</text>
+  <text class="sd" x="86" y="307">Top of the form. It files the record into current/ and archives the old one for you.</text>
 
   <circle cx="60" cy="348" r="14" fill="#123A5F"/>
   <text class="num" x="60" y="353" text-anchor="middle">3</text>
-  <text class="st" x="86" y="345">Upload it into current/</text>
-  <text class="sd" x="86" y="361">The inspection’s own folder in the Site Inspections library.</text>
+  <text class="st" x="86" y="345">Tell the next person</text>
+  <text class="sd" x="86" y="361">Send a LINK to the folder — never the file itself.</text>
 
-  <circle cx="60" cy="402" r="14" fill="#123A5F"/>
+  <circle cx="60" cy="402" r="14" fill="#9A6410"/>
   <text class="num" x="60" y="407" text-anchor="middle">4</text>
-  <text class="st" x="86" y="399">Move the previous file into archive/</text>
-  <text class="sd" x="86" y="415">Straight away — so current/ holds exactly one file again.</text>
+  <text class="st" x="86" y="399">Then delete your device copy</text>
+  <text class="sd" x="86" y="415">Once they confirm they have it. The app will not do this for you.</text>
 
-  <circle cx="60" cy="456" r="14" fill="#9A6410"/>
-  <text class="num" x="60" y="461" text-anchor="middle">5</text>
-  <text class="st" x="86" y="453">Then delete your device copy</text>
-  <text class="sd" x="86" y="469">Only after steps 3 and 4. Send a LINK to the folder — never the file itself.</text>
+  <text class="st" x="60" y="455">Picking a job up:  “Take over an inspection from SharePoint” — home screen.</text>
+  <text class="sd" x="60" y="471">No signal? The buttons marked “offline fallback” work the old way — then the filing is yours.</text>
 
-  <text class="warn" x="32" y="512">Skipping step 5 is how one job ends up being edited in two places.</text>
+  <text class="warn" x="32" y="512">Skipping the last step is how one job ends up being edited in two places.</text>
 
   <!-- who holds it next -->
   <text class="sec" x="32" y="552">WHO HOLDS IT NEXT</text>
@@ -79,19 +77,21 @@
     <rect x="482" y="562" width="81" height="26" rx="5" fill="#E0F2E4" stroke="#1E6B34" stroke-width="1"/>
     <text class="stage" x="522" y="579" text-anchor="middle" fill="#1E6B34">CLOSED</text>
   </g>
-  <text class="sd" x="32" y="606">Change the stage BEFORE you export — it is what names the file.</text>
+  <text class="sd" x="32" y="606">Change the stage BEFORE you hand over — it is what names the file.</text>
 
   <!-- where it lives -->
   <text class="sec" x="32" y="644">WHERE IT LIVES — ONE FOLDER PER INSPECTION</text>
-  <rect x="32" y="654" width="531" height="106" rx="7" fill="#FBFCFD" stroke="#DDE5EC" stroke-width="1"/>
-  <text class="mono" x="48" y="676">Site Inspections ▸ INS-2026-0142 - Smith - 12 Marine Pde, Kirra/</text>
-  <text class="mono" x="72" y="697">current/</text>
-  <text class="monod" x="190" y="697">one file, ever — the live record</text>
-  <text class="mono" x="72" y="716">archive/</text>
-  <text class="monod" x="190" y="716">every past handover</text>
-  <text class="mono" x="72" y="735">photos/</text>
-  <text class="monod" x="190" y="735">the app puts these here by itself</text>
-  <text class="warn" x="48" y="754">Two files in current/ means something has gone wrong.</text>
+  <rect x="32" y="654" width="531" height="112" rx="7" fill="#FBFCFD" stroke="#DDE5EC" stroke-width="1"/>
+  <text class="mono" x="48" y="674">Site Inspections ▸ INS-2026-0142 - Smith - 12 Marine Pde, Kirra/</text>
+  <text class="mono" x="72" y="693">current/</text>
+  <text class="monod" x="190" y="693">one file, ever — the live record</text>
+  <text class="mono" x="72" y="710">archive/</text>
+  <text class="monod" x="190" y="710">every past handover</text>
+  <text class="mono" x="72" y="727">wip/</text>
+  <text class="monod" x="190" y="727">auto-backups while you work — NEVER the baton</text>
+  <text class="mono" x="72" y="744">photos/</text>
+  <text class="monod" x="190" y="744">the app puts these here by itself</text>
+  <text class="warn" x="48" y="761">Two files in current/ means something has gone wrong.</text>
 
   <!-- filename -->
   <text class="sec" x="32" y="790">THE FILE NAMES ITSELF</text>

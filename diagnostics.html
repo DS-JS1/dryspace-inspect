@@ -1,0 +1,524 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Dryspace Inspection App — upload diagnostics</title>
+<style>
+:root{color-scheme:light dark}
+*{box-sizing:border-box}
+body{margin:0;padding:16px;font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+     max-width:760px;margin:0 auto;background:#fff;color:#1b1b1b}
+@media (prefers-color-scheme:dark){body{background:#151515;color:#eee}}
+h1{font-size:19px;margin:0 0 4px}
+h2{font-size:15px;margin:22px 0 6px;padding-bottom:4px;border-bottom:1px solid #8884}
+p.lede{margin:0 0 14px;font-size:13px;opacity:.75}
+.row{display:flex;gap:10px;align-items:baseline;padding:5px 0;border-bottom:1px solid #8882;font-size:13px}
+.row .k{flex:1;min-width:0}
+.row .v{flex:0 0 auto;text-align:right;font-variant-numeric:tabular-nums;max-width:58%;word-break:break-word}
+.ok .v{color:#1a7f37;font-weight:600}
+.bad .v{color:#b3261e;font-weight:600}
+.warn .v{color:#8a5a00;font-weight:600}
+button{font:inherit;padding:10px 15px;border-radius:9px;border:1px solid #8886;background:#f4f4f5;
+       color:inherit;margin:4px 6px 4px 0;cursor:pointer}
+button.primary{background:#0b57d0;border-color:#0b57d0;color:#fff}
+button:disabled{opacity:.5}
+@media (prefers-color-scheme:dark){button{background:#2a2a2a}}
+.note{font-size:12px;opacity:.75;margin:8px 0 0}
+pre{font-size:11px;background:#8881;padding:10px;border-radius:8px;overflow:auto;max-height:340px;
+    white-space:pre-wrap;word-break:break-word}
+iframe{display:none}
+label.file{display:inline-block}
+input[type=file]{font:inherit;font-size:13px;margin:6px 0}
+</style>
+</head>
+<body>
+
+<h1>Upload diagnostics</h1>
+<p class="lede">
+  Run this <strong>on the device that fails</strong>. It answers the four
+  hypotheses in <code>docs/v1.4-plan.md</code> §3 in order, and tells you which
+  one is actually true.
+</p>
+
+<p class="note" style="border:2px solid #b3261e;border-radius:8px;padding:10px">
+  <strong>It must be opened from the app's own web address</strong> — the same
+  <code>https://…</code> URL you open the inspection app from. Not from
+  SharePoint, not from a file on the device, and nothing to do with an email
+  address.
+  <br><br>
+  It has to share an origin with the app because it loads the app in a frame,
+  reads the same stored sign-in, and opens the same database. Served from
+  anywhere else, none of those resolve and the page cannot do its job.
+</p>
+
+<p class="note" style="border:1px solid #8886;border-radius:8px;padding:10px">
+  <strong>One side effect worth knowing.</strong> This page loads the app with
+  <code>?nosw=1</code> so it cannot test a stale cached build — which
+  <em>unregisters the offline service worker for this whole site</em>. When you
+  have finished, open the app normally once and let it load; it re-registers
+  itself. Do not leave a field device in this state, because until you do, the
+  app will not work without signal.
+</p>
+
+<div id="boot" class="note" style="white-space:pre-line">Loading the app…</div>
+
+<div id="panels" hidden>
+
+  <h2>1 · Environment</h2>
+  <div id="env"></div>
+
+  <h2>2 · Stored photos — are they still readable?</h2>
+  <p class="note">
+    Hypothesis 2. Reads every original already on this device. A blob that
+    stored fine and cannot be read back is Safari losing it, and would stall
+    inside <code>fetch</code> where nothing is watching.
+  </p>
+  <button id="btn-blobs">Check stored photos</button>
+  <div id="blobs"></div>
+
+  <h2>3 · Sign-in and token refresh</h2>
+  <p class="note">
+    Hypothesis 3. “Force a refresh” discards the access token but keeps the
+    refresh token, so the next call must go through the refresh path — the one
+    that is untested in a standalone PWA.
+  </p>
+  <button id="btn-token">Time getToken()</button>
+  <button id="btn-refresh">Force a refresh</button>
+  <div id="token"></div>
+
+  <h2>4 · Can this device reach the library?</h2>
+  <button id="btn-drive">Resolve the drive</button>
+  <div id="drive"></div>
+
+  <h2>5 · The chunked upload — hypothesis 1</h2>
+  <p class="note">
+    The decisive test. Anything over 4&nbsp;MB goes through
+    <code>createUploadSession</code>, and that path has only ever run against a
+    fake transport. <strong>Pick a real photo from the camera roll</strong> — a
+    HEIC burst if you have one. Leave it empty to use a synthetic 5&nbsp;MB file
+    instead, which proves the path but not the file type.
+  </p>
+  <label class="file"><input type="file" id="pick" accept="image/*,video/*"></label><br>
+  <button id="btn-upload" class="primary">Run the upload test</button>
+  <div id="upload"></div>
+  <p class="note">
+    Uploads to a <code>_diagnostics/</code> folder in the Site Inspections
+    library. <strong>Nothing is deleted</strong> — the app never deletes from
+    SharePoint, and staff accounts may be <em>Contribute&nbsp;-&nbsp;No&nbsp;Delete</em>.
+    Tidy the folder up yourself afterwards.
+  </p>
+
+  <h2>Request trace</h2>
+  <p class="note">Every Graph request this page made, in order, with timings.</p>
+  <button id="btn-copy">Copy everything</button>
+  <pre id="trace">Nothing yet.</pre>
+</div>
+
+<iframe id="app" title="app under diagnosis"></iframe>
+
+<script src="ds-media-sync.js"></script>
+<script src="ds-sharepoint.js"></script>
+<script src="ds-auth.js"></script>
+<script>
+'use strict';
+
+var W = null, CFG = null, auth = null, TRACE = [];
+
+function el(id){ return document.getElementById(id); }
+function ms(n){ return Math.round(n) + ' ms'; }
+
+function line(host, key, value, cls){
+  var d = document.createElement('div');
+  d.className = 'row' + (cls ? ' ' + cls : '');
+  d.innerHTML = '<span class="k"></span><span class="v"></span>';
+  d.children[0].textContent = key;
+  d.children[1].textContent = value;
+  el(host).appendChild(d);
+  return d;
+}
+
+function clear(host){ el(host).innerHTML = ''; }
+
+function log(entry){
+  TRACE.push(entry);
+  el('trace').textContent = TRACE.map(function(t){ return t; }).join('\n');
+}
+
+/* Wraps fetch so every Graph request is timed and recorded. This is the trace
+   the app did not have, and its absence is what made the hang unreadable. */
+function tracingFetch(url, init){
+  var method = (init && init.method) || 'GET';
+  var short = String(url).replace('https://graph.microsoft.com/v1.0', '')
+                         .replace(/https:\/\/[^/]+/, '…')
+                         .slice(0, 110);
+  var t0 = performance.now();
+  return window.fetch(url, init).then(function(res){
+    log(ms(performance.now() - t0).padStart(9) + '  ' + method + ' ' + res.status + '  ' + short);
+    return res;
+  }, function(err){
+    log(ms(performance.now() - t0).padStart(9) + '  ' + method + ' ERR   ' + short +
+        '  — ' + ((err && err.message) || err));
+    throw err;
+  });
+}
+
+function makeAuth(){
+  return DSAuth.create({
+    clientId: CFG.clientId, tenantId: CFG.tenantId,
+    redirectUri: W.spRedirectUri(),
+    fetchImpl: tracingFetch
+  });
+}
+
+function makeTransport(){
+  return DSSharePoint.createTransport({
+    getToken: function(){ return auth.getToken(); },
+    hostname: CFG.hostname, sitePath: CFG.sitePath,
+    fetchImpl: tracingFetch,
+    folderOf: function(rec, meta){ return meta.folder; },
+    nameOf: function(rec, meta){ return meta.name; },
+    tagOf: function(){ return null; }        /* no library columns on a test file */
+  });
+}
+
+/* ---------- 1 · environment ---------- */
+function showEnv(){
+  clear('env');
+  var standalone = (window.navigator.standalone === true) ||
+                   (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+
+  line('env', 'App version', W.APP_VER || 'unknown');
+  line('env', 'Secure context (HTTPS)', window.isSecureContext ? 'yes' : 'NO',
+       window.isSecureContext ? 'ok' : 'bad');
+  line('env', 'crypto.subtle available',
+       (window.crypto && window.crypto.subtle) ? 'yes' : 'NO — hypothesis 4',
+       (window.crypto && window.crypto.subtle) ? 'ok' : 'bad');
+  line('env', 'Running as an installed app', standalone ? 'yes — hypothesis 3 applies' : 'no, in the browser',
+       standalone ? 'warn' : '');
+  line('env', 'AbortController (request deadlines)',
+       typeof AbortController === 'function' ? 'yes' : 'NO — uploads cannot time out',
+       typeof AbortController === 'function' ? 'ok' : 'bad');
+  line('env', 'Blob.arrayBuffer()', Blob.prototype.arrayBuffer ? 'yes' : 'no — using FileReader');
+  line('env', 'Online', navigator.onLine === false ? 'NO' : 'yes',
+       navigator.onLine === false ? 'bad' : 'ok');
+  line('env', 'Browser', navigator.userAgent.slice(0, 96));
+
+  if(navigator.storage && navigator.storage.estimate){
+    navigator.storage.estimate().then(function(e){
+      var pct = e.quota ? Math.round((e.usage / e.quota) * 100) : 0;
+      line('env', 'Storage used',
+           (e.usage / 1048576).toFixed(1) + ' MB of ' + (e.quota / 1048576).toFixed(0) + ' MB (' + pct + '%)',
+           pct > 85 ? 'warn' : 'ok');
+    });
+  }
+  if(navigator.storage && navigator.storage.persisted){
+    navigator.storage.persisted().then(function(p){
+      line('env', 'Storage is persistent', p ? 'yes' : 'no — the browser may evict data',
+           p ? 'ok' : 'warn');
+    });
+  }
+}
+
+/* ---------- 2 · stored blobs (hypothesis 2) ---------- */
+function checkBlobs(){
+  clear('blobs');
+  el('btn-blobs').disabled = true;
+  line('blobs', 'Reading…', '');
+
+  W.dbAll('media').then(function(all){
+    clear('blobs');
+    line('blobs', 'Photos and files on this device', String(all.length));
+    if(!all.length){
+      line('blobs', 'Nothing to check', 'take a photo in the app first', 'warn');
+      el('btn-blobs').disabled = false;
+      return;
+    }
+    var bad = 0, done = 0;
+    return all.reduce(function(chain, rec){
+      return chain.then(function(){
+        var blob = DSMedia.originalOf(rec);
+        var t0 = performance.now();
+        return DSMedia.verifyReadable(blob, rec.origSize, {timeoutMs: 20000})
+          .then(function(){
+            done++;
+            line('blobs', (rec.name || rec.mid) + ' — ' +
+                 ((blob.size / 1048576).toFixed(1)) + ' MB', 'readable, ' + ms(performance.now() - t0), 'ok');
+          }, function(e){
+            bad++;
+            line('blobs', (rec.name || rec.mid), (e && e.message) || String(e), 'bad');
+          });
+      });
+    }, Promise.resolve()).then(function(){
+      line('blobs', 'Result',
+           bad ? bad + ' of ' + all.length + ' unreadable — HYPOTHESIS 2 CONFIRMED'
+               : 'all ' + done + ' readable — hypothesis 2 ruled out',
+           bad ? 'bad' : 'ok');
+      el('btn-blobs').disabled = false;
+    });
+  }).catch(function(e){
+    line('blobs', 'Could not read the database', (e && e.message) || String(e), 'bad');
+    el('btn-blobs').disabled = false;
+  });
+}
+
+/* ---------- 3 · token (hypothesis 3) ---------- */
+function timeToken(){
+  clear('token');
+  if(!auth.isSignedIn()){
+    line('token', 'Signed in', 'NO — sign in on the main app first, then come back', 'bad');
+    return;
+  }
+  var acc = auth.account() || {};
+  line('token', 'Signed in as', acc.name || acc.username || 'unknown', 'ok');
+  var t0 = performance.now();
+  el('btn-token').disabled = true;
+  auth.getToken().then(function(tok){
+    line('token', 'getToken()', 'succeeded in ' + ms(performance.now() - t0), 'ok');
+    line('token', 'Token length', String(tok.length) + ' characters');
+    el('btn-token').disabled = false;
+  }, function(e){
+    line('token', 'getToken() FAILED after ' + ms(performance.now() - t0),
+         (e && e.message) || String(e), 'bad');
+    if(e && e.timedOut){
+      line('token', 'Diagnosis',
+           'the sign-in server never answered — HYPOTHESIS 3 CONFIRMED', 'bad');
+    }
+    el('btn-token').disabled = false;
+  });
+}
+
+/* Discards the access token but keeps the refresh token, so the next getToken()
+   must take the refresh path — the one iOS has never been proven on. */
+function forceRefresh(){
+  clear('token');
+  var KEY = 'ds-auth-' + CFG.clientId;
+  var cur = null;
+  try { cur = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch(e){}
+  if(!cur || !cur.refreshToken){
+    line('token', 'Cannot force a refresh', 'not signed in on this device', 'bad');
+    return;
+  }
+  cur.accessToken = null;
+  cur.expiresAt = 0;
+  localStorage.setItem(KEY, JSON.stringify(cur));
+  line('token', 'Access token discarded', 'refresh token kept', 'ok');
+  auth = makeAuth();                      /* re-read from storage */
+  timeToken();
+}
+
+/* ---------- 4 · reachability ---------- */
+function checkDrive(){
+  clear('drive');
+  if(!auth.isSignedIn()){
+    line('drive', 'Cannot run', 'not signed in — sign in on the main app first', 'bad');
+    return;
+  }
+  el('btn-drive').disabled = true;
+  var t = makeTransport();
+  var t0 = performance.now();
+  t.resolveDrive().then(function(id){
+    line('drive', 'Document library resolved', ms(performance.now() - t0), 'ok');
+    line('drive', 'Drive id', String(id).slice(0, 40) + '…');
+    el('btn-drive').disabled = false;
+  }, function(e){
+    line('drive', 'FAILED after ' + ms(performance.now() - t0), (e && e.message) || String(e), 'bad');
+    if(e && e.timedOut) line('drive', 'Diagnosis', 'Graph never answered — a network or proxy problem', 'bad');
+    if(e && e.status === 403) line('drive', 'Diagnosis', 'signed in, but not permitted on this site', 'bad');
+    el('btn-drive').disabled = false;
+  });
+}
+
+/* ---------- 5 · the chunked upload (hypothesis 1) ---------- */
+function runUpload(){
+  clear('upload');
+  /* Never signed in is not a hypothesis, it is a missing precondition. Reporting
+     it as one would send someone hunting a fault that is not there. */
+  if(!auth.isSignedIn()){
+    line('upload', 'Cannot run', 'not signed in — sign in on the main app first, then come back', 'bad');
+    return;
+  }
+  el('btn-upload').disabled = true;
+
+  var picked = el('pick').files && el('pick').files[0];
+  var blob, label;
+  if(picked){
+    blob = picked;
+    label = picked.name + ' (' + (picked.size / 1048576).toFixed(2) + ' MB, ' + (picked.type || 'unknown type') + ')';
+  } else {
+    /* Just over the 4 MB threshold, so it is guaranteed to take the session
+       path rather than the simple PUT that already works. */
+    blob = new Blob([new Uint8Array(5 * 1024 * 1024)], {type: 'image/jpeg'});
+    label = 'synthetic 5.00 MB file';
+  }
+  line('upload', 'File under test', label);
+  line('upload', 'Path Graph will take',
+       blob.size > DSSharePoint.SIMPLE_MAX
+         ? 'chunked session — this is the untested one'
+         : 'simple PUT — under 4 MB, pick a larger file to test the session path',
+       blob.size > DSSharePoint.SIMPLE_MAX ? 'warn' : 'bad');
+
+  var t = makeTransport();
+  var stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  var rec = {mid: 'diag', original: blob, origSize: blob.size};
+  var meta = {
+    folder: '_diagnostics',
+    name: 'diag_' + stamp + '_' + (picked ? picked.name : 'synthetic.jpg')
+  };
+
+  var t0 = performance.now(), lastAt = t0, chunk = 0;
+  var progressRow = line('upload', 'Progress', 'starting…');
+
+  /* Reading the file first, exactly as the queue now does — if this is where it
+     dies, the upload was never the problem. */
+  DSMedia.verifyReadable(blob, blob.size, {timeoutMs: 20000}).then(function(){
+    line('upload', 'File is readable', ms(performance.now() - t0), 'ok');
+    return t.upload(rec, meta, function(frac){
+      chunk++;
+      var now = performance.now();
+      line('upload', 'Chunk ' + chunk + ' committed (' + Math.round(frac * 100) + '%)',
+           ms(now - lastAt), 'ok');
+      lastAt = now;
+      progressRow.children[1].textContent = Math.round(frac * 100) + '%';
+    });
+  }).then(function(remote){
+    line('upload', 'Upload finished', ms(performance.now() - t0), 'ok');
+    var v0 = performance.now();
+    return t.verify(remote).then(function(fresh){
+      var match = fresh.size === blob.size;
+      line('upload', 'Read back from SharePoint', ms(performance.now() - v0), 'ok');
+      line('upload', 'Stored size matches',
+           match ? fresh.size + ' bytes' : 'NO — stored ' + fresh.size + ', sent ' + blob.size,
+           match ? 'ok' : 'bad');
+      line('upload', 'RESULT',
+           match ? 'the chunked path works on this device — hypothesis 1 ruled out'
+                 : 'the file uploaded but was truncated',
+           match ? 'ok' : 'bad');
+      line('upload', 'Left in SharePoint', '_diagnostics/' + meta.name, 'warn');
+    });
+  }).catch(function(e){
+    line('upload', 'FAILED after ' + ms(performance.now() - t0), (e && e.message) || String(e), 'bad');
+    if(e && e.unreadable){
+      line('upload', 'Diagnosis', 'the file could not be read on this device — hypothesis 2', 'bad');
+    } else if(e && e.stalled){
+      line('upload', 'Diagnosis',
+           'the session kept answering but stopped advancing — HYPOTHESIS 1 CONFIRMED', 'bad');
+    } else if(e && e.timedOut){
+      line('upload', 'Diagnosis',
+           'a request never answered — HYPOTHESIS 1, the chunked path hanging', 'bad');
+    } else if(e && e.status === 403){
+      line('upload', 'Diagnosis', 'signed in, but not permitted to write here', 'bad');
+    } else if(e && e.needsSignIn){
+      line('upload', 'Diagnosis',
+           'the refresh token was rejected mid-test, so the device is now signed out — hypothesis 3', 'bad');
+    } else {
+      line('upload', 'Diagnosis', 'read the trace below — this is a new failure', 'bad');
+    }
+  }).then(function(){
+    el('btn-upload').disabled = false;
+  });
+}
+
+/* ---------- copy everything ---------- */
+function copyAll(){
+  var text = ['Dryspace upload diagnostics', new Date().toISOString(),
+              navigator.userAgent, ''].join('\n');
+  ['env', 'blobs', 'token', 'drive', 'upload'].forEach(function(id){
+    var t = el(id).innerText.trim();
+    if(t) text += '\n== ' + id + ' ==\n' + t + '\n';
+  });
+  text += '\n== request trace ==\n' + el('trace').textContent;
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(function(){
+      el('btn-copy').textContent = 'Copied';
+      setTimeout(function(){ el('btn-copy').textContent = 'Copy everything'; }, 2000);
+    }, function(){ window.prompt('Copy this:', text); });
+  } else {
+    window.prompt('Copy this:', text);
+  }
+}
+
+/* ---------- boot ---------- */
+/* The app is loaded in an iframe rather than its configuration being copied
+   here, for the same reason the test suite does it (decision D22): a copy
+   drifts, and a diagnostic that tests a stale copy of the truth is worse than
+   no diagnostic at all. */
+(function boot(){
+  var f = el('app');
+  var settled = false;
+
+  function fail(msg){
+    if(settled) return;
+    settled = true;
+    var b = el('boot');
+    b.style.border = '2px solid #b3261e';
+    b.style.borderRadius = '8px';
+    b.style.padding = '10px';
+    b.innerHTML = '';
+    b.appendChild(document.createTextNode(msg));
+  }
+
+  /* A page written to find operations that never finish should not itself hang
+     on one. Loading the app can fail in ways that fire neither load nor error —
+     served as a download, blocked by a policy, or answered by something that is
+     not the app — and without this the page sits on "Loading the app..." for
+     ever, which is precisely the failure it exists to diagnose. */
+  var BOOT_MS = 15000;
+  setTimeout(function(){
+    fail('The app did not load within ' + (BOOT_MS / 1000) + ' seconds.\n\n' +
+         'The usual cause is opening this page from somewhere other than the ' +
+         'app\u2019s own web address \u2014 from SharePoint, from a downloaded copy, or ' +
+         'from a file:// path. It has to be served from the same https:// origin ' +
+         'as the app itself.\n\n' +
+         'This page is currently at: ' + location.origin + location.pathname);
+  }, BOOT_MS);
+
+  /* Fail fast on the case we can detect outright, rather than waiting. */
+  if(location.protocol === 'file:'){
+    fail('This page was opened as a file rather than served over the web.\n\n' +
+         'Open it from the app\u2019s own https:// address instead \u2014 sign-in, stored ' +
+         'photos and the app\u2019s database are all tied to that origin and none of ' +
+         'them are reachable from a file.');
+    return;
+  }
+
+  f.onload = function(){
+    setTimeout(function(){
+      W = f.contentWindow;
+      var reachable = false;
+      /* A cross-origin frame throws on property access rather than returning
+         undefined, so this has to be guarded. */
+      try { reachable = !!(W && W.SP_CONFIG && typeof W.dbAll === 'function'); }
+      catch(e){ reachable = false; }
+      if(!reachable){
+        fail('Something loaded in place of the app, but it is not the app.\n\n' +
+             'Check that this page sits in the same folder as index.html and is ' +
+             'opened from the app\u2019s own web address. This page is at: ' +
+             location.origin + location.pathname);
+        return;
+      }
+      if(settled) return;
+      settled = true;
+      CFG = W.SP_CONFIG;
+      auth = makeAuth();
+      el('boot').hidden = true;
+      el('panels').hidden = false;
+      showEnv();
+    }, 150);
+  };
+  f.onerror = function(){
+    fail('Could not load index.html.\n\nIt should sit in the same folder as this ' +
+         'page. This page is at: ' + location.origin + location.pathname);
+  };
+  f.src = 'index.html?nosw=1&diag=' + Date.now();
+
+  el('btn-blobs').onclick = checkBlobs;
+  el('btn-token').onclick = timeToken;
+  el('btn-refresh').onclick = forceRefresh;
+  el('btn-drive').onclick = checkDrive;
+  el('btn-upload').onclick = runUpload;
+  el('btn-copy').onclick = copyAll;
+})();
+</script>
+</body>
+</html>

@@ -192,6 +192,81 @@ DSMedia.blobToDataURL = function(b){
    separate original, so the stored blob IS the original for those. */
 DSMedia.originalOf = function(rec){ return (rec && (rec.original || rec.blob)) || null; };
 
+/* ═══════════════ is the stored file still readable? ═══════════════
+   Safari has a long history of blobs stored in IndexedDB becoming unreadable
+   after a reload — the record is intact, the blob object exists, and reading it
+   fails or never returns. Handing one of those to fetch() as a request body is
+   the worst case: a stall in the *request* body is invisible to any deadline
+   waiting on a *response*.
+
+   So the file is read before it is sent. One small slice is enough to prove the
+   handle is live, and it turns a silent hang into a named failure. Cheap: a
+   64 KB read against a 5 MB upload. */
+
+DSMedia.PREFLIGHT_BYTES = 64 * 1024;
+DSMedia.PREFLIGHT_TIMEOUT_MS = 15000;
+
+function unreadable(msg){
+  var e = new Error(msg);
+  e.unreadable = true;
+  /* Permanent: no amount of retrying restores a blob the browser has lost. It
+     surfaces under "needs attention" with the reason, where a person can retake
+     the photo — which is the only real remedy. */
+  e.status = 0;
+  return e;
+}
+
+function readSlice(blob){
+  if(blob.arrayBuffer) return blob.arrayBuffer();
+  /* Safari before 14 has no Blob.arrayBuffer(). */
+  return new Promise(function(resolve, reject){
+    var fr = new global.FileReader();
+    fr.onload = function(){ resolve(fr.result); };
+    fr.onerror = function(){ reject(fr.error || new Error('FileReader failed')); };
+    fr.readAsArrayBuffer(blob);
+  });
+}
+
+DSMedia.verifyReadable = function(blob, expectedSize, opts){
+  opts = opts || {};
+  var ms = opts.timeoutMs === undefined ? DSMedia.PREFLIGHT_TIMEOUT_MS : opts.timeoutMs;
+  if(!blob) return Promise.reject(unreadable('there is no file to upload'));
+  if(!blob.size) return Promise.reject(unreadable('the stored file is empty'));
+  if(expectedSize !== undefined && expectedSize !== null && blob.size !== expectedSize){
+    return Promise.reject(unreadable('the stored file is ' + blob.size +
+      ' bytes but the record expects ' + expectedSize +
+      ' — it did not survive being stored'));
+  }
+  var want = Math.min(opts.bytes || DSMedia.PREFLIGHT_BYTES, blob.size);
+  var job;
+  try { job = readSlice(blob.slice(0, want)); }
+  catch(e){ return Promise.reject(unreadable('the stored file could not be opened: ' + (e.message || e))); }
+
+  job = job.then(function(buf){
+    var got = buf && (buf.byteLength !== undefined ? buf.byteLength : buf.length);
+    if(got !== want) throw unreadable('the stored file read back ' + got + ' of ' + want + ' bytes');
+    return true;
+  }, function(e){
+    if(e && e.unreadable) throw e;
+    throw unreadable('the stored file could not be read back: ' + ((e && e.message) || e));
+  });
+
+  if(!ms) return job;
+  return new Promise(function(resolve, reject){
+    var t = global.setTimeout(function(){
+      /* A read that hangs is not proof the blob is dead — the device may simply
+         be busy — so this one is temporary, unlike the failures above. */
+      var slow = new Error('reading the stored file took longer than ' +
+                           Math.round(ms / 1000) + 's');
+      slow.timedOut = true;
+      slow.offline = true;
+      reject(slow);
+    }, ms);
+    job.then(function(v){ global.clearTimeout(t); resolve(v); },
+             function(e){ global.clearTimeout(t); reject(e); });
+  });
+};
+
 /* ═══════════════ upload state ═══════════════ */
 
 DSMedia.STATES = ['local', 'queued', 'uploading', 'uploaded', 'failed', 'purged'];
@@ -234,6 +309,38 @@ DSMedia.requeue = function(rec){
   rec.upRetryable = true;
   rec.upErr = null;
   return rec;
+};
+
+/* B5 — an upload interrupted by the app being killed, backgrounded or reloaded
+   leaves its record in 'uploading' for good. Nothing counts it: the queue skips
+   it and pendingUploads() ignores it, so the file never uploads, the Upload now
+   button vanishes, and nothing on screen says why. That is a silent data-loss
+   path, and it is what stranded records in the field.
+
+   After a reload nothing can still be in flight, so every record found in
+   'uploading' was interrupted by definition and belongs back in the queue.
+
+   Deliberately NOT added to ALLOWED as 'uploading' -> 'queued'. That move must
+   stay illegal for the queue itself, where it would mean two attempts running
+   against one file. This is start-up recovery, and it says so by bypassing the
+   table rather than widening it. */
+DSMedia.recoverInterrupted = function(rec){
+  if(DSMedia.stateOf(rec) !== 'uploading') return false;
+  /* A file that has already burnt its attempts must not go back to a queue that
+     will refuse to drain it — that is the same invisibility by another route.
+     Surface it instead, where "Try again" can reach it. */
+  if((rec.upTries || 0) >= DSMedia.MAX_TRIES){
+    DSMedia.setState(rec, 'failed', {error: 'upload was interrupted repeatedly'});
+    rec.upRetryable = false;
+    return true;
+  }
+  rec.up = 'queued';
+  rec.upAt = Date.now();
+  rec.upErr = null;
+  rec.upRetryable = true;
+  /* upTries is preserved on purpose: a file that reliably kills the app must
+     not retry for ever. */
+  return true;
 };
 
 /* Only a verified remote copy makes a local original safe to remove. Size must
@@ -280,10 +387,18 @@ DSMedia.createQueue = function(opts){
   var save = opts.save;                 /* (rec) -> Promise */
   var meta = opts.meta || function(){ return {}; };
   var onChange = opts.onChange || function(){};
+  /* B6 — per-file feedback. Without it a stalled upload is indistinguishable
+     from a slow one, which is how "Uploading…" came to mean nothing. */
+  var onProgress = opts.onProgress || function(){};
   var isOnline = opts.isOnline || function(){ return global.navigator ? global.navigator.onLine !== false : true; };
   var wait = opts.wait || function(ms){ return new Promise(function(r){ setTimeout(r, ms); }); };
+  /* Overridable so tests can drive the failure directly; on by default because
+     the whole point is that it always runs. */
+  var preflight = opts.preflight === false
+    ? function(){ return Promise.resolve(true); }
+    : (opts.preflight || function(blob, size){ return DSMedia.verifyReadable(blob, size); });
 
-  var running = false, stopped = false, last = null;
+  var running = false, stopped = false, last = null, inFlight = null;
 
   /* A permanently failed record (400, 403 — a bad name, a revoked token) is held
      back rather than retried. Nothing about trying again changes the outcome, and
@@ -305,9 +420,19 @@ DSMedia.createQueue = function(opts){
     if(DSMedia.stateOf(rec) === 'failed') DSMedia.setState(rec, 'queued');
     rec.upTries = (rec.upTries || 0) + 1;
     DSMedia.setState(rec, 'uploading');
+    inFlight = rec;
     onChange(rec);
     return save(rec)
-      .then(function(){ return transport.upload(rec, meta(rec)); })
+      .then(function(){
+        /* Before the network, before the session: prove the file is still there
+           and still readable. A dead blob otherwise reaches fetch() as a request
+           body and stalls where nothing is watching. */
+        return preflight(DSMedia.originalOf(rec), rec.origSize);
+      })
+      .then(function(){
+        onProgress(rec, 0);
+        return transport.upload(rec, meta(rec), function(frac){ onProgress(rec, frac); });
+      })
       .then(function(remote){
         /* Never trust the upload response alone — read the item back. */
         return transport.verify(remote).then(function(fresh){
@@ -356,13 +481,16 @@ DSMedia.createQueue = function(opts){
       });
     })().catch(function(e){
       return 'error: ' + ((e && e.message) || e);
-    }).then(function(r){ running = false; return r; });
+    }).then(function(r){ running = false; inFlight = null; return r; });
     return last;
   }
 
   return {
     drain: drain,
     stop: function(){ stopped = true; },
+    /* Which file is in flight right now — the question "Uploading…" refused
+       to answer. */
+    current: function(){ return inFlight; },
     isRunning: function(){ return running; },
     pending: function(){ return list().then(function(rs){ return pending(rs).length; }); }
   };

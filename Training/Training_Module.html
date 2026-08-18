@@ -109,7 +109,7 @@
   <div class="eyebrow">Dryspace Solutions · Training</div>
   <h1>Site Inspection App — handover &amp; photos</h1>
   <p class="lede">About 12 minutes. Two things to get right: passing a job on without losing it, and getting your photos off the device.</p>
-  <div class="meta">App v1.3 · Works offline · Nothing you do here is saved or sent anywhere.</div>
+  <div class="meta">App v1.4 · Works offline · Nothing you do here is saved or sent anywhere.</div>
 </header>
 
 <section>
@@ -127,21 +127,32 @@
   </div>
   <p class="tight">Six stages, each with exactly one owner:</p>
   <p class="tight"><code>OFFICE</code> → <code>FIELD</code> → <code>TECH</code> → <code>SALES</code> → <code>ADMIN</code> → <code>CLOSED</code></p>
-  <p>Set the stage <strong>before</strong> you export — the stage is part of the filename, so it is how anyone can tell which file is current without opening it.</p>
+  <p>Set the stage <strong>before</strong> you hand over — the stage is part of the filename, so it is how anyone can tell which file is current without opening it.</p>
 </section>
 
 <section>
-  <h2><span class="n">03</span> The handover — five steps</h2>
+  <h2><span class="n">03</span> The handover — four steps</h2>
+  <div class="callout">
+    <b>This changed in v1.4.</b>
+    The app now does the SharePoint filing itself. It used to be three manual steps, and on a phone it could not be done at all — the share sheet offered WhatsApp and Mail, not SharePoint.
+  </div>
   <ol class="steps">
     <li><div><strong>Set your stage and your name</strong><span>Top of the inspection. Stamps the filename and the audit trail.</span></div></li>
-    <li><div><strong>Tap “Share draft”</strong><span>Foot of the form. The app names the file — do not rename it.</span></div></li>
-    <li><div><strong>Upload it into <code>current/</code></strong><span>The inspection’s own folder in the Site Inspections library.</span></div></li>
-    <li><div><strong>Move the previous file into <code>archive/</code></strong><span>Straight away, so <code>current/</code> holds exactly one file again.</span></div></li>
-    <li class="last"><div><strong>Then delete your device copy</strong><span>Only after steps 3 and 4. Send a link to the folder — never the file.</span></div></li>
+    <li><div><strong>Tap “Hand over through SharePoint”</strong><span>Top of the form. It uploads the record into <code>current/</code> and moves the previous file into <code>archive/</code> for you.</span></div></li>
+    <li><div><strong>Tell the next person</strong><span>Send a link to the folder — never the file.</span></div></li>
+    <li class="last"><div><strong>Then delete your device copy</strong><span>Once they confirm they have it. The app will not do this for you.</span></div></li>
   </ol>
   <div class="callout warn">
-    <b>Step 5 is the one people skip.</b>
-    Keeping your copy “just in case” is how one job ends up being edited in two places, with nobody sure which version the client was quoted from.
+    <b>The last step is the one people skip.</b>
+    Keeping your copy “just in case” is how one job ends up being edited in two places, with nobody sure which version the client was quoted from. Your work is backed up to <code>wip/</code> automatically, so there is nothing to keep it for.
+  </div>
+  <div class="callout">
+    <b>Picking a job up.</b>
+    On the home screen, tap <b>Take over an inspection from SharePoint</b>. It lists everything waiting in a <code>current/</code> folder. Nobody has to send you anything.
+  </div>
+  <div class="callout">
+    <b>No signal?</b>
+    Both buttons marked <b>offline fallback</b> still work the old way — and then the filing into <code>current/</code> and <code>archive/</code> is yours to do by hand once you are back in range.
   </div>
 
   <div class="exercise">
@@ -154,7 +165,7 @@
 </section>
 
 <section>
-  <h2><span class="n">04</span> Photos — new in v1.3</h2>
+  <h2><span class="n">04</span> Photos</h2>
   <p>Photos used to travel only inside the draft and the report, which meant the full-quality originals lived nowhere but your device. Now they upload to SharePoint on their own.</p>
   <div class="callout">
     <b>Take photos in the Camera app, then attach them.</b>
@@ -174,7 +185,8 @@
   <p class="tight">One folder per inspection, holding all of it:</p>
   <p class="tight"><code>Site Inspections ▸ INS-2026-0142 - Smith - 12 Marine Pde, Kirra/</code></p>
   <ol class="steps" style="margin-top:10px">
-    <li><div><strong><code>current/</code></strong><span>One file, ever. The live record.</span></div></li>
+    <li><div><strong><code>current/</code></strong><span>One file, ever. The live record — the baton.</span></div></li>
+    <li><div><strong><code>wip/</code></strong><span>Automatic backups while you work. <b>Never the baton.</b> Only for recovering a lost device.</span></div></li>
     <li><div><strong><code>archive/</code></strong><span>Every past handover, in order.</span></div></li>
     <li><div><strong><code>photos/</code></strong><span>The app puts these here by itself. You never choose a location.</span></div></li>
   </ol>
@@ -208,7 +220,7 @@
 </section>
 
 <footer>
-  Dryspace Site Inspection App v1.3 · Form 4.2 — companion to 03_Handover and Version Control Protocol.
+  Dryspace Site Inspection App v1.4 · Form 4.2 — companion to 03_Handover and Version Control Protocol.
   Keep the two quick cards where you work: one in the vehicle, one at the desk.
 </footer>
 
@@ -220,10 +232,9 @@
 /* ---------- ordering exercise ---------- */
 var ORDER = [
   {id:1, t:'Set your stage and your name'},
-  {id:2, t:'Tap “Share draft”'},
-  {id:3, t:'Upload it into current/'},
-  {id:4, t:'Move the previous file into archive/'},
-  {id:5, t:'Delete your device copy'}
+  {id:2, t:'Tap “Hand over through SharePoint”'},
+  {id:3, t:'Tell the next person, with a link to the folder'},
+  {id:4, t:'Delete your device copy'}
 ];
 var shuffled = ORDER.slice().sort(function(a,b){ return a.t.localeCompare(b.t); });
 var picked = [];
@@ -280,12 +291,28 @@ var QS = [
    why:'The app does not sync. One file is live; your device copy is a scratch pad.'},
 
   {q:'When do you delete your copy from your device?',
-   a:['As soon as you have exported it',
-      'Only after it is uploaded to current/ and the old file is archived',
+   a:['As soon as you have tapped Hand over',
+      'Once the handover has gone through and the next person confirms they have it',
       'Never — always keep a copy in case',
       'When the office tells you the job is closed'],
    c:1,
-   why:'Steps 3 and 4 first. Deleting early risks losing work; never deleting creates two live copies.'},
+   why:'The app files it for you, but wait for the confirmation. Never deleting is what creates two live copies.'},
+
+  {q:'The app says somebody else has handed this inspection over since you picked it up. What has happened?',
+   a:['Your work has been lost',
+      'Two people have been working the same job, and continuing will replace their version',
+      'The app has made a mistake — carry on',
+      'You have been signed out'],
+   c:1,
+   why:'Their file goes to archive/ rather than being deleted, but it stops being the live record. Talk to them before continuing.'},
+
+  {q:'What is the wip/ folder for?',
+   a:['It is the live record — the same as current/',
+      'Automatic backups of work in progress, in case a device is lost',
+      'Photos that failed to upload',
+      'Finished inspections waiting to be invoiced'],
+   c:1,
+   why:'A working copy, never the baton. The live record is always the file in current/.'},
 
   {q:'Where should you take site photos?',
    a:['Inside the form, using its camera',

@@ -34,13 +34,16 @@ reintroduces a known bug.
 Source of truth is the repository working folder:
 
 ```
-01_Contact to Contract\Dryspace Inspection App v1.3\
-    index.html              the app — form content, record layer, UI
-    ds-media-sync.js        renditions, naming, upload queue, state machine
-    ds-sharepoint.js        Microsoft Graph transport
-    ds-auth.js              OAuth 2.0 PKCE sign-in
+01_Contact to Contract\Dryspace Inspection App v1.4\
+    index.html              the app — form content, record layer, UI, handover
+    ds-media-sync.js        renditions, naming, upload queue, state machine,
+                            interrupted-upload recovery, readability pre-flight
+    ds-sharepoint.js        Microsoft Graph transport — upload/verify, and from
+                            v1.4 list/download/move/putSmall, all with deadlines
+    ds-auth.js              OAuth 2.0 PKCE sign-in, with its own request deadline
     sw.js                   offline caching + update detection
-    tests.html              237 assertions — run before and after any change
+    tests.html              366 assertions — run before and after any change
+    diagnostics.html        run on a failing device; names the failing hypothesis
     manifest.webmanifest, icons
 ```
 
@@ -147,7 +150,15 @@ Anything unmatched is preserved under an `unmapped:` prefix rather than discarde
 > orphaned on the next autosave.
 
 The record `schema` number tracks this: 1 is label-keyed, 2 introduced field ids,
-3 applied the BS8102:2022 grade remap. Bump it whenever a migration step is added.
+3 applied the BS8102:2022 grade remap, 4 added the baton pointer for handover
+through SharePoint. Bump it whenever a migration step is added.
+
+> **`ensureSchema()` owns that number and nothing else may set it.** `saveNow()`
+> once pinned `cur.schema` to a literal, which was harmless until the schema moved
+> — after which every record migrated correctly on load and was written straight
+> back at the old number, silently, on every save. Found by accident in v1.4. If
+> you add a migration step, grep for the number you are leaving behind before you
+> trust it.
 
 ---
 
@@ -257,3 +268,13 @@ unchanged — the form is the only part that genuinely differs.
 ### Done since this list was last written
 
 - ~~Direct SharePoint upload via Microsoft Graph~~ — built in v1.3.
+- ~~The record itself moving through SharePoint~~ — built in v1.4. The share sheet
+  survives only as the offline fallback.
+- ~~Automatic backup of in-progress work~~ — built in v1.4, to `wip/`.
+- **Resume a broken upload from where it stopped.** The transport creates a fresh
+  upload session on every attempt, so a failed 5 MB photo restarts from byte 0.
+  Persisting the session URL on the record would fix it, but it changes what the
+  record stores, so it belongs with a schema move rather than on its own.
+- **Clear out old `wip/` files.** Nothing deletes them, by design — the app never
+  deletes from SharePoint. They accumulate one per device per inspection. Harmless
+  but untidy; a retention job or a manual sweep at close-out.

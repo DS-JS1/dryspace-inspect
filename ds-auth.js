@@ -20,6 +20,40 @@ var LOGIN = 'https://login.microsoftonline.com/';
    and a large photo can be in flight for minutes on a weak connection. */
 var SKEW_MS = 5 * 60 * 1000;
 
+/* A token request with no deadline cannot fail — it can only hang, and it hangs
+   *before* the upload it was fetched for, so the transport's own deadline never
+   gets a chance to fire. That makes this the earliest silent stall in the chain
+   and the one hardest to see, because nothing has visibly started yet. */
+var TOKEN_TIMEOUT_MS = 30000;
+
+function timedOutError(ms){
+  var e = new Error('sign-in server did not respond within ' + Math.round(ms / 1000) + 's');
+  e.timedOut = true;
+  e.offline = true;      /* temporary by nature — not a reason to sign out */
+  return e;
+}
+
+/* Kept local rather than shared with the transport: each module here is
+   standalone by design, and one small copy costs less than a dependency between
+   sign-in and storage. */
+function fetchWithTimeout(doFetch, url, init, ms){
+  init = init || {};
+  if(!ms || typeof global.AbortController !== 'function') return doFetch(url, init);
+  var ctl = new global.AbortController();
+  init.signal = ctl.signal;
+  var timer = null;
+  function done(){ if(timer !== null){ global.clearTimeout(timer); timer = null; } }
+  return new Promise(function(resolve, reject){
+    timer = global.setTimeout(function(){
+      timer = null;
+      try { ctl.abort(); } catch(e){}
+      reject(timedOutError(ms));
+    }, ms);
+    doFetch(url, init).then(resolve, reject);
+  }).then(function(res){ done(); return res; },
+          function(err){ done(); throw err; });
+}
+
 function b64url(bytes){
   var s = '';
   var b = new Uint8Array(bytes);
@@ -47,6 +81,8 @@ DSAuth.form = function(obj){
     .join('&');
 };
 
+DSAuth.TOKEN_TIMEOUT_MS = TOKEN_TIMEOUT_MS;
+
 DSAuth.create = function(cfg){
   cfg = cfg || {};
   var clientId = cfg.clientId, tenantId = cfg.tenantId;
@@ -55,6 +91,7 @@ DSAuth.create = function(cfg){
   var doFetch = cfg.fetchImpl || (global.fetch && global.fetch.bind(global));
   var store = cfg.storage || global.localStorage;
   var now = cfg.now || function(){ return Date.now(); };
+  var timeoutMs = cfg.timeoutMs === undefined ? TOKEN_TIMEOUT_MS : cfg.timeoutMs;
   var KEY = 'ds-auth-' + (clientId || 'x');
   var PEND = KEY + '-pending';
 
@@ -68,11 +105,11 @@ DSAuth.create = function(cfg){
   function authority(){ return LOGIN + tenantId + '/oauth2/v2.0/'; }
 
   function tokenRequest(body){
-    return doFetch(authority() + 'token', {
+    return fetchWithTimeout(doFetch, authority() + 'token', {
       method: 'POST',
       headers: {'Content-Type': 'application/x-www-form-urlencoded'},
       body: DSAuth.form(body)
-    }).then(function(res){
+    }, timeoutMs).then(function(res){
       return res.json().catch(function(){ return {}; }).then(function(j){
         if(!res.ok){
           var e = new Error('sign-in failed: ' + (j.error_description || j.error || res.status));
@@ -83,6 +120,10 @@ DSAuth.create = function(cfg){
         return j;
       });
     }, function(netErr){
+      /* A deadline is already the right shape of error — rewrapping it would
+         lose .timedOut and with it the only clue that says "the server never
+         answered" rather than "there is no connection". */
+      if(netErr && netErr.timedOut) throw netErr;
       var e = new Error('network: ' + ((netErr && netErr.message) || netErr));
       e.offline = true;
       throw e;

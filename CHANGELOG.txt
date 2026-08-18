@@ -318,3 +318,337 @@ DEPLOYED — 17 August 2026
   moved, and that the three new modules return 200.
 - Devices still on v1.1.1 have no update banner and must be fully closed and
   reopened once. Every release after this announces itself.
+
+
+v1.3.1 — 18 August 2026
+Batch 0 of the v1.4 plan. Two upload faults found by field testing on iPhone and
+iPad, fixed and shipped on their own rather than held behind the architecture
+work. Nothing about how a photo is captured, named or stored has changed.
+
+Interrupted uploads no longer strand a photo (B5)
+- An upload killed by the app being closed, backgrounded or reloaded left its
+  record in the 'uploading' state for good. Nothing counted it: pendingUploads()
+  did not, and neither did the queue. The photo silently never uploaded, the
+  "Upload now" button disappeared, and nothing on screen said why. This is the
+  cause of "the Upload now button disappears and I cannot get it back".
+- DSMedia.recoverInterrupted() now returns every such record to 'queued' at
+  start-up, before the queue is built, so nothing can be draining while stranded
+  records are moved. After a reload nothing can still be in flight, so a record
+  found in 'uploading' was interrupted by definition.
+- 'uploading' -> 'queued' is deliberately still illegal in the transition table.
+  Widening it would legalise a record moving backwards mid-drain, which would
+  mean two attempts against one file. Recovery bypasses the table instead, and
+  says so.
+- A file that has already used its attempts is marked failed and flagged for
+  attention rather than returned to a queue that would skip it — that would be
+  the same invisibility by another route.
+
+Requests now have a deadline, and failures are readable (B6)
+- Nothing in the Graph transport could time out. A hung request left the app on
+  "Uploading…" indefinitely, with nothing to read and no way out.
+- Every request now carries an abort deadline: 60s for metadata, folder creation
+  and verification, 180s for an upload. The chunked-upload PUT gets its own,
+  because it bypasses call() and is the request most likely to stall on a phone.
+- A timeout is classified as temporary, so the queue retries it rather than
+  holding the file back as permanently broken.
+- The sync bar now lists every file that has not landed yet, with its state,
+  upload percentage while in flight, and the actual reason when one fails. A
+  stalled upload was previously indistinguishable from a slow one.
+- "Upload stopped" now names the file it stopped on and, for a timeout, says the
+  connection stalled rather than reporting a bare error string.
+
+Also
+- Guides regenerated as v1.3.1; superseded v1.3.0 PDFs removed. Field id
+  manifest reissued for the new version — the field set itself is unchanged.
+- Training/ was not reviewed. The per-file status panel is a visible change and
+  would normally force that review, but this build is development-only and the
+  training pack updates as a set at v1.4. Recorded as D28 in the decision log.
+
+
+v1.3.2 — 18 August 2026
+Batch 1 of the v1.4 plan, in the only form possible without the failing device:
+the four hypotheses in the plan's §3 were hunted by reading rather than by
+reproduction, and a diagnostic was built so the device can answer the question
+itself. Three independent ways for an upload to hang for ever were found and
+closed. NONE OF THEM IS CONFIRMED AS THE MOBILE FAULT — each is a real defect
+that could produce the reported symptom, and the real cause is still unproven.
+
+The chunked upload could livelock (hypothesis 1)
+- Graph answers a chunk it did not commit with a 202 whose nextExpectedRanges
+  points back at bytes already sent. The loop obeyed that answer without
+  checking whether it advanced, so the file could be re-sent for ever: every
+  request succeeding well inside its deadline, the file never finishing, the app
+  showing "Uploading…" indefinitely.
+- This is exactly the class of fault the plan predicted for this path, and it
+  survived every test because a fake transport always advances.
+- Now: progress is required. Re-sending a chunk once or twice is legitimate;
+  three non-advancing answers stops the attempt with the byte offset in the
+  message. It is retryable, because a new attempt opens a new session, which is
+  the actual remedy.
+- Also added a whole-file deadline (15 minutes). Per-chunk deadlines cannot
+  bound a session that keeps answering promptly but never gets anywhere.
+
+The token request had no deadline, and sat outside the one added in v1.3.1
+- getToken() is awaited before a request is issued, so it was outside the
+  request deadline added in v1.3.1. A sign-in server that never answered hung
+  the upload before anything was sent — the earliest and least visible stall in
+  the chain, and a hole in the v1.3.1 fix.
+- ds-auth.js now has its own 30s deadline on token requests, and the transport
+  has a backstop for any token source that does not.
+- A timed-out refresh is temporary: the device is NOT signed out and the refresh
+  token is NOT discarded. Only a rejection from the server does that.
+
+Stored files are read before they are sent (hypothesis 2)
+- Safari can return a blob from IndexedDB that stored fine and reads back
+  broken. Handed to fetch() as a request body, a stall there is invisible to any
+  deadline waiting on a response.
+- DSMedia.verifyReadable() now reads a 64 KB slice, and checks the size against
+  what the record expects, before the upload starts. An unreadable file fails by
+  name and is held for attention — retrying cannot restore a lost blob, and the
+  only real remedy is to retake the photo.
+- A read that merely times out is treated as temporary instead.
+
+Hypothesis 4 ruled out by reading
+- crypto.subtle is already guarded: sha256Hex() returns null when it is absent
+  and catches its own failures. A non-secure context cannot hang capture. This
+  hypothesis can be struck off without a device.
+
+New: diagnostics.html
+- Run it on the device that fails. It reports the environment, reads every
+  stored photo back, times getToken() and can force the refresh path, resolves
+  the library, and uploads a file you pick from the camera roll through the real
+  chunked path — with a timed trace of every Graph request.
+- It names the hypothesis when one is confirmed.
+- It loads the app in an iframe rather than copying its configuration, for the
+  same reason the test suite does (D22).
+- It uploads to _diagnostics/ and deletes nothing, because staff accounts may be
+  Contribute - No Delete.
+- Running it unregisters the service worker for the site. The page says so.
+
+Tests
+- 307 assertions, up from 284. The new ones prove the livelock is detected and
+  bounded, the whole-file deadline fires, a hung token no longer hangs an
+  upload, a device stays signed in through a token timeout, and an unreadable
+  file is never sent.
+
+
+v1.4.0 — 18 August 2026
+The architectural change: the record now travels the same road as the photos,
+and in-progress work is backed up without anyone having to remember to do it.
+Batches 2 and 3 of the v1.4 plan.
+
+A MAJOR release by §1 of the Release Protocol — the record schema moved 3 -> 4
+and the record has a new storage target. Numbered 1.4.0 rather than 2.0.0 on the
+owner's decision: the form, the field ids, the photos and the workflow are all
+unchanged, and every planning document already calls this work v1.4.
+
+The baton moves through SharePoint (B7, B8)
+- "Hand over through SharePoint" uploads the record to the inspection's current/
+  folder and moves the previous file into archive/. Steps 3 and 4 of the handover
+  ritual, which were manual and on a phone were impossible.
+- "Take over an inspection from SharePoint" lists every inspection with a file
+  waiting in current/ and brings the chosen one down. The baton could previously
+  be put down but not picked up.
+- The share sheet survives as an explicitly labelled offline fallback, on both
+  sides. It is the right tool with no signal and the wrong one otherwise.
+- Photos are not embedded in a draft that goes through SharePoint — they are
+  already in photos/ beside it. The offline fallback still embeds them, because
+  there the draft is all the receiver gets.
+
+Two devices holding one inspection
+- The record now carries a baton pointer: the identity and eTag of the current/
+  file this device last agreed with. Schema 3 -> 4, with a migration.
+- On handover the app compares it with what is actually in current/. If someone
+  else has handed over in the meantime it names them, says when, and asks. It
+  never silently overwrites.
+- Two files in current/ is refused outright and sent to Handover Protocol §8.
+  Which one is the baton is not a decision software should make.
+- The pointer is written the moment the upload lands, before the archive move is
+  attempted — so a device that hits a permissions error on the move does not
+  then believe someone else has handed over.
+
+Order of operations, chosen deliberately
+- Upload the new file BEFORE archiving the old one. Archiving first would leave
+  current/ empty if the upload then failed, and the protocol has no procedure for
+  an empty current/ — it reads as lost data to whoever opens the folder. Two
+  files in current/ is also wrong, but §8 already says exactly what to do about
+  it, and the filenames carry timestamps so the newer is obvious. Fail into the
+  error the protocol knows how to handle.
+
+Transport
+- list, download, move and putSmall added to ds-sharepoint.js. All carry the
+  deadlines added in v1.3.1/v1.3.2.
+- A move is a re-parent, so the item id survives and links already handed out
+  still resolve (D9). It is also not a delete, which matters where field accounts
+  are Contribute - No Delete.
+- A folder that does not exist yet lists as empty rather than throwing. An
+  inspection nobody has handed over has an empty in-tray, not a fault.
+- A draft is tens of kilobytes and goes by simple PUT, not a chunked session.
+
+Documentation
+- 03_Handover and Version Control Protocol §4 rewritten: the ritual is now four
+  steps, with the manual version kept as the no-signal path.
+
+Tests
+- 335 assertions, up from 308. The four handover scenarios were also driven
+  end to end against a stubbed transport in the running app: empty current/,
+  a clean handover with archiving, a second device detected and cancelled,
+  two files refused, and an archive move failing after a successful upload.
+
+
+Batch 3 — automatic backup of work in progress
+Until now an in-progress inspection existed only on one device until somebody
+deliberately handed it over. A lost phone lost a day's work with no copy
+anywhere. That was the largest remaining data risk in the system.
+
+- The app now quietly uploads the current record to the inspection's wip/ folder
+  every four minutes while editing, and once on leaving the form.
+- "Recover work in progress" on the home screen lists what has been backed up
+  and brings a copy down. A backup nobody can restore from is not a backup.
+
+It writes to wip/, not current/
+- The v1.4 plan left this genuinely open. What settles it is mechanical rather
+  than philosophical: every backup changes the file's eTag, and the eTag in
+  current/ is exactly what a handover uses to tell "nobody has touched this"
+  from "somebody else has handed over" (D35). Backing up into current/ would
+  make that warning fire on the owner's own saves — constantly, and therefore
+  ignored.
+- It also keeps the protocol's promise that current/ changes only at a
+  deliberate handover.
+
+Two devices on one inspection — the plan's second open question
+- One backup file per DEVICE, not per person: a person may carry two, and
+  per-device naming means two devices working the same inspection cannot
+  overwrite each other's backup. Answered by the naming rather than by locking.
+
+A working copy is not the baton, and says so everywhere
+- Its own docType, so the baton import will not accept it.
+- Its own folder, which nothing listing the baton looks in.
+- Its own control, worded to send you to the handover path if that is what you
+  actually wanted.
+- Recovering one clears the baton pointer, because this device has not agreed
+  with anything in current/ — so the next handover will say so and ask.
+
+It never gets in the way
+- Silent in every failure case: signed out, offline, photos using the
+  connection, or nothing identifying the record yet. A failed backup is not an
+  inspector's problem to solve mid-inspection, and saying so would train them to
+  ignore real warnings.
+- Leaving the form does not wait on it.
+
+Fixed: saving undid the migration
+- saveNow() pinned cur.schema to a literal 3. The moment the schema moved to 4,
+  every record would migrate on load and be written straight back as 3 — for
+  ever, silently, undoing the migration that had just run. Found while wiring
+  the backup. ensureSchema() now owns that number and saveNow only preserves it.
+
+Tests
+- 356 assertions, up from 335. The harness also gained a queue for assertions
+  that resolve later: test() is synchronous, so anything asserted inside a
+  .then() was landing after the summary had been printed, and a late failure
+  nobody counts is worse than no test.
+
+
+Batch 4 — the small items and the document set
+The send and share buttons moved to the top of the form
+- They sat below every section, so handing over meant scrolling past the whole
+  form to reach them — on a phone, past eleven sections. They now sit directly
+  under the stage and name they depend on. The foot of the form keeps a single
+  "Back to the top" control.
+
+"No files" was doing two jobs, and that is what looked like a fault
+- The plan asked to verify the "old inspections showing no Upload button" report
+  before fixing anything. Verified by reading: there is no per-inspection Upload
+  button at all — the control is global, in the sync bar, and appears only when
+  something is actually waiting. So its absence was correct.
+- The real fault was the wording. A card saying "no files" meant both "this
+  inspection never had photos" and "they are all uploaded and reclaimed", which
+  are very different things to read on an old record you believe had photos.
+- Cards now say "no files on this device", or "3 files - all uploaded", or
+  "3 files - 1 waiting to upload", or "- 1 needs attention".
+- Note this was NOT B5. A record stranded in 'uploading' is still counted, so
+  such a card would have read "1 file", never "no files".
+
+Documentation — the major-tier set
+- 01_Setup and User Guide: new Part A section for v1.4, office and field
+  workflows rewritten, known limits rewritten and made honest about what the
+  automatic backup is not.
+- 04_Project Context Brief: current version, the handover rule, the folder
+  diagram including wip/, and the version history.
+- 02_Iteration Guide: file map, schema history through 4, and a warning about
+  the pinned-literal bug. Parked-ideas list gained resumable uploads and wip/
+  retention.
+- Training pack, reviewed as a set: module (handover section, the ordering
+  exercise, three new quiz questions, folder list), workflow chart, both quick
+  cards, onboarding emails, and the pack README.
+- Guides and quick cards regenerated at v1.4.0; every v1.3 PDF removed.
+
+Not done, and deliberately visible
+- Setup_and_Use_Presentation.pptx has NOT been updated for v1.4 — it is the only
+  item in the training pack not generated from source. Its exported v1.3.0 PDF
+  has been DELETED rather than left to be handed out, because a deck teaching a
+  handover the app no longer performs is worse than no deck. The .pptx source is
+  untouched. The pack README says so at the top of its file list.
+
+Tests
+- 366 assertions, up from 356. The new ones prove the actions sit above the form
+  rather than below it, that there is exactly one handover control and one status
+  line, and that the home card distinguishes the two kinds of "no files".
+
+docs/FIELD-APP-TEMPLATE.md brought up to v1.4
+This is the specification four unbuilt apps will be built from, so v1.4's
+architecture had to reach it or the siblings inherit v1.3's limitation.
+
+- The transport is now described as a storage interface of six functions, not
+  an uploader of two. The note explains WHY it grew: an upload-only transport
+  works until somebody tries to hand a record on from a phone, where the share
+  sheet has no route to a document library at all.
+- New section 8, "How a deferred queue hangs, and what stops it" — the four
+  distinct hang shapes found in a live build, each needing its own guard, none
+  of which catches the others. Including the one that is a trap rather than an
+  oversight: a deadline on the visible call is not a deadline on the operation,
+  because getToken() runs before it.
+- New section 10, "Moving the record between people" — the baton pointer, the
+  three folders and why wip/ is separate from current/, and the reasoning for
+  detecting conflicts by pointer rather than timestamp (field clocks are not
+  reliable, and "mine is newer" silently picks a winner).
+- Storage layout now shows current/, archive/, wip/ and photos/.
+- Two new questions in the build checklist, both expensive to answer late: does
+  the record move between people, and what happens if a device is lost mid-job.
+- Seven new entries in "decisions already settled", the schema-pinning trap in
+  the record layer, adversarial testing in the testing section, and honest
+  known limits about what the backup is not.
+- The "move this document" note sharpened: this is now imminent rather than
+  hypothetical, and should happen as part of the v1.3 -> Superseded restructure
+  rather than after it.
+
+Sections renumbered 1-17. All internal cross-references checked.
+
+Library columns are refreshed at handover, not only on photo upload
+- tagFolder() had one call site: inside a photo upload. An inspection whose
+  stage or inspector was filled in after its last photo kept stale columns for
+  ever, and one with no photos was never indexed at all. Since the folder list
+  IS the index (D23), that quietly defeated it.
+- The handover now refreshes them too, which is the right second place: the
+  record has just changed hands, so the stage and editor are new.
+- transport.setFields is exposed for it, deliberately bypassing the
+  once-per-batch cache tagFolder() uses.
+- Failure stays swallowed, per D24 — the columns are a convenience, the
+  handover is the job.
+
+diagnostics.html no longer hangs when opened from the wrong place
+- Opened from SharePoint it sat on "Loading the app..." for ever: the iframe
+  fired neither load nor error, and the boot had no deadline. That is exactly
+  the failure shape the page exists to find.
+- Now: a 15s boot deadline, an immediate file:// check, a guarded cross-origin
+  read, and messages naming the likely cause and printing the address the page
+  is actually running at.
+- The instructions now say plainly that it must be opened from the app's own
+  https:// address, and that this has nothing to do with an email address.
+  The old wording said "the same address you normally use", which was read as
+  an email address — fairly.
+
+Two test folders deleted from SharePoint
+- 'Tom Kelly - 57 Newmarket Rd, Windsor QLD' and '999-Test Inspect - Client Test
+  Name - 999 Test address, Test Town', both with empty photos/ folders. In the
+  site recycle bin for 93 days. The library is now empty.

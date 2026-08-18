@@ -1,5 +1,5 @@
 DRYSPACE — SITE INSPECTION APP TRAINING PACK
-Version 2.0 · App v1.3 · Form 4.2
+Version 2.1 · App v1.4 · Form 4.2
 Companion to 03_Handover and Version Control Protocol
 
 Replaces the v1.2.1 training pack. That pack is superseded and should not be
@@ -32,7 +32,10 @@ Setup_and_Use_Presentation.pptx
                            This is the EDITABLE SOURCE — a deck has no plain-text
                            original, so the .pptx is what you change.
 
-Setup_and_Use_Presentation_v1.3.0.pdf
+Setup_and_Use_Presentation.pptx         ** NOT UPDATED FOR v1.4 — see below **
+                                        The exported v1.3.0 PDF has been removed
+                                        rather than left to be handed out: it
+                                        teaches the old five-step handover.
                            Generated from the .pptx for sending and printing. Do
                            not edit it. Regenerate and rename on each release,
                            the same as the guides.
@@ -61,7 +64,40 @@ Background graphics ON matters. Without it the navy headers and the coloured
 panels print as empty white boxes.
 
 
-WHAT CHANGED IN v1.3 — READ THIS BEFORE RETRAINING ANYONE
+WHAT CHANGED IN v1.4 — READ THIS BEFORE RETRAINING ANYONE
+---------------------------------------------------------------------------
+1. The handover is FOUR steps now, not five.
+   The app files the record into current/ and moves the old one to archive/
+   itself. Anyone trained on v1.3 needs the handover card again — this is the
+   change most likely to be done the old way out of habit.
+
+2. An inspection can be picked UP from SharePoint, not just put down.
+   "Take over an inspection from SharePoint" on the home screen. On a phone this
+   was not possible at all before, which is why field staff were being emailed
+   files.
+
+3. Work in progress is backed up automatically, to a wip/ folder.
+   A lost or broken device no longer means a lost day. Stress in training that
+   wip/ is NEVER the baton — the live record is always the file in current/.
+
+4. The app warns if two people have worked the same inspection.
+   It names who and when and asks before continuing. It archives their version
+   rather than deleting it.
+
+5. The buttons moved to the top of the form.
+
+NOTE: Setup_and_Use_Presentation.pptx has NOT been updated for v1.4. It is the
+one item in this pack still describing the old five-step handover, and it is the
+only item not generated from source by tools/make_guides.py.
+
+Its exported PDF (Setup_and_Use_Presentation_v1.3.0.pdf) has been DELETED rather
+than left in place. A slide deck teaching a handover the app no longer performs
+is worse than no deck at all, and a versioned filename only makes staleness
+visible to somebody who thinks to check. The .pptx source is untouched — update
+it and re-export before the next training session.
+
+
+WHAT CHANGED IN v1.3
 ---------------------------------------------------------------------------
 1. Photos now upload to SharePoint by themselves.
    Previously photos only travelled inside the draft file and the report. Now

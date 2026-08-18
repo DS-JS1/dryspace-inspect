@@ -94,21 +94,56 @@ stage — without opening anything.
 
 ## 4. The handover ritual
 
-Five steps, in this order, every time. **The order matters** — the last step is
+Four steps, in this order, every time. **The order matters** — the last step is
 what actually stops forks.
+
+> **Changed in v1.4.** Steps 3 and 4 used to be done by hand, and on a phone they
+> could not be done at all — the share sheet offered WhatsApp and Mail and no way
+> to reach SharePoint. The app now does both itself. What follows is the ritual as
+> it now stands; the manual version is kept below it, because it is still what you
+> do when you have no signal.
 
 1. **Set your stage and name.** At the top of the inspection, choose the Current
    stage and type your name. This is what stamps the filename and the audit trail.
-2. **Export.** Tap *Share draft (handover to field team)* at the foot of the form.
-3. **Upload to `current/`.** Put the new file into the inspection's `current/` folder.
-4. **Move the previous file to `archive/`.** Immediately, so `current/` holds
-   exactly one file again.
-5. **Delete your device copy.** Only after steps 3 and 4. Then tell the next
-   person, with a link to the folder — not the file.
+2. **Tap *Hand over through SharePoint*** at the foot of the form. The app
+   uploads the record to this inspection's `current/` folder and moves the
+   previous file into `archive/` — old steps 3 and 4, in that order, without you.
+3. **Tell the next person**, with a link to the folder — not the file.
+4. **Delete your device copy**, once they confirm they have it.
 
-> **Do not skip step 5.** Leaving your copy on the device is how the same
-> inspection ends up being edited in two places. If you are worried about losing
-> work, that is what `archive/` is for.
+**The app will stop you** rather than guess, in two cases:
+
+- **`current/` already holds two files.** It refuses and sends you to §8. Which
+  of the two is the baton is not something software should decide.
+- **Somebody else has handed over since you picked this up.** It says who and
+  when, and asks. Continuing archives their file rather than deleting it, so
+  their work is still recoverable — but it stops being the live record.
+
+> **Do not skip the last step.** Leaving your copy on the device is how the same
+> inspection ends up being edited in two places. The app does not delete it for
+> you: deleting somebody's only copy of a day's work on their behalf is not a
+> thing it should do. If you are worried about losing work, that is what
+> `archive/` is for.
+
+### Picking the baton up
+
+**Tap *Take over an inspection from SharePoint*** on the home screen. It lists
+every inspection with a file waiting in `current/` and brings the one you choose
+onto your device. Nobody has to send you anything.
+
+Photos already uploaded stay in SharePoint. They are not copied down, because
+they are already beside the record in `photos/`.
+
+### When you have no signal
+
+Both paths still exist and are labelled *offline fallback*:
+
+- *Share draft (offline fallback)* exports the file to the share sheet, photos
+  embedded, exactly as before.
+- *Import from a file (offline fallback)* takes one back in.
+
+If you use these, **old steps 3 and 4 are yours again** — put the file in
+`current/` and move the previous one to `archive/` as soon as you have signal.
 
 **Before you hand over, check the photos have uploaded.** The home screen says
 either how many files are waiting or *"All photos uploaded"*. Handing on a record

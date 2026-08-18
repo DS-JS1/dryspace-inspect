@@ -97,11 +97,11 @@ minutes, and probably worth more than both cards.
 Jamie
 
 **Attach:**
-- `Training/Quick_Card_Photos_v1.3.0.pdf`
-- `Training/Quick_Card_Handover_v1.3.0.pdf`
+- `Training/Quick_Card_Photos_v1.4.0.pdf`
+- `Training/Quick_Card_Handover_v1.4.0.pdf`
 
 *(Or link them — both are live:
-https://ds-js1.github.io/dryspace-inspect/Training/Quick_Card_Photos_v1.3.0.pdf)*
+https://ds-js1.github.io/dryspace-inspect/Training/Quick_Card_Photos_v1.4.0.pdf)*
 
 ---
 
@@ -122,6 +122,12 @@ it for the first time.
 
 ## When the version changes
 
-Update the version numbers in the card filenames above. Everything else stays
-true — the install steps, the links and the photo workflow have not changed since
-v1.3 and are not expected to.
+Update the version numbers in the card filenames above. The install steps, the
+links and the photo workflow have not changed since v1.3.
+
+**What v1.4 changed, if you are re-sending these to somebody already trained:**
+the handover is now four steps rather than five, because the app files the record
+into `current/` and `archive/` itself — and it can be picked up from SharePoint as
+well as put down, which on a phone was not possible at all before. Work in
+progress is also backed up automatically now. Both quick cards and the training
+module cover it; anyone trained on v1.3 needs the handover card again.
