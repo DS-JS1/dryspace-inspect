@@ -95,9 +95,17 @@ input[type=file]{font:inherit;font-size:13px;margin:6px 0}
   <p class="note">
     The decisive test. Anything over 4&nbsp;MB goes through
     <code>createUploadSession</code>, and that path has only ever run against a
-    fake transport. <strong>Pick a real photo from the camera roll</strong> — a
-    HEIC burst if you have one. Leave it empty to use a synthetic 5&nbsp;MB file
-    instead, which proves the path but not the file type.
+    fake transport.
+    <br><br>
+    <strong>Pick something over 5&nbsp;MB — a short video is ideal.</strong> Chunks
+    are 5&nbsp;MiB, so a file under that is sent as a single chunk and never
+    exercises the part where a session can stall between chunks. A 10–20 second
+    phone video is 20–50&nbsp;MB and gives four to ten chunks, which is the real
+    test. A typical still photo is 2–4&nbsp;MB and will take the simple path
+    instead, proving nothing about this hypothesis.
+    <br><br>
+    Leave it empty to use a synthetic 5&nbsp;MB file, which reaches the session
+    path but only just.
   </p>
   <label class="file"><input type="file" id="pick" accept="image/*,video/*"></label><br>
   <button id="btn-upload" class="primary">Run the upload test</button>
@@ -353,11 +361,15 @@ function runUpload(){
   }
   line('upload', 'File under test', label);
   line('upload', 'Path Graph will take',
-       blob.size > DSSharePoint.SIMPLE_MAX
-         ? 'chunked session — this is the untested one'
-         : 'simple PUT — under 4 MB, pick a larger file to test the session path',
-       blob.size > DSSharePoint.SIMPLE_MAX ? 'warn' : 'bad');
+       usedSession
+         ? (blob.size > 5 * 1024 * 1024
+              ? 'chunked session, multiple chunks — the untested path, properly exercised'
+              : 'chunked session, a single chunk — better than nothing, but one chunk '
+                + 'cannot stall between chunks')
+         : 'simple PUT — under 4 MB. This does NOT test the chunked path.',
+       usedSession ? (blob.size > 5 * 1024 * 1024 ? 'ok' : 'warn') : 'bad');
 
+  var usedSession = blob.size > DSSharePoint.SIMPLE_MAX;
   var t = makeTransport();
   var stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   var rec = {mid: 'diag', original: blob, origSize: blob.size};
@@ -390,10 +402,29 @@ function runUpload(){
       line('upload', 'Stored size matches',
            match ? fresh.size + ' bytes' : 'NO — stored ' + fresh.size + ', sent ' + blob.size,
            match ? 'ok' : 'bad');
-      line('upload', 'RESULT',
-           match ? 'the chunked path works on this device — hypothesis 1 ruled out'
-                 : 'the file uploaded but was truncated',
-           match ? 'ok' : 'bad');
+      /* This line previously claimed the chunked path worked no matter which
+         path had run, which is how a 2.71 MB photo "ruled out" a hypothesis it
+         never touched. A verdict that does not check what it is reporting on is
+         worse than no verdict. */
+      var verdict, cls;
+      if(!match){
+        verdict = 'the file uploaded but was truncated';
+        cls = 'bad';
+      } else if(!usedSession){
+        verdict = 'the SIMPLE path works — but this file was under 4 MB, so the ' +
+                  'chunked path was NOT tested. Hypothesis 1 is still open.';
+        cls = 'warn';
+      } else if(chunk <= 1){
+        verdict = 'the chunked path works for a single-chunk file. Try something ' +
+                  'over 5 MB to exercise more than one chunk, which is where a ' +
+                  'session can stall.';
+        cls = 'warn';
+      } else {
+        verdict = 'the chunked path works across ' + chunk + ' chunks on this ' +
+                  'device — hypothesis 1 ruled out';
+        cls = 'ok';
+      }
+      line('upload', 'RESULT', verdict, cls);
       line('upload', 'Left in SharePoint', '_diagnostics/' + meta.name, 'warn');
     });
   }).catch(function(e){
