@@ -1937,11 +1937,31 @@ function sharePointChecks(){
         ]});
       }]
     ]);
+    /* v1.4.0 patch - listing the library ROOT is a different URL shape. Graph
+       rejects root::/children with a 400, and scanning for inspections starts
+       there, so "Take over an inspection from SharePoint" failed outright. */
+    var mRoot = make([
+      [/\/root\/children/, 'GET', function(){
+        return res(200, {value: [{id: 'R1', name: 'INS-2026-0142 - Smith', folder: {}}]});
+      }],
+      [/\/root::?\//, 'GET', function(){
+        return res(400, {error: {code: 'BadRequest',
+                                 message: "Resource not found for the segment 'root:'"}});
+      }]
+    ]);
+    return mRoot.t.list('').then(function(items){
+      eq(items.length, 1, 'the library root lists, so inspections can be scanned for');
+      ok(items[0].isFolder === true, 'and its folders come back');
+      ok(mRoot.f.calls.some(function(c){ return /\/root\/children/.test(c.url); }),
+         'the root is listed with /root/children, not the root:/path: form',
+         'called: ' + mRoot.f.calls.map(function(c){ return c.url; }).join(' | '));
+    }).then(function(){
     return m10.t.list('INS-2026-0142 - Smith/current').then(function(items){
       eq(items.length, 2, 'the folder listing comes back');
       eq(items[0].itemId, 'D1', 'the item id is carried through, so it can be fetched and moved');
       eq(items[0].eTag, 'E1', 'the eTag comes back \u2014 this is what detects a second device');
       ok(items[1].isFolder === true, 'folders are distinguishable from files');
+    });
     });
   }).then(function(){
     /* An inspection nobody has handed over yet has no current/ folder. That is

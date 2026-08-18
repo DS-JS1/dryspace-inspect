@@ -338,8 +338,17 @@ DSSharePoint.createTransport = function(opts){
      says 404; the caller wants []. Any other failure is real and is thrown. */
   function listFolder(path){
     return drive().then(function(id){
-      return json(GRAPH + '/drives/' + id + '/root:/' + encodePath(path) +
-                  ':/children?select=id,name,size,eTag,lastModifiedDateTime,folder,file');
+      /* The library ROOT has no path, and Graph has no way to say "the empty
+         path" in the root:/...: form - it rejects root::/children with a 400,
+         "Resource not found for the segment 'root:'". Listing the root is a
+         different URL shape, exactly as folder creation already knew.
+         This is why "Take over an inspection from SharePoint" could not find
+         anything: scanning starts by listing the library root. */
+      var sel = '?select=id,name,size,eTag,lastModifiedDateTime,folder,file';
+      var url = path
+        ? GRAPH + '/drives/' + id + '/root:/' + encodePath(path) + ':/children' + sel
+        : GRAPH + '/drives/' + id + '/root/children' + sel;
+      return json(url);
     }).then(function(r){
       return ((r && r.value) || []).map(function(it){
         return {itemId: it.id, name: it.name, size: it.size,
