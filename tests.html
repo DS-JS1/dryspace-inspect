@@ -836,6 +836,76 @@ function run(W){
         });
     })());
 
+  /* v1.4.0 patch - a hang must name itself.
+
+     Every individual step in an attempt is bounded, and an upload still hung on
+     a device where the diagnostics page had just proved the transport working on
+     the same file. Bounding more things was not the answer; being able to see
+     where it stopped was. Driven with an injected clock and timer so the stall
+     is proved without a 60 second test. */
+  later('a stalled attempt fails with the step it stopped on',
+    (function(){
+      /* A real interval so every attempt's watchdog is driven, and a fake clock
+         so the stall is proved without a 60 second test. upTries starts one
+         below the cap so the queue makes exactly one attempt - otherwise it
+         retries a transport that never settles and the suite hangs, which it
+         did on the first go. */
+      var t = 0;
+      var rec = {mid: 'stall-1', name: 'IMG_1.jpg', up: 'queued', origSize: 10,
+                 upTries: W.DSMedia.MAX_TRIES - 1};
+      var q = W.DSMedia.createQueue({
+        transport: {
+          upload: function(){ return new Promise(function(){}); },   /* never settles */
+          verify: function(){ return Promise.resolve({size: 10}); }
+        },
+        list: function(){ return Promise.resolve([rec]); },
+        save: function(){ return Promise.resolve(); },
+        preflight: false,
+        stallMs: 5000,
+        now: function(){ return t; },
+        wait: function(){ return Promise.resolve(); }
+      });
+      var done = q.drain();
+      var jump = setTimeout(function(){ t = 999999; }, 60);
+      return done.then(function(){
+        clearTimeout(jump);
+        ok(W.DSMedia.stateOf(rec) === 'failed',
+           'a stalled attempt ends as failed rather than sitting in uploading for ever',
+           'record state is ' + W.DSMedia.stateOf(rec));
+        ok(/stopped at/.test(rec.upErr || ''),
+           'and the reason names the step: ' + rec.upErr,
+           'reason was: ' + rec.upErr);
+        ok(/sending/.test(rec.upErr || ''),
+           'which is the step it actually reached',
+           'reason was: ' + rec.upErr);
+        ok(rec.upRetryable !== false,
+           'a stall is retryable - the next attempt may get past it');
+      });
+    })());
+
+  test('the queue reports the step it is on', function(){
+    ok(typeof W.DSMedia.STALL_MS === 'number' && W.DSMedia.STALL_MS > 0,
+       'STALL_MS is set (' + W.DSMedia.STALL_MS + 'ms)');
+    ok(typeof W.UP_STEP === 'object', 'UP_STEP store exists for the visible step line');
+  });
+
+  later('a status panel that cannot read fails loudly, not silently',
+    (function(){
+      /* The empty catch this replaces cost a whole round trip with the field. */
+      var box = D.getElementById('sy-detail');
+      var realAll = W.dbAll;
+      W.dbAll = function(){ return Promise.reject(new Error('storage unavailable')); };
+      return W.refreshSyncDetail().then(function(){
+        W.dbAll = realAll;
+        ok(/could not be read/.test(box ? box.innerHTML : ''),
+           'the panel says it could not be read',
+           'panel said: ' + (box ? box.innerHTML.slice(0, 160) : 'no panel'));
+        ok(/storage unavailable/.test(box ? box.innerHTML : ''),
+           'and carries the reason');
+        W.renderSyncDetail([]);
+      });
+    })());
+
   test('the per-file status panel exists and starts empty', function(){
     var box = D.getElementById('sy-detail');
     ok(!!box, 'sy-detail panel present in the sync bar');

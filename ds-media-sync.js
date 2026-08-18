@@ -363,6 +363,16 @@ DSMedia.isPurgeable = function(rec, graceMs){
 
 DSMedia.MAX_TRIES = 4;
 
+/* v1.4.0 patch \u2014 an attempt that stops making progress must say where it
+   stopped. Every individual step below is already bounded, and an upload still
+   hung: the transport was proven working on the same file and the same device
+   by the diagnostics page, so the fault is in driving it, not in it. A hang
+   with no evidence costs a round trip to the field every time. This turns one
+   into a named failure the first time it happens.
+   Generous on purpose: a 5 MB chunk took 8.4s on the device that failed, so
+   this must not fire on a slow link, only on a stopped one. */
+DSMedia.STALL_MS = 60000;
+
 DSMedia.backoffMs = function(tries){
   var base = Math.min(30000, 1000 * Math.pow(2, Math.max(0, tries - 1)));
   return base;
@@ -397,6 +407,14 @@ DSMedia.createQueue = function(opts){
   var preflight = opts.preflight === false
     ? function(){ return Promise.resolve(true); }
     : (opts.preflight || function(blob, size){ return DSMedia.verifyReadable(blob, size); });
+  /* Which step an attempt is on, reported as it happens. "Uploading" on its own
+     is what made a stall unreadable; this is the same argument as B6, one level
+     finer. */
+  var onStep = opts.onStep || function(){};
+  var stallMs = opts.stallMs === undefined ? DSMedia.STALL_MS : opts.stallMs;
+  var now = opts.now || function(){ return Date.now(); };
+  var timer = opts.timer || {set: function(f, ms){ return setInterval(f, ms); },
+                             clear: function(h){ clearInterval(h); }};
 
   var running = false, stopped = false, last = null, inFlight = null;
 
@@ -413,6 +431,26 @@ DSMedia.createQueue = function(opts){
     });
   }
 
+  /* Watches a marker the attempt updates as it moves. Rejecting is safe: the
+     catch below marks the record failed and retryable, so the file goes back in
+     line rather than being lost - and now carries a reason that names the step
+     it died on. */
+  function watchStall(mark){
+    if(!stallMs) return {promise: new Promise(function(){}), stop: function(){}};
+    var handle = null;
+    var promise = new Promise(function(_, rej){
+      handle = timer.set(function(){
+        var quiet = now() - mark.at;
+        if(quiet > stallMs){
+          timer.clear(handle);
+          rej(new Error('stopped at "' + mark.step + '" — no progress for ' +
+                        Math.round(quiet / 1000) + 's'));
+        }
+      }, Math.max(1000, Math.round(stallMs / 10)));
+    });
+    return {promise: promise, stop: function(){ if(handle !== null) timer.clear(handle); }};
+  }
+
   function attempt(rec){
     /* A previously failed record must be re-queued before it can go back in
        flight — 'failed' -> 'uploading' is not a legal move, and jumping it threw
@@ -422,19 +460,32 @@ DSMedia.createQueue = function(opts){
     DSMedia.setState(rec, 'uploading');
     inFlight = rec;
     onChange(rec);
-    return save(rec)
+
+    var mark = {step: 'recording the attempt', at: now()};
+    function step(name){ mark.step = name; mark.at = now(); onStep(rec, name); }
+    var guard = watchStall(mark);
+    step('recording the attempt');
+
+    var work = save(rec)
       .then(function(){
         /* Before the network, before the session: prove the file is still there
            and still readable. A dead blob otherwise reaches fetch() as a request
            body and stalls where nothing is watching. */
+        step('checking the file is readable');
         return preflight(DSMedia.originalOf(rec), rec.origSize);
       })
       .then(function(){
+        step('sending');
         onProgress(rec, 0);
-        return transport.upload(rec, meta(rec), function(frac){ onProgress(rec, frac); });
+        return transport.upload(rec, meta(rec), function(frac){
+          /* Progress is what "no progress" means, so the marker moves here. */
+          mark.at = now();
+          onProgress(rec, frac);
+        });
       })
       .then(function(remote){
         /* Never trust the upload response alone — read the item back. */
+        step('checking it arrived');
         return transport.verify(remote).then(function(fresh){
           var size = fresh && fresh.size;
           if(size !== rec.origSize){
@@ -455,8 +506,14 @@ DSMedia.createQueue = function(opts){
           return save(rec).then(function(){ onChange(rec); return rec; });
         });
       })
+      .then(function(v){ guard.stop(); return v; }, function(e){ guard.stop(); throw e; });
+
+    return Promise.race([work, guard.promise])
       .catch(function(err){
+        guard.stop();
         DSMedia.setState(rec, 'failed', {error: (err && err.message) || String(err)});
+        /* A stall is worth another go: the step it names is a symptom, and the
+           next attempt may well get past it. */
         rec.upRetryable = DSMedia.isRetryable(err);
         return save(rec).then(function(){ onChange(rec, err); throw err; });
       });

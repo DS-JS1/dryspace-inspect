@@ -460,7 +460,21 @@ into "Waiting", which proved the uploading state had never been written.
   (failed and non-retryable) - caught on the device by the very screenshot
   that was meant to confirm the first fix. Completion is now claimed only
   when nothing is outstanding at all. CACHE_VERSION -> ds-inspect-v1.4.0-3.
-- 402 assertions, up from 387. The new ones fail against the previous build.
+- STILL HUNG after all of the above, on a device where the diagnostics page
+  had just proved the transport working on the same 5.24 MB photo: 2 chunks,
+  verified, 10.5s. So the fault is in driving the transport, not in it.
+  Bounding more things was not the answer - being able to see where it
+  stopped was. An attempt now reports the step it is on, and a watchdog
+  fails it after 60s without progress naming that step, so the record ends
+  as a readable failure that can be retried instead of a frozen row.
+- refreshSyncDetail() no longer ends in an empty catch. It draws the upload
+  percentage, so when it failed the panel silently stopped repainting and a
+  frozen row looked like a stalled upload. That cost a whole round trip.
+- diagnostics.html: usedSession was declared below its own uses, so it read
+  as undefined and the page always announced "simple PUT - under 4 MB", in
+  red, while running a chunked session. It reported the opposite of what it
+  was doing.
+- 410 assertions, up from 387. CACHE_VERSION -> ds-inspect-v1.4.0-4.
 
 The architectural change: the record now travels the same road as the photos,
 and in-progress work is backed up without anyone having to remember to do it.
