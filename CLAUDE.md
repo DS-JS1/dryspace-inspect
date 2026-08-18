@@ -33,6 +33,13 @@ storage pressure is not a factor. The original fault was most probably **B5**,
 fixed in Batch 0. **Do not reopen this without new evidence** — the reasoning,
 and why proving it further is not worth a field device, is in the decision log.
 
+**A second, different stranding was found on the beta on 18 Aug 2026 and fixed**
+(D43, D44). Same symptom, different layer: `tx()` handled `onerror` but not
+`onabort`, so an aborted IndexedDB write never settled and the upload queue's
+`save()` never returned. Storage calls are now bounded and every transaction
+ending is handled. This is what "new evidence" looks like — the rule above is
+not a ban on looking, it is a ban on re-arguing B5 from the same facts.
+
 **v1.4.0 is built and not released.** All of `docs/v1.4-plan.md` is done —
 upload recovery and deadlines (D28–D33), the record moving through SharePoint
 (D34–D38), automatic backup of work in progress (D39–D42), and Batch 4's

@@ -40,8 +40,9 @@ code{font-family:ui-monospace,Consolas,monospace;background:#f4f6f8;padding:1px 
 <div id="results"></div>
 
 <footer>
-  These tests are read-only with respect to stored data: they call pure functions on
-  plain objects and never write to IndexedDB. Service workers and caches are cleared
+  These tests do not change stored data: they call pure functions on
+  plain objects, and the one transaction they open is aborted on purpose so nothing
+  is committed. Service workers and caches are cleared
   before loading so the code under test is always current.
 </footer>
 
@@ -688,6 +689,116 @@ function run(W){
     eq(rows, ['a','b','c'],
        'uploading, queued and failed are outstanding; uploaded and purged are done');
   });
+
+  /* v1.4.0 patch \u2014 the storage layer must never leave a caller waiting.
+
+     An IndexedDB transaction that aborts fires onabort, not onerror. Without an
+     onabort handler tx() returned a promise that never settled, so the queue's
+     save(rec) never came back: the record sat in 'uploading' with no error and
+     no progress, and the summary counted it as finished. This was reproduced on
+     a real device before the fix.
+
+     s.transaction reaches the IDBTransaction from inside the callback, so a real
+     abort can be provoked rather than mocked. The race turns a hang into a named
+     failure, because a test that hangs is a test nobody can read.
+
+     What this does NOT prove: an explicit abort() also bubbles the request's
+     error event to the transaction, so onerror fires and this would have passed
+     before the fix too. It is a regression guard against hanging, not evidence
+     that onabort is wired. The abort path that actually stranded the upload is
+     the one with no request error behind it \u2014 a commit refused under storage
+     pressure \u2014 and that cannot be provoked to order. It is covered below by
+     reading the source, which is how sw.js is checked for the same class of
+     silent omission. */
+  later('an aborted storage transaction rejects instead of hanging for ever',
+    new Promise(function(resolve){
+      var settled = W.tx('media', 'readwrite', function(store){
+        store.put({mid: '__abort-probe__', iid: '__test__', up: 'local'});
+        store.transaction.abort();
+      });
+      var hung = new Promise(function(_, rej){
+        setTimeout(function(){ rej(new Error('HUNG')); }, 4000);
+      });
+      resolve(Promise.race([settled, hung]).then(function(){
+        ok(false, 'an aborted transaction rejects',
+           'tx() resolved as though the write had succeeded');
+      }, function(e){
+        ok(String(e.message) !== 'HUNG', 'an aborted transaction rejects',
+           'tx() never settled — the caller waits for ever, which is what stranded the upload');
+        if(String(e.message) !== 'HUNG'){
+          ok(!!String(e.message).length, 'and it says why: ' + e.message);
+        }
+      }));
+    }));
+
+  later('every storage transaction handles onabort, not just onerror',
+    fetch('index.html?r=' + Date.now()).then(function(r){ return r.text(); })
+      .then(function(src){
+        /* An aborted transaction fires onabort. A handler for onerror alone
+           leaves the promise pending for ever, which is silent: no error, no
+           progress, no way for the queue to recover the file. */
+        var fn = src.match(/function tx\(store, mode, fn\)[\s\S]{0,900}/);
+        ok(!!fn, 'tx() found in index.html');
+        if(!fn) return;
+        ok(fn[0].indexOf('onabort') > -1,
+           'tx() handles onabort',
+           'tx() handles only onerror, so an aborted transaction never settles and ' +
+           'save(rec) waits for ever - the record stays in "uploading" with no error');
+        var rq = src.match(/function dbRequest\([\s\S]{0,900}/);
+        ok(!!rq && rq[0].indexOf('onabort') > -1,
+           'reads handle onabort too',
+           'a hung read strands start-up recovery, so no queue is ever built');
+      }));
+
+  test('storage calls are bounded by a deadline', function(){
+    ok(typeof W.DB_TIMEOUT_MS === 'number' && W.DB_TIMEOUT_MS > 0,
+       'DB_TIMEOUT_MS is set (' + W.DB_TIMEOUT_MS + 'ms) — no storage call can wait for ever');
+    ok(typeof W.withDbDeadline === 'function', 'withDbDeadline() defined');
+  });
+
+  later('the deadline turns a silent storage stall into a readable error',
+    (function(){
+      /* A promise that never settles is exactly the failure being guarded
+         against, so it is the honest input for this test. */
+      return W.withDbDeadline(new Promise(function(){}), 'probe').then(function(){
+        ok(false, 'a stalled storage call is rejected by the deadline',
+           'it resolved instead');
+      }, function(e){
+        ok(/did not respond/.test(e.message),
+           'a stalled storage call is rejected by the deadline: ' + e.message);
+      });
+    })());
+
+  /* v1.4.0 patch \u2014 the summary must never contradict the list below it. */
+  test('an in-flight upload is counted, so the summary cannot claim completion', function(){
+    ok(typeof W.inFlightUploads === 'function', 'inFlightUploads() defined');
+    if(typeof W.inFlightUploads !== 'function') return;
+    var all = [{mid:'a', up:'uploading'}, {mid:'b', up:'uploaded'}];
+    eq(W.inFlightUploads(all).map(function(r){ return r.mid; }), ['a'],
+       'only the uploading record is in flight');
+    eq(W.pendingUploads(all).length, 0,
+       'and it is still not "pending" — the queue already has it, so no second attempt is offered');
+  });
+
+  later('the sync banner says uploading, not "All photos uploaded"',
+    Promise.resolve().then(function(){
+      var msg = D.getElementById('sy-msg');
+      var realAll = W.dbAll, realAuth = W.dsAuth;
+      W.dbAll = function(){ return Promise.resolve([{mid:'a', name:'IMG_1.jpg', up:'uploading'}]); };
+      W.dsAuth = {isSignedIn: function(){ return true; },
+                  account: function(){ return {name: 'Test User'}; }};
+      W.renderSyncBar();
+      return new Promise(function(r){ setTimeout(r, 60); }).then(function(){
+        var said = msg ? msg.textContent : '';
+        W.dbAll = realAll; W.dsAuth = realAuth;
+        ok(!/All photos uploaded/.test(said),
+           'does not claim completion while a file is uploading',
+           'banner said: ' + said);
+        ok(/uploading now/.test(said),
+           'it reports the upload in progress instead',
+           'banner said: ' + said);
+      });
+    }));
 
   test('the per-file status panel exists and starts empty', function(){
     var box = D.getElementById('sy-detail');

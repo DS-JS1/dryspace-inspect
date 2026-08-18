@@ -433,6 +433,31 @@ Tests
 
 
 v1.4.0 — 18 August 2026
+PATCH FOLDED IN, same evening — a stranded upload found on the beta build.
+APP_VER stays 1.4.0 because 1.4.0 has not been released; CACHE_VERSION moved to
+ds-inspect-v1.4.0-2 so installed test devices actually take the corrected build.
+
+The fault, from the device: two photos sat as "Uploading" for ever with no
+progress and no error, while the app said "All photos uploaded" above them.
+Diagnostics ruled out the usual causes — both blobs read back in 6ms and 2ms,
+getToken() in 377ms, the library resolved in 735ms. A reload turned both rows
+into "Waiting", which proved the uploading state had never been written.
+
+- An IndexedDB transaction that ABORTS fires onabort, not onerror. tx() handled
+  only onerror, so an aborted write never settled and the queue's save(rec)
+  never returned — leaving the record in 'uploading' with nothing in flight.
+  This is B5's shape one layer further down. onabort is now handled, on reads
+  as well as writes: a hung read strands start-up recovery, and then no upload
+  queue is built at all.
+- Every storage call now has a 15s deadline, covering the ways a transaction
+  can go quiet that no handler can see — including openDB() blocking behind
+  another tab. A storage error is recoverable; a storage call that never
+  returns is not.
+- The summary counters now count 'uploading'. The sync banner says "N file(s)
+  uploading now" and the inspection card says "N uploading", instead of both
+  claiming completion over a panel that says otherwise.
+- 400 assertions, up from 387. The new ones fail against the previous build.
+
 The architectural change: the record now travels the same road as the photos,
 and in-progress work is backed up without anyone having to remember to do it.
 Batches 2 and 3 of the v1.4 plan.
