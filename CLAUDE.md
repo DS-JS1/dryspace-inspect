@@ -44,9 +44,12 @@ decision log.
 
 **Two things are still owed before it can ship**, and neither is a code change:
 
-- **`Training/Setup_and_Use_Presentation.pptx`** still teaches the old five-step
-  handover. It is the only training item not generated from source. Its stale
-  PDF export has been deleted rather than left to be handed out.
+- **A replacement training deck.** `Training/Setup_and_Use_Presentation.pptx` and
+  its PDF export have been **deleted** — the deck taught the old five-step
+  handover and was the only training item not generated from source, so it could
+  not be brought to v1.4 by regenerating it. A new one is to be built from
+  scratch. Until it exists, `Training/Training_Module.html` and the Workflow
+  Chart carry a group session on their own.
 - **Julie and Mike's permission test** — confirm *Contribute - No Delete* really
   does permit the archive move. v1.4 moves a file at every handover; a refusal
   there leaves two files in `current/` every time.
@@ -56,7 +59,7 @@ folder, and `FIELD-APP-TEMPLATE.md` and `04_Project Context Brief.md` have left
 it for `00_AI Tools in Development/_Shared/`, which is now its own repository.
 See the decision log §4.
 
-**The major-tier document set is complete** apart from the presentation above.
+**The major-tier document set is complete** apart from the deck above.
 `01_Setup and User Guide`, `04_Project Context Brief`, `Training/` as a set,
 `02_Iteration Guide` and the architecture template were all updated for v1.4.
 `03_Handover and Version Control Protocol.md` §4 was rewritten as the work

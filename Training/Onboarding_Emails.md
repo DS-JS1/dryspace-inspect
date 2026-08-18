@@ -107,7 +107,7 @@ https://ds-js1.github.io/dryspace-inspect/Training/Quick_Card_Photos_v1.4.0.pdf)
 
 ## What deliberately is not in these
 
-**The Setup & User Guide, the Handover Protocol, the presentation.** All useful,
+**The Setup & User Guide and the Handover Protocol.** All useful,
 none of it needed to get started. An inspector who has installed the app and read
 one card can do a full inspection. Send the rest when someone asks, or work
 through it at a toolbox meeting.

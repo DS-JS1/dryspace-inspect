@@ -27,18 +27,16 @@ Training_Module.html       Self-paced module, about 12 minutes. Works offline,
                            stores nothing, needs no login. Ends with a knowledge
                            check that can be re-run any time.
 
-Setup_and_Use_Presentation.pptx
-                           Slide deck for walking a group through setup and use.
-                           This is the EDITABLE SOURCE — a deck has no plain-text
-                           original, so the .pptx is what you change.
-
-Setup_and_Use_Presentation.pptx         ** NOT UPDATED FOR v1.4 — see below **
-                                        The exported v1.3.0 PDF has been removed
-                                        rather than left to be handed out: it
-                                        teaches the old five-step handover.
-                           Generated from the .pptx for sending and printing. Do
-                           not edit it. Regenerate and rename on each release,
-                           the same as the guides.
+Setup_and_Use_Presentation.pptx         ** DELETED — TO BE REBUILT **
+                           The slide deck for walking a group through setup
+                           and use. It taught the old five-step handover, and
+                           was the one item in this pack not generated from
+                           source, so it could not be brought up to v1.4 by
+                           regenerating it. Deck and exported PDF have both
+                           been removed rather than left to be handed out.
+                           A replacement will be built from scratch. Until
+                           then, run a session from Training_Module.html and
+                           the Workflow Chart, which are both current.
 
 
 Onboarding_Emails.md       Two email templates for inviting a new inspector.
@@ -86,15 +84,18 @@ WHAT CHANGED IN v1.4 — READ THIS BEFORE RETRAINING ANYONE
 
 5. The buttons moved to the top of the form.
 
-NOTE: Setup_and_Use_Presentation.pptx has NOT been updated for v1.4. It is the
-one item in this pack still describing the old five-step handover, and it is the
-only item not generated from source by tools/make_guides.py.
+NOTE: Setup_and_Use_Presentation.pptx has been DELETED, along with its exported
+PDF. It taught the old five-step handover, and it was the only item in this pack
+not generated from source by tools/make_guides.py — so unlike everything else
+here, it could not simply be regenerated at v1.4.
 
-Its exported PDF (Setup_and_Use_Presentation_v1.3.0.pdf) has been DELETED rather
-than left in place. A slide deck teaching a handover the app no longer performs
-is worse than no deck at all, and a versioned filename only makes staleness
-visible to somebody who thinks to check. The .pptx source is untouched — update
-it and re-export before the next training session.
+A deck teaching a handover the app no longer performs is worse than no deck at
+all, and a versioned filename only makes staleness visible to somebody who thinks
+to check. Editing it was judged more work than starting again, so a replacement
+will be built from scratch.
+
+Until it exists, run a group session from Training_Module.html and the Workflow
+Chart. Both are current at v1.4 and both project perfectly well.
 
 
 WHAT CHANGED IN v1.3
