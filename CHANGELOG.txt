@@ -652,3 +652,42 @@ Two test folders deleted from SharePoint
 - 'Tom Kelly - 57 Newmarket Rd, Windsor QLD' and '999-Test Inspect - Client Test
   Name - 999 Test address, Test Town', both with empty photos/ folders. In the
   site recycle bin for 93 days. The library is now empty.
+
+Filing-critical fields are checked once, at handover
+- Five fields decide how a record files rather than what it says: inspection
+  number, client, address, inspection date, and the name of whoever is handing
+  it on. They name the folder, pin into every photo filename, and become the
+  library columns.
+- Deliberately NOT enforced at the field. A blank field mid-inspection is
+  legitimate, and permanent warnings train people to stop seeing warnings.
+  Capture is never blocked (D16); this is that principle one level up.
+- The handover asks once, names each blank field and what it decides, and shows
+  the folder the record will file as. OK hands over anyway. It asks; it does not
+  block.
+- It runs before anything is listed, moved or written, so cancelling leaves
+  SharePoint exactly as it was.
+- It tells the truth about pinning: once photos have uploaded the folder is
+  fixed, so filling the number in afterwards corrects the record and the columns
+  but does NOT rename the folder or any photo already in it. Saying otherwise
+  would be untrue at the one moment somebody could act on the difference.
+
+A test build at /beta/, so the live app is not the test bed
+- The root of the Pages site stays v1.3.0, which is what staff run. /beta/
+  serves v1.4 so diagnostics.html can run on the failing iPhone -- it must share
+  an origin with the app because it frames the app, reads the same stored
+  sign-in and opens the same IndexedDB.
+- Its own redirect URI, because Entra matches them as exact strings. THE ENTRY
+  MUST BE ADDED TO THE APP REGISTRATION BEFORE SIGN-IN WILL WORK THERE.
+- The service worker registers relatively, so it scopes to /beta/ and caches
+  under its own version. The live app's cache is untouched.
+- The build announces itself: a banner, a [TEST] page title, and a marked
+  version line. A test build that looks identical to the live one is how
+  somebody does a real inspection in it.
+
+Comment escapes tidied
+- Several batches of patches left literal \uXXXX sequences in comments, where
+  the codebase convention is the real character (string literals keep the
+  escapes, which are valid JS). Eight comment lines corrected.
+
+Tests
+- 387 assertions, up from 366.
