@@ -829,6 +829,10 @@ function run(W){
              'and it still says they need attention',
              'banner said: ' + said);
           W.dbAll = realAll; W.dsAuth = realAuth;
+          /* Leave the panel as it was found. Rendering rows here made the next
+             test's "hidden until there is something to report" fail, which is
+             test pollution, not an app fault. */
+          W.renderSyncDetail([]);
         });
     })());
 
