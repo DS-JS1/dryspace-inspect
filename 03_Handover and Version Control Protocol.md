@@ -2,7 +2,7 @@
 
 **How one inspection passes safely from office, to field, to technical, to sales, to admin**
 
-App v1.3 · Form 4.2 · Project 2.1 — Site Assessment
+App v1.4 · Form 4.2 · Project 2.1 — Site Assessment
 Live app: https://ds-js1.github.io/dryspace-inspect/
 
 > **What changed in v1.3.** Photos now upload to SharePoint by themselves, so the
