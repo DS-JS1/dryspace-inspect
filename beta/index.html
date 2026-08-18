@@ -3567,6 +3567,7 @@ function renderSyncBar(){
       'Signed in as ' + who + '. ' +
       (pend.length ? pend.length + ' file(s) waiting to upload.'
                    : busy.length ? busy.length + ' file(s) uploading now.'
+                   : stuck.length ? ''
                    : (all.length ? 'All photos uploaded.' : 'No photos yet.')) +
       (stuck.length ? ' ' + stuck.length + (stuck.length > 1 ? ' need' : ' needs') + ' attention.' : '');
     acts.innerHTML =
