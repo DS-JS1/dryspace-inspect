@@ -152,8 +152,53 @@ DSMedia.sha256Hex = function(blob){
 
 DSMedia.isImage = function(type){ return String(type || '').indexOf('image/') === 0; };
 
+/* v1.4.0 patch \u2014 take ownership of the bytes at capture.
+
+   A File from a camera input is a REFERENCE to a file the operating system
+   owns, not bytes this app holds. Storing it in IndexedDB stores the reference.
+   iOS reclaims that temporary file \u2014 on a reload, on a background, or under
+   storage pressure, and this device reports persistence as not granted \u2014 and
+   the record survives pointing at nothing. Reading it then throws "The object
+   can not be found here", which is what stranded a real inspection: the
+   evidence copy bound for SharePoint was gone while the compressed report copy,
+   made by canvas and therefore owned by the app, was perfectly fine.
+
+   Reading it once into an ArrayBuffer and rebuilding the Blob makes the app the
+   owner. No extra storage: the same bytes, held properly. The read already
+   happens for hashing and compression, so it costs one more pass, off the
+   capture path's critical section.
+
+   If the read fails the original File is kept rather than dropped. That is no
+   worse than today, and losing a photo to a defensive measure would be its own
+   kind of absurd. */
+DSMedia.materialise = function(file){
+  if(!file) return Promise.resolve(file);
+  var read;
+  if(typeof file.arrayBuffer === 'function'){
+    read = file.arrayBuffer();
+  } else if(typeof global.FileReader === 'function'){
+    read = new Promise(function(res, rej){
+      var fr = new global.FileReader();
+      fr.onload  = function(){ res(fr.result); };
+      fr.onerror = function(){ rej(fr.error || new Error('could not read the file')); };
+      fr.readAsArrayBuffer(file);
+    });
+  } else {
+    return Promise.resolve(file);
+  }
+  return read.then(function(buf){
+    return new global.Blob([buf], {type: file.type || 'application/octet-stream'});
+  }, function(){ return file; });
+};
+
 DSMedia.makeRenditions = function(file, compress){
-  var isImg = DSMedia.isImage(file.type);
+  return DSMedia.materialise(file).then(function(own){
+    return renditionsOf(own, file.type, compress);
+  });
+};
+
+function renditionsOf(file, declaredType, compress){
+  var isImg = DSMedia.isImage(declaredType || file.type);
   if(!isImg){
     return DSMedia.sha256Hex(file).then(function(h){
       return {original: file, report: file, thumb: null, type: file.type,
@@ -177,7 +222,7 @@ DSMedia.makeRenditions = function(file, compress){
               reportSize: file.size, origSize: file.size, origHash: h, derived: false};
     });
   });
-};
+}
 
 DSMedia.blobToDataURL = function(b){
   return new Promise(function(res, rej){

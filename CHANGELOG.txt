@@ -474,7 +474,16 @@ into "Waiting", which proved the uploading state had never been written.
   as undefined and the page always announced "simple PUT - under 4 MB", in
   red, while running a chunked session. It reported the opposite of what it
   was doing.
-- 410 assertions, up from 387. CACHE_VERSION -> ds-inspect-v1.4.0-4.
+- ROOT CAUSE, found the first time the instrumentation ran: "Failed - the
+  stored file could not be read back: The object can not be found here."
+  The original was stored as the File handed over by the camera, which is a
+  reference to a file iOS owns, not bytes this app holds. iOS reclaims that
+  temporary file and the record survives pointing at nothing. The report
+  copy was always fine because canvas produced it, so the app owned it.
+  Captured files are now read once into an ArrayBuffer and rebuilt as a
+  Blob, so IndexedDB holds real bytes. Same storage, held properly. A
+  failed read keeps the File rather than dropping the photo.
+- 414 assertions, up from 387. CACHE_VERSION -> ds-inspect-v1.4.0-5.
 
 The architectural change: the record now travels the same road as the photos,
 and in-progress work is backed up without anyone having to remember to do it.

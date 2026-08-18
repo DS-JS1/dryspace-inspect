@@ -1243,6 +1243,40 @@ function mediaModuleChecks(){
        'correcting the address does not split a job across two folders');
   });
 
+  /* v1.4.0 patch - the app must own the bytes it stores.
+
+     A File from a camera input is a reference to an OS-owned temporary file.
+     Stored in IndexedDB it keeps pointing at something iOS is free to reclaim,
+     and reading it later throws "The object can not be found here" - which is
+     exactly what happened to a real inspection, on a device reporting storage
+     persistence as not granted. The compressed report copy survived because
+     canvas produced it and the app therefore owned it. */
+  later('an original is stored as bytes the app owns, not the input File',
+    (function(){
+      var input = new Blob([new Uint8Array(64)], {type: 'video/mp4'});
+      input.name = 'clip.mp4';
+      return M.makeRenditions(input, function(){ return Promise.reject(new Error('n/a')); })
+        .then(function(r){
+          ok(r.original !== input,
+             'the stored original is a fresh blob, not the object handed in',
+             'the input File object was stored as-is, so it can still be reclaimed');
+          ok(r.original && r.original.size === 64, 'and it holds the same bytes',
+             'size was ' + (r.original && r.original.size));
+          ok(r.original && r.original.type === 'video/mp4', 'and keeps its type');
+        });
+    })());
+
+  later('materialise keeps the file rather than losing it if the read fails',
+    (function(){
+      var dead = {type: 'image/jpeg', size: 10,
+                  arrayBuffer: function(){ return Promise.reject(new Error('gone')); }};
+      return M.materialise(dead).then(function(out){
+        ok(out === dead,
+           'a failed read returns the original rather than dropping the photo',
+           'materialise returned something else, which would lose the capture');
+      });
+    })());
+
   section('Media module — state');
 
   test('legal transitions only', function(){

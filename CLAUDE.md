@@ -86,6 +86,11 @@ These exist because breaking one of them lost, or nearly lost, real data.
   Answers are stored as the option's text; rewording orphans them on next save.
 - **Never delete a local original that has not been verified in SharePoint.**
   Verification means an independent read-back, never the upload response.
+- **Never store a handle to a file this app does not own.** A `File` from a
+  camera input points at a temporary file iOS is free to reclaim; the record
+  then outlives the bytes and reads back as "The object can not be found
+  here". Read it into an ArrayBuffer and rebuild the Blob at capture (D45).
+  This cost a real inspection's evidence photo.
 - **Never bump `APP_VER` without bumping `CACHE_VERSION`.** A forgotten cache bump
   is silent: the deploy succeeds and every installed device keeps the old app.
 - **Capture is never blocked.** Storage warnings warn; they do not prevent a photo
