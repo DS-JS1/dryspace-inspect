@@ -22,13 +22,21 @@ and point you here.
 
 ## Work in progress
 
-**v1.3.0 is live. Photo upload still does not work on mobile.** Read
-`docs/v1.4-plan.md` before touching anything — it carries the field-test findings
-and ranked hypotheses for the mobile hang.
+**v1.3.0 is live and is what staff run.** A v1.4 test build is deployed alongside
+it at `/beta/`, which staff do not use and which announces itself as a test build.
 
-**v1.4.0 is built and not released.** Batches 0–3 of `docs/v1.4-plan.md` are done:
+**The mobile upload fault is resolved.** All four hypotheses in
+`docs/v1.4-plan.md` §3 were answered on the failing iPhone on 18 Aug 2026: the
+chunked upload path is proven against real Graph (41.3 MB video, 9 chunks,
+byte-exact read-back), token refresh passes, `crypto.subtle` is present, and
+storage pressure is not a factor. The original fault was most probably **B5**,
+fixed in Batch 0. **Do not reopen this without new evidence** — the reasoning,
+and why proving it further is not worth a field device, is in the decision log.
+
+**v1.4.0 is built and not released.** All of `docs/v1.4-plan.md` is done —
 upload recovery and deadlines (D28–D33), the record moving through SharePoint
-(D34–D38), and automatic backup of work in progress (D39–D42).
+(D34–D38), automatic backup of work in progress (D39–D42), and Batch 4's
+button placement, filing-critical gate and documentation set (D34–D35).
 
 **It is a major release** — record schema 3 → 4, and a new storage target for the
 record. Numbered 1.4.0 rather than 2.0.0 deliberately; the reasoning is in the
@@ -36,11 +44,16 @@ decision log.
 
 **Two things are still owed before it can ship:**
 
-- **The mobile hang is unproven.** Three real ways an upload could hang for ever
-  were found by reading and fixed; none is confirmed as *the* cause. Run
-  `diagnostics.html` on the iPhone or iPad that fails, signed in, with a real
-  photo from the camera roll — it names the hypothesis when it confirms one. Do
-  not describe the hang as solved until someone has.
+- **The folder restructure.** v1.3 to `Superseded`, a new v1.4 folder, and
+  `_Shared` for `docs/FIELD-APP-TEMPLATE.md` and `04_Project Context Brief.md`
+  — see the decision log §4. Do this *with* the restructure, not after it, or the
+  specification for four unbuilt apps ends up inside an archived folder.
+- **`Training/Setup_and_Use_Presentation.pptx`** still teaches the old five-step
+  handover. It is the only training item not generated from source. Its stale
+  PDF export has been deleted rather than left to be handed out.
+- **Julie and Mike's permission test** — confirm *Contribute - No Delete* really
+  does permit the archive move. v1.4 moves a file at every handover; a refusal
+  there leaves two files in `current/` every time.
 - **Batch 4 and the major-tier document set** — `01_Setup and User Guide`,
   `04_Project Context Brief`, `Training/` as a set, `02_Iteration Guide`,
   `docs/FIELD-APP-TEMPLATE.md`, then the new `v1.4` folder with this one moved to
