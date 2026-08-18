@@ -407,6 +407,71 @@ Served from SharePoint, none of them resolve.
 
 ---
 
+### Batch 1 closed on device evidence — 18 August 2026
+
+`diagnostics.html` was run on the failing iPhone (iOS 18.7, Safari 26.6.1)
+against the live tenant. **All four hypotheses are now answered.**
+
+| Hypothesis | Verdict |
+|---|---|
+| **1** — chunked upload path never proven | **Ruled out.** 41.3 MB video, 9 chunks, all committed, read back at 43,308,985 bytes exactly |
+| **2** — blobs unreadable from IndexedDB | Not reachable; see below |
+| **3** — token refresh in a PWA | **Passed** in Safari: `POST 200 /oauth2/v2.0/token` in 289 ms, then two Graph calls on the new token |
+| **4** — `crypto.subtle` at capture | **Ruled out.** Present and a secure context |
+
+**The chunked path is not merely working, it is healthy.** Chunk times were
+5937, 6247, 6042, 5737, 5839, 6040, 5938 ms — flat, monotonic, no retry, no
+stall. About 0.8 MB/s sustained, finishing in 53 s against a 15-minute budget.
+The path the plan called "only proven against a fake transport" is now proven
+against real Graph, from the device that was failing.
+
+**Storage pressure is also ruled out:** 0.6 MB used of 39 GB.
+
+**Why hypothesis 2 could not be reached, and why that is acceptable.** iOS gives
+a home-screen web app a *separate* storage container from Safari. Diagnostics ran
+in a Safari tab, so it saw an empty database — which says nothing about the
+installed app's stored photos, and is not evidence of eviction. Reaching the real
+container would need diagnostics running inside the installed app, and there is
+no route from an installed v1.3.0 build to `/beta/`. Left deliberately: from v1.4
+the pre-flight read (D33) turns an unreadable blob into a named failure in normal
+use, so this hypothesis reports itself in the field rather than needing a harness.
+
+**Incidental confirmation:** the device reported *"Storage is persistent: no"*.
+The app does request durable storage at start-up; iOS refuses it for an ordinary
+Safari tab. That is exactly the warning already in `01_Setup and User Guide`
+Part C — *always use the installed icon, not a browser tab* — now confirmed
+empirically rather than asserted.
+
+### So what actually broke v1.3.0 on mobile?
+
+**Most probably B5, and this is inference rather than proof.** The evidence
+converges:
+
+- The tenant showed inspection folders created **with their library columns
+  written** and **no photo**. `upload()` runs
+  `ensureFolder → tagFolder → drive → transfer`, and the first three complete in
+  under a second while the transfer takes seconds to a minute.
+- The chunked transfer itself is now demonstrably sound on that device.
+- B5 stranded any record interrupted mid-`uploading` — permanently, invisibly,
+  and with the *Upload now* button gone, because `pendingUploads()` did not count
+  `uploading`.
+
+Background the app during that transfer window — which is what happens when
+somebody locks the phone or takes a call — and you get precisely the reported
+symptom: folder present, columns written, photo absent, button gone, nothing
+said. B6 then guaranteed there was nothing on screen to read.
+
+**Not proven, and not worth proving.** Confirming it would mean reinstalling
+v1.3.0 on a field device and deliberately reproducing a data-visibility bug that
+is already fixed. Both faults are closed with tests (Batch 0), the recovery path
+runs at every start-up, and per-file status now shows what the queue is doing.
+
+**Recorded so nobody re-opens it:** if photo upload fails on mobile again after
+v1.4 ships, this investigation does not apply. Start fresh from
+`diagnostics.html`, which now answers all four questions in about a minute.
+
+---
+
 ## 3. Reversed decisions — do not revert to these
 
 Each of these was once true. Reverting reintroduces a known problem.

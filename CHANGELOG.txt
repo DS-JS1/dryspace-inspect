@@ -691,3 +691,30 @@ Comment escapes tidied
 
 Tests
 - 387 assertions, up from 366.
+
+Batch 1 closed on device evidence — 18 August 2026
+Ran diagnostics.html on the failing iPhone (iOS 18.7, Safari 26.6.1) against the
+live tenant.
+
+- HYPOTHESIS 1 RULED OUT. A 41.3 MB video went through createUploadSession in
+  9 chunks, every one committed, read back at 43,308,985 bytes exactly. Chunk
+  times 5937/6247/6042/5737/5839/6040/5938 ms - flat, monotonic, no retry, no
+  stall. ~0.8 MB/s, finishing in 53 s against a 15-minute budget. The path the
+  plan called "only proven against a fake transport" is now proven against real
+  Graph, on the device that was failing.
+- Hypothesis 3 passed: token refresh returned 200 in 289 ms and the new token
+  carried two Graph calls.
+- Hypothesis 4 ruled out. Storage pressure ruled out (0.6 MB of 39 GB).
+- Hypothesis 2 not reachable from a Safari tab, because iOS gives a home-screen
+  web app its own storage container. Left deliberately: D33's pre-flight makes
+  it self-reporting in normal use.
+
+Most probable cause of the original mobile fault: B5, fixed in Batch 0. The
+tenant showed folders created WITH their columns written and no photo; the
+transfer is demonstrably sound; and B5 stranded any record interrupted during
+exactly that window, invisibly and with the button gone. Inference rather than
+proof, and not worth proving - it would mean reinstalling v1.3.0 to reproduce a
+bug that is already fixed and tested.
+
+Also confirmed empirically: an ordinary Safari tab is refused durable storage,
+which is what the Setup Guide Part C has always said. The app does request it.
