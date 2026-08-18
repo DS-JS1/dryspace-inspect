@@ -1517,35 +1517,89 @@ function openDB(){
     rq.onerror = function(){ rej(rq.error); };
   });
 }
+/* v1.4.0 patch — a storage call must always end, one way or another.
+
+   An IndexedDB transaction that ABORTS fires onabort, not onerror. With no
+   onabort handler the promise never settled and the caller waited for ever.
+   That is not a theoretical hole: it stranded an upload on a real device. The
+   queue does setState('uploading') → save(rec) → pre-flight → first progress
+   tick, so a save() that never returns leaves the record in 'uploading' with no
+   error, no progress and nothing in flight — the exact shape of B5, one layer
+   further down. Safari aborts readwrite transactions under storage pressure and
+   persistence is granted at the browser's discretion, so the app cannot prevent
+   an abort; it can only survive one.
+
+   The deadline is the backstop for every remaining way a transaction can go
+   quiet — including openDB() blocking behind another tab holding an upgrade,
+   which no per-transaction handler can see. A storage error is recoverable: the
+   queue marks the file failed, says why, and "Try again" reaches it. A storage
+   call that never returns is not recoverable by anything. */
+var DB_TIMEOUT_MS = 15000;
+var ABORTED = 'the device aborted a storage operation — it may be out of space';
+
+function withDbDeadline(job, what){
+  if(!DB_TIMEOUT_MS) return job;
+  return new Promise(function(res, rej){
+    var settled = false;
+    var timer = setTimeout(function(){
+      if(settled) return;
+      settled = true;
+      rej(new Error('storage did not respond within ' +
+                    Math.round(DB_TIMEOUT_MS / 1000) + 's (' + what + ')'));
+    }, DB_TIMEOUT_MS);
+    job.then(function(v){
+      if(settled) return;
+      settled = true; clearTimeout(timer); res(v);
+    }, function(e){
+      if(settled) return;
+      settled = true; clearTimeout(timer); rej(e);
+    });
+  });
+}
+
+/* Every read goes through here too. A hung read is worse than a hung write:
+   recoverInterruptedUploads() opens with dbAll('media'), and if that never
+   returns then start-up recovery never finishes and initSync() never runs, so
+   there is no upload queue at all and nothing on screen says so. */
+function dbRequest(store, mode, run, what){
+  var job = openDB().then(function(db){
+    return new Promise(function(res, rej){
+      var t = db.transaction(store, mode), rq = run(t.objectStore(store));
+      rq.onsuccess = function(){ res(rq.result); };
+      rq.onerror   = function(){ rej(rq.error || new Error('storage read failed')); };
+      t.onabort    = function(){ rej(t.error || new Error(ABORTED)); };
+    });
+  });
+  return withDbDeadline(job, what);
+}
+
+
 function tx(store, mode, fn){
-  return openDB().then(function(db){
+  var job = openDB().then(function(db){
     return new Promise(function(res, rej){
       var t = db.transaction(store, mode), s = t.objectStore(store), out = fn(s);
       t.oncomplete = function(){ res(out && out._v !== undefined ? out._v : out); };
-      t.onerror = function(){ rej(t.error); };
+      t.onerror = function(){ rej(t.error || new Error('storage transaction failed')); };
+      t.onabort = function(){ rej(t.error || new Error(ABORTED)); };
     });
   });
+  return withDbDeadline(job, store + ' ' + mode);
 }
 function dbPut(store, rec){ return tx(store,'readwrite',function(s){ s.put(rec); }); }
 function dbDel(store, key){ return tx(store,'readwrite',function(s){ s.delete(key); }); }
 function dbGet(store, key){
-  return openDB().then(function(db){ return new Promise(function(res,rej){
-    var rq = db.transaction(store).objectStore(store).get(key);
-    rq.onsuccess = function(){ res(rq.result); }; rq.onerror = function(){ rej(rq.error); };
-  });});
+  return dbRequest(store, 'readonly', function(s){ return s.get(key); }, store + ' get');
 }
 function dbAll(store){
-  return openDB().then(function(db){ return new Promise(function(res,rej){
-    var rq = db.transaction(store).objectStore(store).getAll();
-    rq.onsuccess = function(){ res(rq.result || []); }; rq.onerror = function(){ rej(rq.error); };
-  });});
+  return dbRequest(store, 'readonly', function(s){ return s.getAll(); }, store + ' getAll')
+    .then(function(r){ return r || []; });
 }
 function mediaFor(iid){
-  return openDB().then(function(db){ return new Promise(function(res,rej){
-    var rq = db.transaction('media').objectStore('media').index('iid').getAll(iid);
-    rq.onsuccess = function(){ res((rq.result||[]).sort(function(a,b){return a.added-b.added;})); };
-    rq.onerror = function(){ rej(rq.error); };
-  });});
+  return dbRequest('media', 'readonly', function(s){ return s.index('iid').getAll(iid); },
+                   'media by inspection')
+    .then(function(r){
+      return (r || []).sort(function(a,b){ return a.added - b.added; });
+    });
 }
 
 /* ---------- Utilities ---------- */
@@ -2384,9 +2438,14 @@ function renderHome(){
       var stuck = mine.filter(function(m){
         return DSMedia.stateOf(m) === 'failed' && m.upRetryable === false;
       }).length;
+      /* The same lie as the sync banner, in the place staff actually look. */
+      var inflight = mine.filter(function(m){
+        return DSMedia.stateOf(m) === 'uploading';
+      }).length;
       var media = !mine.length ? 'no files on this device'
         : mine.length + ' file' + (mine.length > 1 ? 's' : '') +
           (waiting ? ' \u00b7 ' + waiting + ' waiting to upload'
+                   : inflight ? ' \u00b7 ' + inflight + ' uploading'
                    : (stuck ? '' : ' \u00b7 all uploaded')) +
           (stuck ? ' \u00b7 ' + stuck + (stuck > 1 ? ' need' : ' needs') + ' attention' : '');
       card.innerHTML =
@@ -3472,6 +3531,15 @@ function stuckUploads(all){
     return DSMedia.stateOf(r) === 'failed' && r.upRetryable === false;
   });
 }
+/* v1.4.0 patch \u2014 'uploading' was counted by nothing. pendingUploads() ignores
+   it deliberately: the queue already holds that file, so offering "Upload now"
+   would start a second attempt on one upload. But the SUMMARY then read "not
+   pending" as "finished" and said "All photos uploaded" directly above a panel
+   listing two files as Uploading. A summary that contradicts the list beneath it
+   teaches staff to distrust both. Counted here so the message can be true. */
+function inFlightUploads(all){
+  return all.filter(function(r){ return DSMedia.stateOf(r) === 'uploading'; });
+}
 
 function renderSyncBar(){
   var bar = document.getElementById('sync-bar');
@@ -3491,13 +3559,14 @@ function renderSyncBar(){
   }
   dbAll('media').then(function(all){
     renderSyncDetail(all);
-    var pend = pendingUploads(all), stuck = stuckUploads(all);
+    var pend = pendingUploads(all), stuck = stuckUploads(all), busy = inFlightUploads(all);
     var acc = dsAuth.account() || {};
     var who = acc.name || acc.username || 'you';
     bar.className = 'sync-bar' + (stuck.length ? ' sy-bad' : '');
     document.getElementById('sy-msg').textContent =
       'Signed in as ' + who + '. ' +
       (pend.length ? pend.length + ' file(s) waiting to upload.'
+                   : busy.length ? busy.length + ' file(s) uploading now.'
                    : (all.length ? 'All photos uploaded.' : 'No photos yet.')) +
       (stuck.length ? ' ' + stuck.length + (stuck.length > 1 ? ' need' : ' needs') + ' attention.' : '');
     acts.innerHTML =
