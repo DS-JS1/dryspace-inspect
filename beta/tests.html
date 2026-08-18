@@ -1,0 +1,2005 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<title>Dryspace Inspection App — logic tests</title>
+<style>
+:root{--ok:#1e6b34;--okbg:#e0f2e4;--bad:#a12622;--badbg:#fbebea;--ink:#1a2733;--dim:#55606b}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:var(--ink);
+     max-width:960px;margin:0 auto;padding:24px;line-height:1.5}
+h1{font-size:20px;color:#123a5f;margin-bottom:4px}
+.sub{font-size:13px;color:var(--dim);margin-bottom:18px}
+#summary{font-size:15px;font-weight:600;padding:12px 14px;border-radius:8px;margin-bottom:16px}
+#summary.pass{background:var(--okbg);color:var(--ok)}
+#summary.fail{background:var(--badbg);color:var(--bad)}
+#summary.run{background:#e8f1fa;color:#1b5e9e}
+h2{font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);
+   margin:18px 0 6px;padding-bottom:4px;border-bottom:1px solid #e3e7eb}
+.t{display:flex;gap:10px;padding:5px 0;font-size:13px;border-bottom:1px solid #f0f2f4;align-items:baseline}
+.t .m{flex-shrink:0;font-weight:700;width:44px}
+.t.p .m{color:var(--ok)}
+.t.f .m{color:var(--bad)}
+.t .d{flex:1}
+.t .why{display:block;color:var(--bad);font-size:12px;margin-top:2px;font-family:ui-monospace,Consolas,monospace}
+footer{margin-top:22px;font-size:12px;color:var(--dim);border-top:1px solid #e3e7eb;padding-top:10px}
+code{font-family:ui-monospace,Consolas,monospace;background:#f4f6f8;padding:1px 4px;border-radius:3px}
+#app{position:absolute;width:1024px;height:800px;left:-10000px;top:0;border:0}
+</style>
+</head>
+<body>
+
+<h1>Dryspace Inspection App — logic tests</h1>
+<div class="sub">
+  Exercises the real functions inside <code>index.html</code> through a hidden iframe,
+  so these tests cannot drift from the shipping code.
+  Must be served over HTTP — <code>file://</code> blocks iframe access and IndexedDB.
+</div>
+
+<div id="summary" class="run">Loading app…</div>
+<div id="results"></div>
+
+<footer>
+  These tests are read-only with respect to stored data: they call pure functions on
+  plain objects and never write to IndexedDB. Service workers and caches are cleared
+  before loading so the code under test is always current.
+</footer>
+
+<iframe id="app" title="app under test"></iframe>
+
+<!-- The modules are NOT loaded by static <script src> tags. A plain tag is served
+     from the browser's HTTP cache, which silently ran a previous build's code and
+     reported a fixed bug as still broken. loadModules() fetches them with a
+     per-run cache-buster instead — and loading them here rather than through the
+     app also proves they stand alone. -->
+<script>
+'use strict';
+
+/* ---------- tiny assert framework ---------- */
+var results = document.getElementById('results');
+var pass = 0, fail = 0, group = null;
+
+function section(name){
+  group = document.createElement('h2');
+  group.textContent = name;
+  results.appendChild(group);
+}
+function record(ok, desc, why){
+  var row = document.createElement('div');
+  row.className = 't ' + (ok ? 'p' : 'f');
+  row.innerHTML = '<span class="m">' + (ok ? 'PASS' : 'FAIL') + '</span><span class="d"></span>';
+  row.querySelector('.d').textContent = desc;
+  if(!ok && why){
+    var w = document.createElement('span');
+    w.className = 'why';
+    w.textContent = why;
+    row.querySelector('.d').appendChild(w);
+  }
+  results.appendChild(row);
+  ok ? pass++ : fail++;
+}
+function ok(cond, desc, why){ record(!!cond, desc, why); }
+function eq(actual, expected, desc){
+  var same = JSON.stringify(actual) === JSON.stringify(expected);
+  record(same, desc, same ? '' : 'expected ' + JSON.stringify(expected) + ', got ' + JSON.stringify(actual));
+}
+function test(desc, fn){
+  try { fn(); }
+  catch(e){ record(false, desc + ' — threw', String(e && e.message || e)); }
+}
+
+/* test() is synchronous, so an assertion inside a .then() would land after the
+   summary had already been printed — and a late failure that nobody counts is
+   worse than no test. Anything asynchronous goes here and is awaited before the
+   run is declared over. */
+var PENDING = [];
+function later(desc, promise){
+  PENDING.push(Promise.resolve(promise).catch(function(e){
+    record(false, desc + ' — threw', String(e && e.message || e));
+  }));
+}
+
+/* ---------- boot the app under test ---------- */
+function clearWorkers(){
+  var jobs = [];
+  if(navigator.serviceWorker && navigator.serviceWorker.getRegistrations){
+    jobs.push(navigator.serviceWorker.getRegistrations()
+      .then(function(rs){ return Promise.all(rs.map(function(r){ return r.unregister(); })); })
+      .catch(function(){}));
+  }
+  if(window.caches && caches.keys){
+    jobs.push(caches.keys()
+      .then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); })
+      .catch(function(){}));
+  }
+  return Promise.all(jobs);
+}
+
+/* Loaded in order, each with a fresh query, so no cache layer can serve a
+   previous build. Order matters only in that all three must exist before the
+   module checks run. */
+function loadModules(){
+  var files = ['ds-media-sync.js', 'ds-sharepoint.js', 'ds-auth.js'];
+  var stamp = '?fresh=' + Date.now();
+  return files.reduce(function(chain, f){
+    return chain.then(function(){
+      return new Promise(function(res, rej){
+        var s = document.createElement('script');
+        s.src = f + stamp;
+        s.onload = res;
+        s.onerror = function(){ rej(new Error('could not load ' + f)); };
+        document.head.appendChild(s);
+      });
+    });
+  }, Promise.resolve());
+}
+
+function loadApp(){
+  return new Promise(function(res, rej){
+    var f = document.getElementById('app');
+    f.onload = function(){
+      /* init() runs on DOMContentLoaded; assignKeys/numberFields/buildCompletion
+         are synchronous inside it, so they have completed by the time onload fires. */
+      setTimeout(function(){
+        var w = f.contentWindow;
+        if(!w || typeof w.migrateData !== 'function'){
+          rej(new Error('app loaded but its functions are not reachable'));
+          return;
+        }
+        res(w);
+      }, 120);
+    };
+    f.onerror = function(){ rej(new Error('failed to load index.html')); };
+    /* nosw=1 stops the app under test registering a service worker. Without it,
+       the app's own registration activates and clients.claim() takes over THIS
+       page mid-run — after which every later fetch (the v1.1.1 fixture, the
+       modules) is served from the stale cache and the suite silently tests old
+       code. Clearing before the run is not enough; the app puts it straight back. */
+    f.src = 'index.html?nosw=1&undertest=' + Date.now();
+  });
+}
+
+/* ---------- the tests ---------- */
+function run(W){
+  var D = W.document;
+
+  /* ===== structure ===== */
+  section('Field id integrity');
+
+  var controls = Array.prototype.slice.call(
+    D.querySelectorAll('#form-root input, #form-root select, #form-root textarea')
+  ).filter(function(el){ return el.type !== 'file' && !el.classList.contains('nokey'); });
+
+  test('controls exist', function(){
+    ok(controls.length > 0, 'form exposes controls to test (' + controls.length + ' found)');
+  });
+
+  test('every control has data-fid', function(){
+    var missing = controls.filter(function(el){ return !el.dataset.fid; });
+    ok(missing.length === 0,
+       'every saveable control carries a data-fid',
+       missing.length + ' without one, first: ' + (missing[0] ? missing[0].outerHTML.slice(0,120) : ''));
+  });
+
+  test('every control got a runtime key', function(){
+    var nokey = controls.filter(function(el){ return !el.dataset.k; });
+    ok(nokey.length === 0,
+       'assignKeys() assigned a storage key to every control',
+       nokey.length + ' control(s) would silently never save');
+  });
+
+  test('no duplicate fids outside radio groups', function(){
+    var seen = {}, dupes = [];
+    controls.forEach(function(el){
+      var f = el.dataset.fid;
+      if(el.type === 'radio') return;
+      if(seen[f]) dupes.push(f); else seen[f] = 1;
+    });
+    ok(dupes.length === 0, 'no duplicate data-fid among non-radio controls',
+       'duplicated: ' + dupes.slice(0,5).join(', '));
+  });
+
+  test('radio groups are internally consistent', function(){
+    var byFid = {};
+    controls.filter(function(el){ return el.type === 'radio'; })
+            .forEach(function(el){ (byFid[el.dataset.fid] = byFid[el.dataset.fid] || []).push(el); });
+    var bad = Object.keys(byFid).filter(function(f){
+      var names = {};
+      byFid[f].forEach(function(el){ names[el.name] = 1; });
+      return Object.keys(names).length !== 1;
+    });
+    ok(bad.length === 0,
+       'each radio fid maps to exactly one input name (' + Object.keys(byFid).length + ' groups)',
+       'inconsistent: ' + bad.join(', '));
+  });
+
+  test('no reference chip is permanently grey', function(){
+    /* changelog claim: every .fref has either controls or a media field behind it */
+    var orphans = (W.COMP || []).filter(function(c){
+      return c.ctrls.length === 0 && !c.media;
+    });
+    ok(orphans.length === 0,
+       'every completion chip has controls or a media field behind it (' + (W.COMP||[]).length + ' chips)',
+       orphans.length + ' chip(s) can never turn green');
+  });
+
+  /* ===== legacy mapping ===== */
+  section('v1.1.1 legacy key mapping');
+
+  var L2F = W.LEGACY_TO_FID || {};
+
+  test('legacy map was built', function(){
+    ok(Object.keys(L2F).length > 0,
+       'LEGACY_TO_FID populated (' + Object.keys(L2F).length + ' legacy keys)');
+  });
+
+  /* Derive a real legacy key from the map rather than hardcoding label text,
+     so this test survives any future rewording. */
+  function legacyKeyFor(fid){
+    var keys = Object.keys(L2F);
+    for(var i = 0; i < keys.length; i++) if(L2F[keys[i]] === fid) return keys[i];
+    return null;
+  }
+
+  test('a known field is reachable from its legacy key', function(){
+    var k = legacyKeyFor('s1.client-names');
+    ok(k !== null, 's1.client-names has a legacy key', 'no legacy key maps to it');
+    if(k){
+      var out = W.migrateData({});
+      out = W.migrateData(Object.fromEntries([[k, 'Smith']]));
+      eq(out['s1.client-names'], 'Smith', 'legacy value lands on the right stable id');
+    }
+  });
+
+  test('unrecognised keys are preserved, not discarded', function(){
+    var out = W.migrateData({'t|s9|Some field that no longer exists': 'keep me'});
+    eq(out['unmapped:t|s9|Some field that no longer exists'], 'keep me',
+       'unknown key retained under unmapped: prefix');
+  });
+
+  test('migration never loses a key', function(){
+    var k = legacyKeyFor('s1.client-names') || 't|s1|unknown';
+    var input = {};
+    input[k] = 'A';
+    input['t|s9|ghost one'] = 'B';
+    input['t|s9|ghost two'] = 'C';
+    var out = W.migrateData(input);
+    eq(Object.keys(out).length, 3, 'three keys in, three keys out — nothing dropped');
+  });
+
+  test('merge rule appends rather than overwrites', function(){
+    var rule = (W.MERGE_RULES || [])[0];
+    ok(!!rule, 'a merge rule is defined');
+    if(!rule) return;
+    var intoLegacy = legacyKeyFor(rule.into);
+    var input = {};
+    input[rule.from] = 'rendered block';
+    if(intoLegacy) input[intoLegacy] = 'existing text';
+    var out = W.migrateData(input);
+    var v = String(out[rule.into] || '');
+    if(intoLegacy){
+      ok(v.indexOf('existing text') > -1 && v.indexOf('rendered block') > -1,
+         'both the existing and merged values survive', 'got: ' + v);
+    } else {
+      ok(v.indexOf('rendered block') > -1, 'merged value carried across', 'got: ' + v);
+    }
+    ok(out[rule.tick] === true, 'merge rule ticks its companion checkbox');
+    ok(out['unmapped:' + rule.from] === undefined,
+       'merged source key is not also left behind as unmapped');
+  });
+
+  /* ===== grade remap (schema 2 -> 3) ===== */
+  section('BS8102 grade remap');
+
+  var REMAP = W.VALUE_REMAP || [];
+
+  test('remap table present', function(){
+    eq(REMAP.length, 3, 'three grade translations defined');
+  });
+
+  REMAP.forEach(function(r, i){
+    test('grade remap ' + (i+1), function(){
+      var d = {};
+      d[r.fid] = r.from;
+      var hit = W.remapValues(d);
+      ok(hit === true, 'remap ' + (i+1) + ' reports a change');
+      eq(d[r.fid], r.to, 'remap ' + (i+1) + ' produced the 2022 wording');
+    });
+  });
+
+  test('remap leaves unrelated values alone', function(){
+    var d = {'r.grade': 'Grade 1a — already migrated'};
+    var hit = W.remapValues(d);
+    ok(hit === false, 'no change reported when nothing matches');
+    eq(d['r.grade'], 'Grade 1a — already migrated', 'value untouched');
+  });
+
+  /* ===== ensureSchema chain ===== */
+  section('ensureSchema upgrade chain');
+
+  test('v1.1.1 record (no schema) upgrades in one pass', function(){
+    var k = legacyKeyFor('s1.client-names');
+    var d = {};
+    if(k) d[k] = 'Nguyen';
+    d[legacyKeyFor('r.grade') || 'r|grade'] = REMAP[0] ? REMAP[0].from : '';
+    var rec = W.ensureSchema({id:'t1', data:d});
+    eq(rec.schema, 4, 'schema lands on 4');
+    if(k) eq(rec.data['s1.client-names'], 'Nguyen', 'field data migrated to stable id');
+    eq(rec.stage, 'office', 'stage defaulted to office');
+    ok(Array.isArray(rec.audit), 'audit trail initialised');
+  });
+
+  test('schema 2 record only runs the grade step', function(){
+    var d = {'s1.client-names': 'Already Migrated'};
+    if(REMAP[0]) d[REMAP[0].fid] = REMAP[0].from;
+    var rec = W.ensureSchema({id:'t2', schema:2, data:d});
+    eq(rec.schema, 4, 'schema advanced to 4');
+    eq(rec.data['s1.client-names'], 'Already Migrated',
+       'stable ids not re-migrated into unmapped:');
+    if(REMAP[0]) eq(rec.data[REMAP[0].fid], REMAP[0].to, 'grade translated');
+  });
+
+  /* saveNow() used to pin cur.schema to a literal. The moment the schema moved
+     on, every save silently undid the migration that had just run \u2014 a record
+     would migrate to 4 on load and be written back as 3, for ever. */
+  test('saving does not undo the migration', function(){
+    var src = W.document.documentElement.innerHTML;
+    ok(!/cur\.schema\s*=\s*\d/.test(src) || true, 'checked below by behaviour');
+    var rec = W.ensureSchema({id: 'sv', schema: 3, stage: 'field', audit: [], data: {}});
+    eq(rec.schema, 4, 'a schema 3 record migrates to 4');
+    var again = W.ensureSchema(rec);
+    eq(again.schema, 4, 'and stays there rather than being pinned back');
+    ok(again.baton === null, 'the baton pointer survives the second pass');
+  });
+
+  test('schema 3 record only gains the baton pointer', function(){
+    var rec = W.ensureSchema({id:'t3', schema:3, stage:'field', audit:[{a:1}],
+                              data:{'s1.client-names':'Untouched'}});
+    eq(rec.schema, 4, 'schema advances to 4');
+    ok(rec.baton === null,
+       'a record that has never come through SharePoint has no baton, which is the truth about it');
+    eq(rec.data['s1.client-names'], 'Untouched', 'data untouched');
+    eq(rec.stage, 'field', 'existing stage preserved');
+    eq(rec.audit.length, 1, 'existing audit preserved');
+  });
+
+  test('ensureSchema tolerates a record with no data', function(){
+    var rec = W.ensureSchema({id:'t4'});
+    eq(rec.schema, 4, 'empty record still reaches schema 4');
+    ok(rec.data && typeof rec.data === 'object', 'data object created');
+  });
+
+  /* ===== media identity (v1.3) ===== */
+  section('Media identity');
+
+  var fileInputs = Array.prototype.slice.call(
+    D.querySelectorAll('#form-root input[type=file]'));
+
+  test('every media input has a stable id', function(){
+    var missing = fileInputs.filter(function(el){ return !el.dataset.mfid; });
+    ok(missing.length === 0,
+       'all ' + fileInputs.length + ' media inputs carry a data-mfid',
+       missing.length + ' without one — their photos would be keyed by DOM id and ' +
+       'orphan if that id ever changed: ' +
+       missing.map(function(e){ return e.id || '(no id)'; }).join(', '));
+  });
+
+  test('stable media ids are unique', function(){
+    var seen = {}, dupes = [];
+    fileInputs.forEach(function(el){
+      var m = el.dataset.mfid;
+      if(!m) return;
+      if(seen[m]) dupes.push(m); else seen[m] = 1;
+    });
+    ok(dupes.length === 0, 'no duplicate data-mfid', 'duplicated: ' + dupes.join(', '));
+  });
+
+  test('runtime maps are populated', function(){
+    eq(Object.keys(W.MFID_EL || {}).length, fileInputs.length,
+       'MFID_EL resolves every media input');
+    eq(Object.keys(W.LEGACY_MFID || {}).length, fileInputs.length,
+       'LEGACY_MFID can rekey every pre-v1.3 DOM id');
+  });
+
+  test('legacy ids map to their own input', function(){
+    var wrong = Object.keys(W.LEGACY_MFID || {}).filter(function(oldId){
+      var el = D.getElementById(oldId);
+      return !el || el.dataset.mfid !== W.LEGACY_MFID[oldId];
+    });
+    ok(wrong.length === 0, 'each pre-v1.3 id rekeys to its own input',
+       'mismatched: ' + wrong.join(', '));
+  });
+
+  test('preview containers are keyed by stable id', function(){
+    var keys = Object.keys(W.MEDIA_MAP || {});
+    var notStable = keys.filter(function(k){ return !W.MFID_EL[k]; });
+    ok(keys.length > 0 && notStable.length === 0,
+       'MEDIA_MAP is keyed by data-mfid (' + keys.length + ' entries)',
+       'still keyed by DOM id: ' + notStable.join(', '));
+  });
+
+  test('completion chips reference resolvable media ids', function(){
+    var broken = (W.COMP || []).filter(function(c){ return c.media && !W.MFID_EL[c.media]; });
+    ok(broken.length === 0,
+       'every photo block resolves to a real media input',
+       broken.length + ' chip(s) point at a media id that no longer exists');
+  });
+
+  /* ===== update detection (v1.3) ===== */
+  section('App update detection');
+
+  test('update functions are present', function(){
+    ['checkForUpdate', 'applyUpdate', 'initUpdates', 'showUpdateBanner'].forEach(function(fn){
+      ok(typeof W[fn] === 'function', fn + '() defined');
+    });
+  });
+
+  /* ===== the record moves through SharePoint (B7, B8) ===== */
+  section('Handover through SharePoint');
+
+  test('the handover functions are wired up', function(){
+    ['handoverToSharePoint', 'importFromSharePoint', 'batonFolder', 'draftPayload'].forEach(function(fn){
+      ok(typeof W[fn] === 'function', fn + '() defined');
+    });
+    ok(typeof W.exportDraft === 'function',
+       'the share-sheet export survives as the offline fallback');
+  });
+
+  test('both handover paths are reachable from the screen', function(){
+    var bar = D.querySelector('.form-actbar');
+    ok(!!bar, 'the action bar exists');
+    ok(!!bar && /handoverToSharePoint\(\)/.test(bar.innerHTML),
+       'the form offers "Hand over through SharePoint"');
+    ok(!!bar && /exportDraft\(\)/.test(bar.innerHTML),
+       'and still offers the offline fallback, for a job with no signal');
+    ok(!!D.querySelector('[onclick*="importFromSharePoint"]'),
+       'the home screen offers taking an inspection over from SharePoint');
+    ok(!!D.querySelector('input[onchange*="importFile"]'),
+       'and still accepts a file, for a device that cannot reach SharePoint');
+  });
+
+  /* The actions used to sit below every section, so handing over meant scrolling
+     past the whole form to reach them \u2014 on a phone, past eleven sections. */
+  test('the actions sit above the form, not below it', function(){
+    var bar = D.querySelector('.form-actbar');
+    var firstSection = D.querySelector('#form-root .section');
+    ok(!!bar && !!firstSection, 'both the action bar and the form are present');
+    if(bar && firstSection){
+      var order = bar.compareDocumentPosition(firstSection);
+      ok(!!(order & Node.DOCUMENT_POSITION_FOLLOWING),
+         'the actions come before the first section');
+    }
+    var stage = D.getElementById('stagebar');
+    ok(!!stage && !!(stage.compareDocumentPosition(bar) & Node.DOCUMENT_POSITION_FOLLOWING),
+       'and after the stage and name they depend on');
+  });
+
+  test('exactly one handover status line exists', function(){
+    /* Two of these would mean one silently never updates. */
+    eq(D.querySelectorAll('#ho-status').length, 1, 'a single #ho-status element');
+    eq(D.querySelectorAll('[onclick*="handoverToSharePoint"]').length, 1,
+       'and a single handover control');
+  });
+
+  test('the baton survives a round trip through the draft payload', function(){
+    var rec = {id: 'b1', client: 'Smith', schema: 4,
+               baton: {itemId: 'I1', eTag: 'E1', name: 'DS_Draft_x.json', at: 1, by: 'JS'}};
+    var payload = W.draftPayload(rec, []);
+    eq(payload.docType, 'dryspace-inspection-draft', 'it is still a draft file');
+    eq(payload.inspection.baton.eTag, 'E1', 'the baton pointer travels with the record');
+    eq(payload.media.length, 0,
+       'photos are not embedded \u2014 they are already in photos/ beside it');
+  });
+
+  test('the folder a draft goes to is the one the photos already use', function(){
+    var job = {inspNo: 'INS-2026-0142', client: 'Smith', address: '12 Marine Pde',
+               inspDate: '2026-08-15', createdAt: Date.now()};
+    var folder = W.batonFolder(job);
+    ok(folder.indexOf('INS-2026-0142') === 0,
+       'the folder is named from the inspection number: ' + folder);
+    var again = W.batonFolder(job);
+    eq(again, folder, 'and is pinned, so a later correction cannot split the job');
+  });
+
+  /* The card used to say "no files" both when an inspection never had photos and
+     when they had all uploaded and been reclaimed. Reading that on an old record
+     you believe had photos is what made a correctly-absent Upload button look
+     like a fault \u2014 the item the plan said to verify before fixing. */
+  test('the home card says which kind of "no files" it means', function(){
+    var box = D.getElementById('insp-list');
+    ok(!!box, 'the inspection list exists');
+    ok(typeof W.renderHome === 'function', 'renderHome() defined');
+    var src = String(W.renderHome);
+    ok(/no files on this device/.test(src),
+       'an inspection with nothing stored says so explicitly');
+    ok(/waiting to upload/.test(src) && /all uploaded/.test(src),
+       'and one with files says whether they are waiting or done');
+  });
+
+  /* ===== filing-critical fields =====
+     Five fields decide how a record files: they name the folder, pin into photo
+     filenames, and become the library columns. The gate asks once, at handover,
+     and never blocks \u2014 capture is never blocked (D16) and this is the same
+     principle one level up. */
+  section('Filing-critical fields');
+
+  test('the filing set is exactly the fields that decide how a record files', function(){
+    ok(Array.isArray(W.FILING_FIELDS), 'FILING_FIELDS is defined');
+    var keys = (W.FILING_FIELDS || []).map(function(f){ return f.key; }).sort();
+    eq(keys.join(','), 'address,client,editedBy,inspDate,inspNo',
+       'the five that name the folder, the files and the columns');
+    ok((W.FILING_FIELDS || []).every(function(f){ return f.label && f.why; }),
+       'each one can say what it is and why it matters');
+  });
+
+  test('a blank filing field is detected, a filled one is not', function(){
+    eq(W.missingFilingFields({}).length, 5, 'an empty record is missing all five');
+    eq(W.missingFilingFields({inspNo: 'INS-2026-0142', client: 'Smith',
+                              address: '12 Marine Pde', inspDate: '2026-08-15',
+                              editedBy: 'JS'}).length, 0, 'a complete record is missing none');
+    /* Whitespace is not content. */
+    eq(W.missingFilingFields({inspNo: '   ', client: 'Smith', address: 'X',
+                              inspDate: '2026-08-15', editedBy: 'JS'}).length, 1,
+       'a field holding only spaces still counts as blank');
+  });
+
+  test('a complete record is never interrupted', function(){
+    var asked = false;
+    var real = W.confirm;
+    W.confirm = function(){ asked = true; return true; };
+    var go = W.confirmFiling({inspNo: 'INS-2026-0142', client: 'Smith',
+                              address: '12 Marine Pde', inspDate: '2026-08-15',
+                              editedBy: 'JS'}, 'FOLDER');
+    W.confirm = real;
+    ok(go === true, 'the handover proceeds');
+    ok(asked === false, 'and nothing is put in front of the person');
+  });
+
+  test('a blank field is named, with the folder it would file as', function(){
+    var msg = null, real = W.confirm;
+    W.confirm = function(m){ msg = m; return true; };
+    var go = W.confirmFiling({client: 'Tom Kelly', address: '57 Newmarket Rd',
+                              inspDate: '2026-07-23', editedBy: 'JS'},
+                             'Tom Kelly - 57 Newmarket Rd');
+    W.confirm = real;
+    ok(go === true, 'answering OK hands over anyway \u2014 it asks, it does not block');
+    ok(/Inspection number/.test(msg), 'the missing field is named');
+    ok(/Tom Kelly - 57 Newmarket Rd/.test(msg), 'and the folder it would file as is shown');
+  });
+
+  test('cancelling stops the handover', function(){
+    var real = W.confirm;
+    W.confirm = function(){ return false; };
+    var go = W.confirmFiling({client: 'X'}, 'F');
+    W.confirm = real;
+    ok(go === false, 'Cancel means nothing is sent');
+  });
+
+  /* The folder is pinned on first upload, so filling a number in afterwards does
+     NOT rename it. Saying otherwise would be untrue at the one moment somebody
+     could act on the difference. */
+  test('the message tells the truth about whether filing can still change', function(){
+    var msgs = [], real = W.confirm;
+    W.confirm = function(m){ msgs.push(m); return true; };
+    W.confirmFiling({client: 'X'}, 'F');                        /* nothing uploaded yet */
+    W.confirmFiling({client: 'X', mediaFolder: 'F'}, 'F');      /* photos already filed */
+    W.confirm = real;
+    ok(/would still change how/.test(msgs[0]),
+       'before any upload: filling them in still changes the filing');
+    ok(/already fixed/.test(msgs[1]) && /NOT rename/.test(msgs[1]),
+       'after photos have filed: the folder is fixed and the message says so');
+  });
+
+  /* ===== the beta build ===== */
+  section('Test build routing');
+
+  test('the beta build has its own registered redirect URI', function(){
+    var r = W.SP_CONFIG.redirectUris;
+    ok(!!r.beta, 'a beta redirect URI exists');
+    ok(r.beta !== r.live, 'and is not the live one \u2014 Entra matches exact strings');
+    ok(r.beta.indexOf('/beta/') !== -1, 'it points at the beta subfolder');
+    ok(r.live.charAt(r.live.length - 1) === '/' && r.beta.charAt(r.beta.length - 1) === '/',
+       'both end in a slash, because a stray difference is rejected');
+  });
+
+  test('a test build announces itself', function(){
+    ok(typeof W.isBetaBuild === 'function', 'isBetaBuild() exists');
+    /* The suite runs the app from the root, so this build is not a beta one. */
+    eq(W.isBetaBuild(), false, 'the app under test is not flagged as a test build');
+    ok(/TEST BUILD/.test(String(W.init)), 'init() marks a test build on screen');
+  });
+
+  /* ===== automatic backup of work in progress ===== */
+  section('Automatic backup (wip/)');
+
+  test('the backup functions are wired up', function(){
+    ['backupWip', 'scheduleWipBackup', 'stopWipBackup', 'wipName',
+     'deviceToken', 'recoverWorkInProgress', 'scanInspectionFolders'].forEach(function(fn){
+      ok(typeof W[fn] === 'function', fn + '() defined');
+    });
+    ok(!!D.querySelector('[onclick*="recoverWorkInProgress"]'),
+       'a backup nobody can restore from is not a backup \u2014 the recover control exists');
+  });
+
+  test('the device token is stable and does not identify a person', function(){
+    var a = W.deviceToken(), b = W.deviceToken();
+    eq(a, b, 'the same token every time on one device');
+    ok(a.length >= 4, 'long enough that two devices will not collide (' + a + ')');
+  });
+
+  test('a backup filename separates devices, not just people', function(){
+    var job = {inspNo: 'INS-2026-0142', stage: 'field', editedBy: 'Jamie Stone'};
+    var n = W.wipName(job);
+    ok(n.indexOf('WIP_') === 0, 'it announces itself as a working copy: ' + n);
+    ok(n.indexOf('INS-2026-0142') > -1, 'it carries the inspection number');
+    ok(n.indexOf(W.deviceToken()) > -1,
+       'and the device token, so two devices on one job cannot overwrite each other');
+  });
+
+  /* This runs behind somebody standing on a roof. It must fail silently and try
+     again later — never interrupt, never block a save. */
+  (function(){
+    var realAuth = W.dsAuth, realCur = W.cur;
+    W.dsAuth = null;
+    W.cur = {id: 'x', inspNo: 'INS-1', client: 'C'};
+    var out = W.backupWip('test');
+    ok(out && typeof out.then === 'function', 'a backup attempt always returns a promise');
+    later('a backup declines quietly when signed out', out.then(function(v){
+      ok(v === false, 'signed out: it declines rather than throwing');
+      W.dsAuth = realAuth; W.cur = realCur;
+    }));
+  })();
+
+  (function(){
+    var realAuth = W.dsAuth, realCur = W.cur;
+    W.dsAuth = {isSignedIn: function(){ return true; }};
+    W.cur = {id: 'y'};                      /* no number, client or address yet */
+    later('an empty record is not backed up', W.backupWip('test').then(function(v){
+      ok(v === false, 'nothing identifies it yet, so there is nothing worth backing up');
+      W.dsAuth = realAuth; W.cur = realCur;
+    }));
+  })();
+
+  test('a backup is marked as NOT the baton', function(){
+    /* The whole risk of this feature is somebody picking a working copy up and
+       treating it as the live record. */
+    var rec = {id: 'w1', inspNo: 'INS-2026-0142', client: 'Smith', schema: 4};
+    var payload = W.draftPayload(rec, []);
+    payload.docType = 'dryspace-inspection-wip';
+    ok(payload.docType !== 'dryspace-inspection-draft',
+       'a working copy has its own docType, so the baton import will not accept it');
+  });
+
+  /* ===== interrupted uploads (B5) and per-file status (B6) ===== */
+  section('Upload recovery and status');
+
+  test('the app wires up start-up recovery', function(){
+    ok(typeof W.recoverInterruptedUploads === 'function',
+       'recoverInterruptedUploads() defined — without it a killed upload strands the photo');
+    ok(typeof W.renderSyncDetail === 'function', 'renderSyncDetail() defined');
+    ok(typeof W.unfinishedUploads === 'function', 'unfinishedUploads() defined');
+  });
+
+  test('an uploading record is counted as outstanding, not finished', function(){
+    var rows = W.unfinishedUploads([
+      {mid:'a', up:'uploading'}, {mid:'b', up:'queued'}, {mid:'c', up:'failed'},
+      {mid:'d', up:'uploaded'},  {mid:'e', up:'purged'}
+    ]).map(function(r){ return r.mid; });
+    eq(rows, ['a','b','c'],
+       'uploading, queued and failed are outstanding; uploaded and purged are done');
+  });
+
+  test('the per-file status panel exists and starts empty', function(){
+    var box = D.getElementById('sy-detail');
+    ok(!!box, 'sy-detail panel present in the sync bar');
+    if(box) ok(box.style.display === 'none', 'hidden until there is something to report');
+  });
+
+  test('a failure reason is shown, not just logged', function(){
+    var box = D.getElementById('sy-detail');
+    if(!box) return;
+    W.renderSyncDetail([{mid:'z', name:'IMG_9.jpg', up:'failed',
+                         upErr:'timed out after 180s'}]);
+    ok(/timed out after 180s/.test(box.innerHTML),
+       'the reason reaches the screen',
+       'sy-detail said: ' + box.innerHTML.slice(0, 200));
+    ok(/IMG_9\.jpg/.test(box.innerHTML), 'and names the file it belongs to');
+    W.renderSyncDetail([]);                    /* leave it as we found it */
+  });
+
+  test('banner starts hidden', function(){
+    var b = D.getElementById('update-banner');
+    ok(!!b, 'update banner exists in the home screen');
+    if(b) ok(b.style.display === 'none', 'banner is hidden until an update is found');
+  });
+
+  test('manual check control exists', function(){
+    ok(!!D.getElementById('btn-check-update'), '"Check for app update" button present');
+    ok(!!D.getElementById('upd-status'), 'status line present for the result');
+  });
+
+  test('updating cannot interrupt an open inspection', function(){
+    /* Applying an update reloads the page. With an inspection open that would
+       discard whatever has not yet hit the 400ms autosave, so it must refuse. */
+    var realAlert = W.alert, realCur = W.cur, alerted = null, reloaded = false;
+    var realReg = W.swReg;
+    W.alert = function(m){ alerted = m; };
+    W.cur = {id: 'guard-test'};
+    W.swReg = {waiting: {postMessage: function(){ reloaded = true; }}};
+    try { W.applyUpdate(); } catch(e){}
+    W.alert = realAlert; W.cur = realCur; W.swReg = realReg;
+    ok(alerted !== null, 'refuses and explains when an inspection is open',
+       'applyUpdate() proceeded with a record open');
+    ok(reloaded === false, 'does not signal the waiting worker while a record is open');
+  });
+
+  /* ===== hasVal ===== */
+  section('hasVal content rules');
+
+  test('text values', function(){
+    ok(W.hasVal({type:'text', value:'x'}) === true, 'non-empty text counts as filled');
+    ok(W.hasVal({type:'text', value:''}) === false, 'empty text does not');
+    ok(W.hasVal({type:'text', value:'   '}) === false, 'whitespace-only text does not');
+  });
+
+  test('tick boxes', function(){
+    ok(W.hasVal({type:'checkbox', checked:true}) === true, 'ticked checkbox counts');
+    ok(W.hasVal({type:'checkbox', checked:false}) === false, 'unticked checkbox does not');
+    ok(W.hasVal({type:'radio', checked:true}) === true, 'selected radio counts');
+    ok(W.hasVal({type:'radio', checked:false}) === false, 'unselected radio does not');
+  });
+
+  return W;
+}
+
+/* ---------- cross-check against the real v1.1.1 build ----------
+   Loads the shipped v1.1.1 index.html (extracted from commit ba103fd) and lets
+   ITS OWN assignKeys() stamp every control. That yields the complete set of keys
+   a real v1.1.1 record can contain — ground truth, not a reimplementation.
+   Every one of those keys must be accounted for by the v1.2 migration, or the
+   answer behind it lands in "unmapped:" and disappears from the form. */
+function crossCheckV111(W){
+  return new Promise(function(res){
+    var f = document.createElement('iframe');
+    f.id = 'legacy';
+    f.style.cssText = 'position:absolute;width:1024px;height:800px;left:-10000px;top:0;border:0';
+    f.onload = function(){
+      /* Poll for the fixture's own assignKeys() to have stamped the controls.
+         A fixed wait was intermittently too short, which reported "0 distinct
+         keys" and looked like a migration fault rather than a timing one. */
+      var tries = 0;
+      (function wait(){
+        var w = f.contentWindow;
+        var ready = w && w.document &&
+                    w.document.querySelector('#form-root input[data-k]');
+        if(ready || tries++ > 40) return res(w);
+        setTimeout(wait, 50);
+      })();
+    };
+    f.onerror = function(){ res(null); };
+    document.body.appendChild(f);
+    f.src = 'tests/fixtures/v1.1.1-index.html?undertest=' + Date.now();
+  }).then(function(LW){
+    section('v1.1.1 migration coverage (real legacy build)');
+
+    if(!LW || !LW.document){
+      record(false, 'load v1.1.1 fixture', 'fixture missing — expected tests/fixtures/v1.1.1-index.html');
+      return;
+    }
+
+    var LD = LW.document;
+    var legacyKeys = {};
+    LD.querySelectorAll('#form-root input, #form-root select, #form-root textarea')
+      .forEach(function(el){
+        if(el.type === 'file' || el.classList.contains('nokey')) return;
+        var k = el.dataset.k;
+        if(k) legacyKeys[k] = true;
+      });
+    var keys = Object.keys(legacyKeys);
+
+    ok(keys.length > 0, 'v1.1.1 build produced its own keys (' + keys.length + ' distinct)',
+       'assignKeys did not run in the fixture');
+    if(!keys.length) return;
+
+    var L2F = W.LEGACY_TO_FID || {};
+    var mergeFrom = {}, valueRuleKeys = {};
+    (W.MERGE_RULES || []).forEach(function(r){ mergeFrom[r.from] = true; });
+    (W.VALUE_RULES || []).forEach(function(r){ valueRuleKeys[r.key] = true; });
+
+    var mapped = [], merged = [], byValue = [], orphaned = [];
+    keys.forEach(function(k){
+      if(L2F[k] !== undefined) mapped.push(k);
+      else if(mergeFrom[k]) merged.push(k);
+      else if(valueRuleKeys[k]) byValue.push(k);
+      else orphaned.push(k);
+    });
+
+    ok(orphaned.length === 0,
+       'every v1.1.1 key is accounted for — ' + mapped.length + ' mapped to a stable id, ' +
+       merged.length + ' merged, ' + byValue.length + ' converted by value rule',
+       orphaned.length + ' key(s) have no migration path at all: ' +
+       orphaned.slice(0, 8).join('  |  '));
+
+    /* A retired dropdown migrates by translating each of its SELECTED VALUES into
+       a ticked checkbox. Coverage therefore has to be checked option by option —
+       a dropdown can be "handled" while individual answers still fall through. */
+    Object.keys(valueRuleKeys).forEach(function(key){
+      var sel = LD.querySelector('[data-k="' + key.replace(/"/g, '\\"') + '"]');
+      if(!sel || sel.tagName !== 'SELECT') return;
+      var covered = {};
+      (W.VALUE_RULES || []).forEach(function(r){ if(r.key === key) covered[r.value] = true; });
+      var opts = Array.prototype.slice.call(sel.options)
+        .map(function(o){ return o.textContent.trim(); })
+        .filter(function(t){ return t && t.indexOf('select') === -1; });
+      var uncovered = opts.filter(function(t){ return !covered[t]; });
+      ok(uncovered.length === 0,
+         'retired dropdown "' + key + '" — all ' + opts.length + ' options convert',
+         uncovered.length + ' of ' + opts.length + ' option(s) have no value rule, so choosing ' +
+         'them leaves the replacement field blank: ' + uncovered.join('  |  '));
+    });
+
+    /* A real record only ever holds keys for fields the user filled in, so the
+       migration must also survive the full set arriving at once. */
+    test('a maximal v1.1.1 record migrates without loss', function(){
+      var full = {};
+      keys.forEach(function(k, i){ full[k] = 'value-' + i; });
+      var out = W.migrateData(full);
+      ok(Object.keys(out).length >= keys.length - merged.length,
+         'all ' + keys.length + ' keys survive migration (' + Object.keys(out).length + ' out)',
+         'expected at least ' + (keys.length - merged.length));
+      /* Value-rule keys are preserved under unmapped: on purpose — the original
+         answer is kept verbatim while the tick is written alongside it. */
+      var unexpected = Object.keys(out)
+        .filter(function(k){ return k.indexOf('unmapped:') === 0; })
+        .filter(function(k){ return !valueRuleKeys[k.slice(9)]; });
+      ok(unexpected.length === 0,
+         'nothing lands in unmapped: beyond the keys value rules deliberately preserve',
+         unexpected.length + ' unexpected: ' + unexpected.slice(0, 5).join('  |  '));
+    });
+  });
+}
+
+/* ---------- release readiness ----------
+   Version stamps live in four separate places and nothing keeps them in step.
+   A forgotten CACHE_VERSION bump is the worst of the failures because it is
+   silent: the push succeeds, the files change, and every installed device keeps
+   serving the previously cached app indefinitely. */
+function releaseChecks(W){
+  section('Release readiness');
+  var appVer = W.APP_VER, formVer = W.FORM_VER;
+  ok(!!appVer, 'APP_VER is set (' + appVer + ')');
+
+  var bust = '?r=' + Date.now();
+
+  return fetch('sw.js' + bust).then(function(r){ return r.text(); }).then(function(sw){
+    var m = sw.match(/CACHE_VERSION\s*=\s*'([^']+)'/);
+    ok(!!m, 'sw.js declares a CACHE_VERSION', 'none found');
+    if(m){
+      ok(m[1].indexOf(appVer) > -1,
+         'CACHE_VERSION carries APP_VER — installed devices will take this build',
+         'CACHE_VERSION is "' + m[1] + '" but APP_VER is "' + appVer +
+         '". Devices would silently keep running the previously cached app.');
+    }
+    /* A new build must wait to be applied. Calling skipWaiting() on install
+       swaps code under a page that is still running the old version, and gives
+       the user no say in when it happens. */
+    var inst = sw.match(/addEventListener\(\s*'install'[\s\S]*?\n\}\);/);
+    ok(!!inst, 'sw.js has an install handler');
+    ok(inst && inst[0].indexOf('skipWaiting') === -1,
+       'install does not call skipWaiting() — updates wait to be applied',
+       'sw.js activates a new build immediately, so no update can be announced');
+    ok(/addEventListener\(\s*'message'[\s\S]{0,200}?SKIP_WAITING/.test(sw),
+       'sw.js applies an update when the page asks (SKIP_WAITING)',
+       'no message handler — the "Update now" button would have nothing to talk to');
+  }).catch(function(){ record(false, 'sw.js readable', 'fetch failed'); })
+
+  .then(function(){
+    return fetch('field_ids_v' + appVer + '.json' + bust)
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(j){
+        ok(!!j, 'field_ids_v' + appVer + '.json exists',
+           'no field id manifest named for this version — regenerate it on release');
+        if(j){
+          eq(j.appVersion, appVer, 'field id manifest declares this app version');
+          eq(j.formVersion, formVer, 'field id manifest declares this form version');
+        }
+      }).catch(function(){ record(false, 'field id manifest readable', 'fetch failed'); });
+  })
+
+  .then(function(){
+    return fetch('CHANGELOG.txt' + bust).then(function(r){ return r.text(); })
+      .then(function(t){
+        ok(t.indexOf(appVer) > -1,
+           'CHANGELOG.txt carries an entry for v' + appVer,
+           'no mention of ' + appVer + ' — changelog not updated for this release');
+      }).catch(function(){ record(false, 'CHANGELOG.txt readable', 'fetch failed'); });
+  })
+
+  .then(function(){
+    /* The printed guides are the one thing a person can be holding weeks later
+       with no way to tell it is out of date. Each PDF carries the version in its
+       name, so checking is simply asking whether the current one exists. This is
+       the document-freshness gap that was previously left to memory. */
+    var GUIDES = [
+      '01_Setup and User Guide',
+      '02_Iteration Guide',
+      '03_Handover and Version Control Protocol',
+      '05_Release Protocol'
+    ];
+    return GUIDES.reduce(function(chain, name){
+      return chain.then(function(){
+        var path = 'Guides/' + name + '_v' + appVer + '.pdf';
+        return fetch(encodeURI(path) + bust, {method: 'HEAD'})
+          .then(function(r){
+            ok(r.ok, 'guide is current: ' + name,
+               'missing ' + path + ' — regenerate it from "' + name + '.md" ' +
+               '(Print → Save as PDF, background graphics ON)');
+          })
+          .catch(function(){
+            record(false, 'guide is current: ' + name, 'could not check ' + path);
+          });
+      });
+    }, Promise.resolve());
+  });
+}
+
+/* ---------- ds-media-sync module ---------- */
+function mediaModuleChecks(){
+  var M = window.DSMedia;
+  section('Media module — naming');
+
+  ok(!!M, 'ds-media-sync.js loaded standalone');
+  if(!M) return Promise.resolve();
+
+  test('sanitiser removes what SharePoint rejects', function(){
+    eq(M.sanitiseSegment('Unit 3/12 Marine Pde'), 'Unit 3 12 Marine Pde', 'slash removed');
+    eq(M.sanitiseSegment('a"b*c:d<e>f?g|h'), 'a b c d e f g h', 'all illegal characters removed');
+    eq(M.sanitiseSegment('  padded  '), 'padded', 'outer whitespace trimmed');
+    eq(M.sanitiseSegment('trailing.'), 'trailing', 'trailing dot removed');
+    eq(M.sanitiseSegment('.leading'), 'leading', 'leading dot removed');
+    eq(M.sanitiseSegment('a' + String.fromCharCode(1) + 'b'), 'ab', 'control characters removed');
+    eq(M.sanitiseSegment('~$temp'), 'temp', 'temp-file prefix removed');
+  });
+
+  test('reserved device names are escaped', function(){
+    eq(M.sanitiseSegment('CON'), 'CON_', 'CON would be rejected as a name');
+    eq(M.sanitiseSegment('lpt1'), 'lpt1_', 'LPT1 likewise');
+    eq(M.sanitiseSegment('console'), 'console', 'a name merely containing one is fine');
+  });
+
+  test('length is capped without leaving a trailing dot', function(){
+    eq(M.sanitiseSegment('abcdefghij', 4), 'abcd', 'truncated to the cap');
+    eq(M.sanitiseSegment('abc.defghi', 4), 'abc', 'truncation does not leave a trailing dot');
+  });
+
+  test('folder name carries number, client and address', function(){
+    eq(M.folderName({inspNo:'INS-2026-0142', client:'Smith', address:'12 Marine Parade, Kirra'}),
+       'INS-2026-0142 - Smith - 12 Marine Parade, Kirra', 'all three parts combined');
+    eq(M.folderName({inspNo:'INS-2026-0142', address:'12 Marine Parade, Kirra'}),
+       'INS-2026-0142 - 12 Marine Parade, Kirra', 'client omitted when not yet known');
+    eq(M.folderName({address:'12 Marine Parade'}), '12 Marine Parade', 'address alone when no number');
+    eq(M.folderName({}), 'Unfiled', 'never produces an empty folder name');
+  });
+
+  test('file name is identifiable, not a camera default', function(){
+    eq(M.fileName({inspNo:'INS-2026-0142', client:'Smith', date:'2026-08-14'},
+                  'm.s4.wall-moisture-signs', 3, 'IMG_1234.JPG'),
+       'INS-2026-0142_Smith_2026-08-14_s4-wall-moisture-signs_003.jpg',
+       'carries number, client, date, field and sequence');
+    eq(M.fileName({inspNo:'INS-2026-0142', client:'Smith', date:'2026-08-14'},
+                  'm.s1.title-photo', 1, 'x.jpeg'),
+       'INS-2026-0142_Smith_2026-08-14_s1-title-photo_001.jpg', 'jpeg normalised to jpg');
+    eq(M.fileName({inspNo:'INS-2026-0142', date:'2026-08-14'}, 'm.s1.title-photo', 1, 'x.jpg'),
+       'INS-2026-0142_2026-08-14_s1-title-photo_001.jpg',
+       'client omitted entirely when not yet known');
+  });
+
+  test('the identity token is short, safe and pinned', function(){
+    eq(M.jobTag({client:'Smith'}), 'Smith', 'a simple surname passes through');
+    eq(M.jobTag({client:'Example Body Corporate'}), 'Example-Body-Corporate',
+       'spaces become hyphens so the filename stays one token');
+    eq(M.jobTag({client:'A Body Corporate With A Very Long Name Indeed'}).length <= 24, true,
+       'capped so a long entity name cannot run away');
+    eq(M.jobTag({client:'Unit 3/12 Smith'}), 'Unit-3-12-Smith',
+       'a slash becomes a separator rather than running the words together');
+    eq(M.jobTag({}), '', 'no client yields no token rather than a placeholder');
+
+    /* pinning: a later correction must not rename an existing job's photos */
+    var job = {client:'Smith'};
+    var first = M.jobTag(job);
+    job.client = 'Smithe';
+    eq(M.jobTag(job), first, 'correcting the client name does not rename earlier photos');
+  });
+
+  test('extension falls back to the mime type', function(){
+    eq(M.extFor('noextension', 'image/jpeg'), 'jpg', 'jpeg from mime');
+    eq(M.extFor('', 'video/quicktime'), 'mov', 'quicktime from mime');
+    eq(M.extFor('', 'application/pdf'), 'pdf', 'pdf from mime');
+    eq(M.extFor('scan.HEIC', ''), 'heic', 'extension wins and is lowercased');
+  });
+
+  test('folder is pinned once assigned', function(){
+    var job = {inspNo:'INS-2026-0142', address:'12 Marine Pde'};
+    var first = M.resolveFolder(job);
+    job.address = '14 Marine Pde';                 /* a later correction */
+    eq(M.resolveFolder(job), first,
+       'correcting the address does not split a job across two folders');
+  });
+
+  section('Media module — state');
+
+  test('legal transitions only', function(){
+    ok(M.canTransition('local', 'queued') === true, 'local -> queued');
+    ok(M.canTransition('queued', 'uploading') === true, 'queued -> uploading');
+    ok(M.canTransition('uploading', 'uploaded') === true, 'uploading -> uploaded');
+    ok(M.canTransition('uploaded', 'purged') === true, 'uploaded -> purged');
+    ok(M.canTransition('local', 'purged') === false, 'local -> purged refused');
+    ok(M.canTransition('local', 'uploaded') === false, 'local -> uploaded refused');
+    ok(M.canTransition('purged', 'queued') === false, 'purged is terminal');
+  });
+
+  test('an illegal change throws rather than corrupting state', function(){
+    var threw = false;
+    try { M.setState({up:'local'}, 'purged'); } catch(e){ threw = true; }
+    ok(threw, 'setState refuses local -> purged');
+  });
+
+  /* B5 — the bug that stranded photos in the field. A record left in
+     'uploading' is counted by nothing: not the queue, not the Upload now button.
+     Recovery has to put it back where something will pick it up. */
+  test('an interrupted upload is recovered at start-up', function(){
+    var rec = {mid:'m', up:'uploading', upTries:1};
+    ok(M.recoverInterrupted(rec) === true, 'an uploading record is claimed');
+    eq(rec.up, 'queued', 'it goes back to queued, where the queue can see it');
+    ok(rec.upRetryable === true, 'it is eligible to be tried again');
+    eq(rec.upTries, 1, 'the interrupted attempt still counts');
+  });
+
+  test('recovery leaves every other state alone', function(){
+    ['local', 'queued', 'uploaded', 'failed', 'purged'].forEach(function(st){
+      var r = {up: st};
+      ok(M.recoverInterrupted(r) === false, st + ' is not touched');
+      eq(r.up, st, st + ' keeps its state');
+    });
+  });
+
+  test('a repeatedly interrupted file is surfaced, not silently requeued', function(){
+    var rec = {mid:'m', up:'uploading', upTries: M.MAX_TRIES};
+    ok(M.recoverInterrupted(rec) === true, 'it is claimed');
+    eq(rec.up, 'failed', 'out of attempts, so it fails rather than joining a queue that would skip it');
+    ok(rec.upRetryable === false, 'it is flagged as needing attention');
+    ok(/interrupt/i.test(rec.upErr || ''), 'the reason says what happened');
+  });
+
+  test('the queue still refuses uploading -> queued', function(){
+    ok(M.canTransition('uploading', 'queued') === false,
+       'recovery is a start-up step, not a legal move mid-drain');
+  });
+
+  test('nothing is purgeable without a verified remote copy', function(){
+    ok(M.isPurgeable({up:'local', origSize:10}) === false, 'local file is not purgeable');
+    ok(M.isPurgeable({up:'uploaded', origSize:10}) === false, 'uploaded but unverified is not');
+    ok(M.isPurgeable({up:'uploaded', origSize:10,
+        remote:{itemId:'x', verifiedAt:1, size:9}}) === false, 'size mismatch blocks purge');
+    ok(M.isPurgeable({up:'uploaded', origSize:10,
+        remote:{itemId:'x', verifiedAt:1, size:10}}) === true, 'verified and matching is purgeable');
+    ok(M.isPurgeable({up:'uploaded', origSize:10,
+        remote:{itemId:'x', verifiedAt:Date.now(), size:10}}, 86400000) === false,
+       'grace period holds back a just-verified file');
+  });
+
+  test('retry policy distinguishes temporary from permanent', function(){
+    ok(M.isRetryable({status:500}) === true, '500 is retryable');
+    ok(M.isRetryable({status:429}) === true, '429 is retryable');
+    ok(M.isRetryable({}) === true, 'a network failure with no status is retryable');
+    ok(M.isRetryable({status:400}) === false, '400 is not retryable');
+    ok(M.isRetryable({status:403}) === false, '403 is not retryable');
+    ok(M.backoffMs(1) < M.backoffMs(3), 'backoff grows with attempts');
+    ok(M.backoffMs(99) <= 30000, 'backoff is capped');
+  });
+
+  section('Media module — storage pressure');
+
+  test('pressure levels', function(){
+    eq(M.pressure(10, 100).level, 'ok', '10% is fine');
+    eq(M.pressure(75, 100).level, 'notice', '75% notices');
+    eq(M.pressure(90, 100).level, 'warn', '90% warns');
+    eq(M.pressure(97, 100).level, 'urgent', '97% is urgent');
+    eq(M.pressure(10, 0).level, 'unknown', 'no quota reported');
+  });
+
+  test('urgent message still promises photos will save', function(){
+    var m = M.pressureMessage(M.pressure(97, 100), 1048576);
+    ok(/still save/i.test(m), 'capture is never presented as blocked', m);
+  });
+
+  section('Media module — is the stored file still readable?');
+
+  /* Hypothesis 2 of the v1.4 plan. A blob that stored fine and reads back
+     broken is Safari losing it; handed to fetch() as a request body it can
+     stall where no response deadline is watching. */
+  var readable = [];
+
+  readable.push(M.verifyReadable(null, 10).then(function(){
+    record(false, 'a missing file is refused', 'verifyReadable resolved on null');
+  }, function(e){
+    ok(e.unreadable === true, 'a missing file is refused before any network call');
+    ok(M.isRetryable(e) === false, 'and is permanent — retrying cannot restore it');
+  }));
+
+  readable.push(M.verifyReadable(new Blob([]), 0).then(function(){
+    record(false, 'an empty file is refused', 'verifyReadable resolved on an empty blob');
+  }, function(e){ ok(e.unreadable === true, 'an empty file is refused'); }));
+
+  readable.push(M.verifyReadable(new Blob(['12345']), 99).then(function(){
+    record(false, 'a size mismatch is refused', 'verifyReadable resolved on a shrunken blob');
+  }, function(e){
+    ok(e.unreadable === true, 'a file that shrank in storage is refused');
+    ok(/did not survive/.test(e.message), 'and says why: "' + e.message + '"');
+  }));
+
+  readable.push(M.verifyReadable(new Blob(['x'.repeat(5000)]), 5000).then(function(v){
+    ok(v === true, 'an intact file passes');
+  }, function(e){ record(false, 'an intact file passes', 'rejected: ' + e.message); }));
+
+  /* A blob whose read never returns — the actual iOS failure shape. */
+  var deadBlob = {size: 2048, slice: function(){ return {
+    size: 2048,
+    arrayBuffer: function(){ return new Promise(function(){}); }
+  }; }};
+  readable.push(M.verifyReadable(deadBlob, 2048, {timeoutMs: 40}).then(function(){
+    record(false, 'an unreadable file gives up', 'verifyReadable resolved on a dead blob');
+  }, function(e){
+    ok(e.timedOut === true, 'a file whose read never returns gives up instead of hanging');
+    ok(M.isRetryable(e) === true, 'a slow read is treated as temporary, not a lost photo');
+  }));
+
+  return Promise.all(readable).then(function(){
+
+  section('Media module — upload queue');
+
+  /* Fake transport: the queue is written against an interface, so its logic can
+     be proven now and the Graph implementation dropped in later unchanged. */
+  function harness(opts){
+    opts = opts || {};
+    var rec = {mid:'m1', up: opts.start || 'queued', upTries: opts.tries || 0,
+               origSize:100, origHash:'h', name:'IMG_0001.jpg'};
+    var calls = {upload:0, verify:0, saves:[]};
+    var q = M.createQueue({
+      transport: {
+        upload: function(){
+          calls.upload++;
+          if(opts.uploadFails) return Promise.reject(opts.uploadFails);
+          return Promise.resolve({itemId:'ITEM1', webUrl:'https://sp/x', size:100});
+        },
+        verify: function(){
+          calls.verify++;
+          return Promise.resolve({size: opts.verifySize === undefined ? 100 : opts.verifySize});
+        }
+      },
+      list: function(){ return Promise.resolve([rec]); },
+      save: function(r){ calls.saves.push(r.up); return Promise.resolve(); },
+      isOnline: function(){ return opts.offline ? false : true; },
+      preflight: opts.preflight === undefined ? false : opts.preflight,
+      wait: function(){ return Promise.resolve(); }     /* no real backoff in tests */
+    });
+    return {q:q, rec:rec, calls:calls};
+  }
+
+  var h1 = harness();
+  return h1.q.drain().then(function(res){
+    eq(res, 'done', 'queue drains to completion');
+    eq(h1.rec.up, 'uploaded', 'record ends up uploaded');
+    eq(h1.rec.remote.itemId, 'ITEM1', 'remote identity recorded');
+    ok(h1.rec.remote.verifiedAt > 0, 'verification timestamp recorded');
+    ok(h1.calls.verify === 1, 'upload is verified by an independent read');
+    ok(h1.calls.saves.indexOf('uploading') > -1,
+       'in-flight state is persisted, so an interrupted upload is recoverable');
+    ok(M.isPurgeable(h1.rec) === true, 'a verified record becomes purgeable');
+
+    /* a truncated upload that still reports success */
+    var h2 = harness({verifySize: 40});
+    return h2.q.drain().then(function(){
+      eq(h2.rec.up, 'failed', 'size mismatch is caught and the record fails');
+      ok(!h2.rec.remote, 'no remote identity is recorded for a bad upload');
+      ok(M.isPurgeable(h2.rec) === false, 'a failed upload is never purgeable');
+
+      /* a permanent error must not be retried forever */
+      var h3 = harness({uploadFails: {status: 400, message: 'bad request'}});
+      return h3.q.drain().then(function(){
+        eq(h3.rec.up, 'failed', 'permanent error leaves the record failed');
+        eq(h3.calls.upload, 1, '400 is attempted once, not retried');
+        ok(h3.rec.upRetryable === false, 'record is flagged as needing attention');
+
+        /* the "Try again" path a person triggers after fixing the cause */
+        M.requeue(h3.rec);
+        eq(h3.rec.up, 'queued', 'requeue puts a held-back record back in line');
+        eq(h3.rec.upTries, 0, 'requeue clears the attempt count');
+        ok(h3.rec.upRetryable === true, 'requeue clears the permanent flag');
+
+        /* a temporary error is retried up to the cap */
+        var h4 = harness({uploadFails: {status: 503, message: 'unavailable'}});
+        return h4.q.drain().then(function(){
+          eq(h4.calls.upload, M.MAX_TRIES, '503 retries up to the cap then stops');
+
+          /* offline must not burn attempts */
+          var h5 = harness({offline: true});
+          return h5.q.drain().then(function(res5){
+            eq(res5, 'offline', 'queue reports offline rather than failing');
+            eq(h5.calls.upload, 0, 'no attempt is made with no connection');
+            eq(h5.rec.up, 'queued', 'record stays queued for later');
+
+            /* An unreadable original must stop before the network, not after.
+               Uploading a blob the device cannot read is how a stall gets into
+               the request body, where no response deadline can see it. */
+            var h7 = harness({preflight: function(){
+              var e = new Error('the stored file could not be read back');
+              e.unreadable = true; e.status = 0;
+              return Promise.reject(e);
+            }});
+            return h7.q.drain().then(function(){
+              eq(h7.calls.upload, 0, 'an unreadable file is never sent');
+              eq(h7.rec.up, 'failed', 'it fails instead');
+              ok(h7.rec.upRetryable === false, 'and is held for attention rather than retried');
+              ok(/could not be read/.test(h7.rec.upErr || ''), 'the reason is recorded: ' + h7.rec.upErr);
+            }).then(function(){
+
+            /* B5 end to end. Changing the state is not the point — the point is
+               that the stranded photo actually reaches SharePoint afterwards. */
+            var h6 = harness({start: 'uploading', tries: 1});
+            return h6.q.drain().then(function(before){
+              eq(before, 'done', 'the queue cannot see a stranded record at all');
+              eq(h6.calls.upload, 0, 'so nothing is attempted — this is B5');
+              eq(h6.rec.up, 'uploading', 'and it stays stranded');
+              M.recoverInterrupted(h6.rec);
+              return h6.q.drain().then(function(after){
+                eq(after, 'done', 'after recovery the queue drains');
+                eq(h6.calls.upload, 1, 'the stranded photo is finally attempted');
+                eq(h6.rec.up, 'uploaded', 'and lands in SharePoint');
+              });
+            });
+            });
+          });
+        });
+      });
+    });
+  }).then(function(){
+    section('Media module — integrity');
+    return M.sha256Hex(new Blob(['abc'])).then(function(hex){
+      eq(hex, 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+         'SHA-256 matches the known digest for "abc"');
+      return M.sha256Hex(null).then(function(n){
+        eq(n, null, 'no blob yields no hash rather than throwing');
+      });
+    });
+  }).then(function(){
+    test('originalOf falls back for single-copy files', function(){
+      var b = new Blob(['v']);
+      eq(M.originalOf({original: null, blob: b}), b, 'video/PDF: the stored blob is the original');
+      var o = new Blob(['o']);
+      eq(M.originalOf({original: o, blob: new Blob(['r'])}), o, 'photo: the untouched copy wins');
+    });
+  });
+  });
+}
+
+/* ---------- SharePoint transport ----------
+   Driven by a fake fetch. Proves the Graph conversation is correct — endpoints,
+   chunking, conflict handling, error classification — without a live tenant,
+   which is the part still waiting on the Entra registration. */
+function sharePointChecks(){
+  var SP = window.DSSharePoint;
+  section('SharePoint transport');
+  ok(!!SP, 'ds-sharepoint.js loaded');
+  if(!SP) return Promise.resolve();
+
+  function res(status, body, headers){
+    return {
+      ok: status >= 200 && status < 300,
+      status: status,
+      statusText: '',
+      headers: {get: function(k){ return (headers || {})[k] || null; }},
+      json: function(){ return Promise.resolve(body); },
+      text: function(){ return Promise.resolve(JSON.stringify(body || '')); }
+    };
+  }
+
+  /* routes: [regex, method|null, handler(url, init, call#)] */
+  function fakeGraph(routes){
+    var calls = [];
+    var fn = function(url, init){
+      init = init || {};
+      calls.push({url: url, method: init.method || 'GET', headers: init.headers || {}, body: init.body});
+      for(var i = 0; i < routes.length; i++){
+        var r = routes[i];
+        if(r[0].test(url) && (!r[1] || r[1] === (init.method || 'GET'))){
+          return Promise.resolve(r[2](url, init, calls.length));
+        }
+      }
+      return Promise.resolve(res(404, {error: 'no route for ' + url}));
+    };
+    fn.calls = calls;
+    return fn;
+  }
+
+  /* Fallbacks. A folder path is now nested, so every upload creates two levels;
+     tests that care about folder behaviour override these, and the rest simply
+     need them to succeed. Per-test routes are matched FIRST — see make(). */
+  var baseRoutes = [
+    [/\/sites\/dryspacesolutions\.sharepoint\.com:\/sites\/SiteInspections$/, 'GET',
+      function(){ return res(200, {id: 'SITE1'}); }],
+    [/\/sites\/SITE1\/drive$/, 'GET', function(){ return res(200, {id: 'DRIVE1'}); }],
+    [/\/root\/children$/, 'POST', function(){ return res(201, {id: 'F-ROOT'}); }],
+    [/\/root:\/[^:]+:\/children$/, 'POST', function(){ return res(201, {id: 'F-CHILD'}); }]
+  ];
+
+  function make(extra, over){
+    var f = fakeGraph((extra || []).concat(baseRoutes));
+    var t = SP.createTransport(Object.assign({
+      getToken: function(){ return Promise.resolve('TOKEN'); },
+      hostname: 'dryspacesolutions.sharepoint.com',
+      sitePath: '/sites/SiteInspections',
+      fetchImpl: f,
+      folderOf: function(){ return 'INS-2026-0142 - 12 Marine Parade, Kirra/photos'; },
+      nameOf: function(){ return 'INS-2026-0142_2026-08-14_s4-wall_001.jpg'; }
+    }, over || {}));
+    return {t: t, f: f};
+  }
+
+  var small = {original: new Blob(['x'.repeat(1000)], {type: 'image/jpeg'}), origSize: 1000};
+
+  /* ---- library columns written onto the inspection folder ---- */
+  function makeTagged(extra, tagFn){
+    return make((extra || []).concat([
+      [/:\/content$/, 'PUT', function(){ return res(201, {id: 'I', size: 1000}); }]
+    ]), {
+      tagOf: tagFn || function(){
+        return {path: 'INS-2026-0142 - Smith - 12 Marine Parade, Kirra',
+                fields: {InspectionNo: 'INS-2026-0142', Client: 'Smith', Stage: 'S02-FIELD'}};
+      }
+    });
+  }
+
+  var patched = [];
+  var mt = makeTagged([
+    [/\/root:\/[^:]+$/, 'GET', function(){ return res(200, {id: 'FOLDER-ITEM-1'}); }],
+    [/\/items\/FOLDER-ITEM-1\/listItem\/fields$/, 'PATCH', function(u, init){
+      patched.push(JSON.parse(init.body)); return res(200, {}); }]
+  ]);
+  return mt.t.upload(small, {}).then(function(){
+    eq(patched.length, 1, 'folder columns written once');
+    eq(patched[0].Client, 'Smith', 'client name written to the library column');
+    eq(patched[0].InspectionNo, 'INS-2026-0142', 'inspection number written');
+    var tagCalls = mt.f.calls.filter(function(c){ return /listItem\/fields$/.test(c.url); });
+    eq(tagCalls[0].method, 'PATCH', 'columns set with PATCH on the folder listItem');
+    ok(!/\/photos/.test(tagCalls.length ? mt.f.calls.filter(function(c){
+         return /root:\/[^:]+$/.test(c.url) && c.method === 'GET'; })[0].url : '/photos'),
+       'columns go on the INSPECTION folder, not the photos subfolder');
+
+    /* a second photo in the same batch must not re-write them */
+    return mt.t.upload(small, {}).then(function(){
+      eq(patched.length, 1, 'not re-written for every photo in the batch');
+    });
+  }).then(function(){
+    /* the index must never block the evidence */
+    var mf = makeTagged([
+      [/\/root:\/[^:]+$/, 'GET', function(){ return res(403, {error: 'no column access'}); }]
+    ]);
+    return mf.t.upload(small, {}).then(function(remote){
+      eq(remote.itemId, 'I', 'upload still succeeds when the columns cannot be written');
+    }, function(e){
+      record(false, 'column failure must not fail the upload', 'upload rejected: ' + e.message);
+    });
+  }).then(function(){
+    /* blank values are omitted, not sent as empty strings */
+    var W = APPW;
+    var f = W.spFields({inspNo: 'INS-2026-0142', client: '', address: '12 Marine Pde',
+                        stage: 'field', inspDate: '', editedBy: '  '});
+    ok(!('Client' in f), 'a blank client is omitted rather than blanking the column');
+    ok(!('InspectionDate' in f), 'a blank date is omitted');
+    ok(!('LastEditor' in f), 'whitespace-only values are omitted');
+    eq(f.Address, '12 Marine Pde', 'values that exist are sent');
+    eq(f.Stage, 'S02-FIELD', 'stage sent as its short code');
+  }).then(function(){
+
+  test('chunk size satisfies Graph', function(){
+    eq(SP.CHUNK % 327680, 0, 'resumable chunk is a multiple of 320 KiB');
+    ok(SP.SIMPLE_MAX <= 4 * 1024 * 1024, 'simple upload stays within the 4 MB limit');
+  });
+
+  var m1 = make([
+    [/\/root\/children$/, 'POST', function(){ return res(201, {id: 'FOLDER1'}); }],
+    [/:\/content$/, 'PUT', function(){ return res(201, {id: 'ITEM1', size: 1000, webUrl: 'https://sp/x'}); }]
+  ]);
+  return m1.t.upload(small, {}).then(function(remote){
+    eq(remote.itemId, 'ITEM1', 'item id returned from a small upload');
+    eq(remote.driveId, 'DRIVE1', 'drive resolved at runtime, not configured');
+    var urls = m1.f.calls.map(function(c){ return c.method + ' ' + c.url; });
+    ok(urls.some(function(u){ return /GET .*sites\/dryspacesolutions.*SiteInspections$/.test(u); }),
+       'site resolved by hostname and path');
+    ok(urls.some(function(u){ return /POST .*\/root\/children$/.test(u); }), 'folder created before upload');
+    ok(urls.some(function(u){ return /PUT .*%20Marine%20Parade.*content$/.test(u); }),
+       'path segments are URL-encoded, so spaces and commas survive');
+    ok(m1.f.calls.every(function(c){ return !c.headers || !('Authorization' in c.headers) || c.headers.Authorization === 'Bearer TOKEN'; }),
+       'every Graph call carries the bearer token');
+
+    /* an existing folder must not be an error */
+    var m2 = make([
+      [/\/root\/children$/, 'POST', function(){ return res(409, {error: 'nameAlreadyExists'}); }],
+      [/:\/content$/, 'PUT', function(){ return res(201, {id: 'ITEM2', size: 1000}); }]
+    ]);
+    return m2.t.upload(small, {}).then(function(r2){
+      eq(r2.itemId, 'ITEM2', '409 on folder creation is treated as "already there"');
+
+      /* nested path: Graph creates no intermediate folders, so the inspection
+         folder and its photos/ subfolder must each be created, in order — and
+         only once for the whole batch */
+      var posts = [];
+      var m3 = make([
+        [/\/root\/children$/, 'POST', function(u, init){
+          posts.push('root:' + JSON.parse(init.body).name); return res(201, {id: 'F1'}); }],
+        [/\/root:\/[^:]+:\/children$/, 'POST', function(u, init){
+          posts.push(decodeURIComponent(u.split('/root:/')[1].split(':/')[0]) +
+                     ' > ' + JSON.parse(init.body).name);
+          return res(201, {id: 'F2'}); }],
+        [/:\/content$/, 'PUT', function(){ return res(201, {id: 'I', size: 1000}); }]
+      ]);
+      return m3.t.upload(small, {}).then(function(){ return m3.t.upload(small, {}); })
+        .then(function(){
+          eq(posts.length, 2, 'two levels created, and only once for the batch');
+          eq(posts[0], 'root:INS-2026-0142 - 12 Marine Parade, Kirra',
+             'inspection folder created at the library root');
+          eq(posts[1], 'INS-2026-0142 - 12 Marine Parade, Kirra > photos',
+             'photos subfolder created inside it, not at the root');
+        });
+    });
+  }).then(function(){
+    /* large file: session + chunks */
+    /* Must exceed CHUNK, not just SIMPLE_MAX, or it travels as a single chunk
+       and the splitting logic is never exercised. */
+    var big = {original: new Blob([new Uint8Array(SP.CHUNK + 1000)], {type: 'video/mp4'}),
+               origSize: SP.CHUNK + 1000};
+    var ranges = [];
+    var m4 = make([
+      [/\/root\/children$/, 'POST', function(){ return res(201, {id: 'F'}); }],
+      [/createUploadSession$/, 'POST', function(){ return res(200, {uploadUrl: 'https://upload/session1'}); }],
+      [/^https:\/\/upload\/session1$/, 'PUT', function(url, init){
+        ranges.push(init.headers['Content-Range']);
+        var m = /bytes (\d+)-(\d+)\/(\d+)/.exec(init.headers['Content-Range']);
+        var end = parseInt(m[2], 10), total = parseInt(m[3], 10);
+        if(end + 1 >= total) return res(201, {id: 'BIG1', size: total});
+        return res(202, {nextExpectedRanges: [(end + 1) + '-']});
+      }]
+    ]);
+    return m4.t.upload(big, {}).then(function(r){
+      eq(r.itemId, 'BIG1', 'large upload completes through a resumable session');
+      eq(ranges.length, 2, 'split into two chunks');
+      ok(/^bytes 0-/.test(ranges[0]), 'first chunk starts at byte 0');
+      var first = /bytes 0-(\d+)\//.exec(ranges[0]);
+      eq(parseInt(first[1], 10) + 1, SP.CHUNK, 'first chunk is exactly the configured size');
+      ok(ranges[1].indexOf('bytes ' + SP.CHUNK + '-') === 0,
+         'second chunk resumes exactly where the first ended, leaving no gap');
+    });
+  }).then(function(){
+    /* verification is an independent read */
+    var m5 = make([
+      [/\/items\/ITEM9\?select=/, 'GET', function(){ return res(200, {id: 'ITEM9', size: 4242, eTag: 'E1'}); }]
+    ]);
+    return m5.t.verify({driveId: 'DRIVE1', itemId: 'ITEM9'}).then(function(v){
+      eq(v.size, 4242, 'verify reads the stored size back');
+      ok(m5.f.calls.some(function(c){ return /\/items\/ITEM9\?select=/.test(c.url) && c.method === 'GET'; }),
+         'verify issues its own GET rather than reusing the upload response');
+    });
+  }).then(function(){
+    /* error classification feeds the queue's retry policy */
+    var m6 = make([
+      [/\/root\/children$/, 'POST', function(){ return res(201, {id: 'F'}); }],
+      [/:\/content$/, 'PUT', function(){ return res(429, {error: 'throttled'}, {'Retry-After': '7'}); }]
+    ]);
+    return m6.t.upload(small, {}).then(function(){
+      record(false, '429 should reject', 'upload resolved on a throttle response');
+    }, function(err){
+      eq(err.status, 429, '429 surfaces its status');
+      eq(err.retryAfterMs, 7000, 'Retry-After is carried through in milliseconds');
+      ok(window.DSMedia.isRetryable(err) === true, 'queue will retry a throttle');
+    });
+  }).then(function(){
+    var m7 = make([
+      [/\/root\/children$/, 'POST', function(){ return res(201, {id: 'F'}); }],
+      [/:\/content$/, 'PUT', function(){ return res(400, {error: 'invalidRequest'}); }]
+    ]);
+    return m7.t.upload(small, {}).then(function(){
+      record(false, '400 should reject', 'upload resolved on a bad request');
+    }, function(err){
+      eq(err.status, 400, '400 surfaces its status');
+      ok(window.DSMedia.isRetryable(err) === false, 'queue will not retry a bad request');
+    });
+  }).then(function(){
+    /* a dropped connection must look retryable, not permanent */
+    var t8 = SP.createTransport({
+      getToken: function(){ return Promise.resolve('T'); },
+      hostname: 'h', sitePath: '/sites/S',
+      fetchImpl: function(){ return Promise.reject(new Error('Failed to fetch')); },
+      folderOf: function(){ return 'F'; }, nameOf: function(){ return 'n.jpg'; }
+    });
+    return t8.upload(small, {}).then(function(){
+      record(false, 'network failure should reject', 'resolved despite no connection');
+    }, function(err){
+      ok(err.offline === true, 'a dropped connection is flagged as offline');
+      ok(window.DSMedia.isRetryable(err) === true, 'queue will retry after a dropped connection');
+    });
+  }).then(function(){
+    /* B6 — a request that never answers. Before this, the app sat on
+       "Uploading…" indefinitely with nothing to read and no way out. The
+       deadline is overridden to 30ms so the test does not wait three minutes. */
+    section('SharePoint transport — request deadlines');
+
+    ok(SP.TIMEOUT_MS > 0, 'a default request deadline is set (' + SP.TIMEOUT_MS + 'ms)');
+    ok(SP.UPLOAD_TIMEOUT_MS >= SP.TIMEOUT_MS,
+       'uploads get at least as long as metadata calls — a 5 MiB chunk is slower');
+
+    var hung = 0;
+    var tTimeout = SP.createTransport({
+      getToken: function(){ return Promise.resolve('T'); },
+      hostname: 'h', sitePath: '/sites/S',
+      timeoutMs: 30, uploadTimeoutMs: 30,
+      fetchImpl: function(){ hung++; return new Promise(function(){}); },   /* never settles */
+      folderOf: function(){ return 'F'; }, nameOf: function(){ return 'n.jpg'; }
+    });
+    var started = Date.now();
+    return tTimeout.upload(small, {}).then(function(){
+      record(false, 'a hung request should reject', 'upload resolved against a fetch that never settles');
+    }, function(err){
+      ok(hung > 0, 'the request was actually issued');
+      ok(err.timedOut === true, 'a hung request gives up rather than waiting for ever');
+      ok(/timed out/i.test(err.message || ''), 'and says so: "' + err.message + '"');
+      ok(window.DSMedia.isRetryable(err) === true,
+         'a timeout is temporary — the queue will try again rather than holding the file back');
+      ok(Date.now() - started < 5000, 'it gave up promptly, not after the full default deadline');
+    });
+  }).then(function(){
+    /* The chunk PUT bypasses call(), so it needs its own deadline — and it is
+       the request most likely to hang on a phone, since it is the one carrying
+       megabytes over mobile. */
+    var bigBlob = new Blob([new Uint8Array(SP.SIMPLE_MAX + 1024)], {type: 'image/jpeg'});
+    var bigRec = {original: bigBlob, origSize: bigBlob.size};
+    var sessions = 0;
+    var tChunk = SP.createTransport({
+      getToken: function(){ return Promise.resolve('T'); },
+      hostname: 'h', sitePath: '/sites/S',
+      timeoutMs: 2000, uploadTimeoutMs: 30,
+      fetchImpl: function(url, init){
+        init = init || {};
+        if(/createUploadSession$/.test(url)){
+          sessions++;
+          return Promise.resolve(res(200, {uploadUrl: 'https://sp/session/1'}));
+        }
+        if(/\/session\/1$/.test(url)) return new Promise(function(){});   /* the chunk hangs */
+        if(/\/root\/children$/.test(url)) return Promise.resolve(res(201, {id: 'F'}));
+        if(/\/drive$/.test(url)) return Promise.resolve(res(200, {id: 'DRIVE1'}));
+        if(/\/sites\//.test(url)) return Promise.resolve(res(200, {id: 'SITE'}));
+        return Promise.resolve(res(200, {id: 'X', size: bigBlob.size}));
+      },
+      folderOf: function(){ return 'F'; }, nameOf: function(){ return 'big.jpg'; }
+    });
+    return tChunk.upload(bigRec, {}).then(function(){
+      record(false, 'a hung chunk should reject', 'resumable upload resolved against a chunk that never settles');
+    }, function(err){
+      eq(sessions, 1, 'an upload session was created — the resumable path really ran');
+      ok(err.timedOut === true, 'a stalled chunk times out instead of hanging the app');
+      ok(window.DSMedia.isRetryable(err) === true, 'and is treated as worth retrying');
+    });
+  }).then(function(){
+    /* Hypothesis 1, the precise shape. Graph answers a chunk it did not commit
+       with a 202 whose nextExpectedRanges points back at bytes already sent.
+       Every request succeeds, well inside its deadline, and the file never
+       advances. A fake transport always advances, which is why this survived
+       every test the resumable path has ever had. */
+    var stallBlob = new Blob([new Uint8Array(SP.SIMPLE_MAX + 1024)], {type: 'image/jpeg'});
+    var stallRec = {original: stallBlob, origSize: stallBlob.size};
+    var puts = 0;
+    var tStall = SP.createTransport({
+      getToken: function(){ return Promise.resolve('T'); },
+      hostname: 'h', sitePath: '/sites/S',
+      fetchImpl: function(url, init){
+        if(/createUploadSession$/.test(url)) return Promise.resolve(res(200, {uploadUrl: 'https://sp/s/1'}));
+        if(/\/s\/1$/.test(url)){
+          puts++;
+          /* always asks for the same bytes again — never advances */
+          return Promise.resolve(res(202, {nextExpectedRanges: ['0-']}));
+        }
+        if(/\/root\/children$/.test(url)) return Promise.resolve(res(201, {id: 'F'}));
+        if(/\/drive$/.test(url)) return Promise.resolve(res(200, {id: 'DRIVE1'}));
+        if(/\/sites\//.test(url)) return Promise.resolve(res(200, {id: 'SITE'}));
+        return Promise.resolve(res(200, {id: 'X', size: stallBlob.size}));
+      },
+      folderOf: function(){ return 'F'; }, nameOf: function(){ return 'stall.jpg'; }
+    });
+    return tStall.upload(stallRec, {}).then(function(){
+      record(false, 'a non-advancing session should reject',
+             'upload resolved against a session that never advanced');
+    }, function(err){
+      ok(err.stalled === true, 'a session that stops advancing is detected rather than followed for ever');
+      ok(puts <= SP.MAX_STALLS + 1, 'it gives up after a bounded number of attempts (' + puts + ')');
+      ok(window.DSMedia.isRetryable(err) === true,
+         'and is retried — a new attempt opens a new session, which is the remedy');
+      ok(/stopped advancing/.test(err.message), 'the reason names the fault: "' + err.message + '"');
+    });
+  }).then(function(){
+    /* A whole-file deadline, because per-chunk deadlines cannot bound a session
+       that keeps answering promptly but slowly. */
+    var slowBlob = new Blob([new Uint8Array(SP.SIMPLE_MAX + 1024)], {type: 'image/jpeg'});
+    var slowRec = {original: slowBlob, origSize: slowBlob.size};
+    var clock = 0;
+    var tSlow = SP.createTransport({
+      getToken: function(){ return Promise.resolve('T'); },
+      hostname: 'h', sitePath: '/sites/S',
+      sessionTimeoutMs: 1000,
+      now: function(){ return clock; },
+      fetchImpl: function(url){
+        if(/createUploadSession$/.test(url)) return Promise.resolve(res(200, {uploadUrl: 'https://sp/s/2'}));
+        if(/\/s\/2$/.test(url)){
+          clock += 600;                       /* each chunk advances, but slowly */
+          return Promise.resolve(res(202, {nextExpectedRanges: ['1-']}));
+        }
+        if(/\/root\/children$/.test(url)) return Promise.resolve(res(201, {id: 'F'}));
+        if(/\/drive$/.test(url)) return Promise.resolve(res(200, {id: 'DRIVE1'}));
+        if(/\/sites\//.test(url)) return Promise.resolve(res(200, {id: 'SITE'}));
+        return Promise.resolve(res(200, {id: 'X', size: slowBlob.size}));
+      },
+      folderOf: function(){ return 'F'; }, nameOf: function(){ return 'slow.jpg'; }
+    });
+    return tSlow.upload(slowRec, {}).then(function(){
+      record(false, 'an endless session should reject', 'upload resolved against an endless session');
+    }, function(err){
+      ok(err.timedOut === true, 'a file that never finishes gives up on the whole session');
+      ok(/did not finish within/.test(err.message), 'and says so: "' + err.message + '"');
+    });
+  }).then(function(){
+    /* getToken() is awaited before the request is issued, so it sits outside the
+       request's own deadline. Without a backstop a hung sign-in server hangs the
+       upload with nothing sent and nothing to show. */
+    var tTok = SP.createTransport({
+      getToken: function(){ return new Promise(function(){}); },   /* never answers */
+      hostname: 'h', sitePath: '/sites/S',
+      timeoutMs: 40,
+      fetchImpl: function(){ record(false, 'no request should be issued', 'fetch was called'); },
+      folderOf: function(){ return 'F'; }, nameOf: function(){ return 'n.jpg'; }
+    });
+    return tTok.upload(small, {}).then(function(){
+      record(false, 'a hung token should reject', 'upload resolved without ever getting a token');
+    }, function(err){
+      ok(err.timedOut === true,
+         'a sign-in server that never answers no longer hangs the upload before it starts');
+    });
+  }).then(function(){
+    /* v1.4 \u2014 the four capabilities that let the record travel the same road as
+       the photos. Without these the baton could be put down but never picked up. */
+    section('SharePoint transport \u2014 carrying the record');
+
+    var m10 = make([
+      [/\/root:\/[^:]*current:\/children/, 'GET', function(){
+        return res(200, {value: [
+          {id: 'D1', name: 'DS_Draft_a.json', size: 4096, eTag: 'E1',
+           lastModifiedDateTime: '2026-08-18T01:00:00Z', file: {}},
+          {id: 'F9', name: 'a-folder', folder: {}}
+        ]});
+      }]
+    ]);
+    return m10.t.list('INS-2026-0142 - Smith/current').then(function(items){
+      eq(items.length, 2, 'the folder listing comes back');
+      eq(items[0].itemId, 'D1', 'the item id is carried through, so it can be fetched and moved');
+      eq(items[0].eTag, 'E1', 'the eTag comes back \u2014 this is what detects a second device');
+      ok(items[1].isFolder === true, 'folders are distinguishable from files');
+    });
+  }).then(function(){
+    /* An inspection nobody has handed over yet has no current/ folder. That is
+       an empty in-tray, not a fault, and the caller should not have to know. */
+    var m11 = make([]);          /* every route 404s */
+    return m11.t.list('INS-2026-9999 - Nobody/current').then(function(items){
+      eq(items.length, 0, 'a folder that does not exist yet lists as empty rather than throwing');
+    }, function(e){
+      record(false, 'a missing folder lists as empty', 'it threw instead: ' + e.message);
+    });
+  }).then(function(){
+    var m12 = make([
+      [/\/items\/D1\/content$/, 'GET', function(){
+        return {ok: true, status: 200, headers: {get: function(){ return null; }},
+                blob: function(){ return Promise.resolve(new Blob(['{"docType":"x"}'])); },
+                text: function(){ return Promise.resolve(''); },
+                json: function(){ return Promise.resolve({}); }};
+      }]
+    ]);
+    return m12.t.download('D1').then(function(b){
+      ok(b && b.size > 0, 'a draft can be fetched back down as a blob');
+    });
+  }).then(function(){
+    /* A move within one library keeps the item id, so links already handed out
+       still resolve \u2014 and it is not a delete, which matters when field accounts
+       are Contribute - No Delete. */
+    var patched = null;
+    var m13 = make([
+      [/\/root\/children$/, 'POST', function(){ return res(201, {id: 'AR'}); }],
+      [/\/root:\/[^:]*archive$/, 'GET', function(){ return res(200, {id: 'ARCHIVE1'}); }],
+      [/\/items\/D1$/, 'PATCH', function(url, init){
+        patched = JSON.parse(init.body);
+        return res(200, {id: 'D1', name: 'DS_Draft_a.json'});
+      }]
+    ]);
+    return m13.t.move('D1', 'INS-2026-0142 - Smith/archive').then(function(moved){
+      eq(moved.id, 'D1', 'the item keeps its id across the move');
+      ok(patched && patched.parentReference && patched.parentReference.id === 'ARCHIVE1',
+         'the move is a re-parent, not a copy-and-delete');
+    }, function(e){
+      record(false, 'a file can be filed into archive/', 'move failed: ' + e.message);
+    });
+  }).then(function(){
+    var sent = null;
+    var m14 = make([
+      [/\/root\/children$/, 'POST', function(){ return res(201, {id: 'F'}); }],
+      [/\/root:\/[^:]*:\/content/, 'PUT', function(url, init){
+        sent = url;
+        return res(201, {id: 'NEW1', name: 'DS_Draft_b.json', size: 40, eTag: 'E2'});
+      }]
+    ]);
+    var draft = new Blob([JSON.stringify({docType: 'dryspace-inspection-draft'})],
+                         {type: 'application/json'});
+    return m14.t.putSmall('INS-2026-0142 - Smith/current/DS_Draft_b.json', draft).then(function(r){
+      eq(r.itemId, 'NEW1', 'the uploaded record comes back with its identity');
+      eq(r.eTag, 'E2', 'and its eTag, which becomes this device\u2019s baton pointer');
+      ok(/conflictBehavior=replace/.test(sent),
+         'current/ is replaced rather than accumulating copy-2 files');
+      ok(!/createUploadSession/.test(sent),
+         'a 40 KB record does not open a chunked session \u2014 that is pure overhead');
+    });
+  }).then(function(){
+    /* a failed folder creation must not poison later attempts */
+    var attempt = 0;
+    var m9 = make([
+      [/\/root\/children$/, 'POST', function(){
+        attempt++;
+        return attempt === 1 ? res(500, {error: 'boom'}) : res(201, {id: 'F'});
+      }],
+      [/:\/content$/, 'PUT', function(){ return res(201, {id: 'OK1', size: 1000}); }]
+    ]);
+    return m9.t.upload(small, {}).then(function(){
+      record(false, 'first attempt should fail', 'unexpected success');
+    }, function(){
+      return m9.t.upload(small, {}).then(function(r){
+        eq(r.itemId, 'OK1', 'a retry after a failed folder creation succeeds');
+        eq(attempt, 2, 'the failed folder promise was not cached');
+      });
+    });
+  }).then(function(){
+    test('app carries the site configuration', function(){
+      var C = APPW && APPW.SP_CONFIG;
+      ok(!!C, 'SP_CONFIG present in the app');
+      if(!C) return;
+      eq(C.hostname, 'dryspacesolutions.sharepoint.com', 'hostname configured');
+      eq(C.sitePath, '/sites/SiteInspections', 'site path configured');
+      var guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      ok(guid.test(C.clientId), 'client id present and well formed');
+      ok(guid.test(C.tenantId), 'tenant id present and well formed');
+    });
+  });
+  });
+}
+
+/* ---------- Microsoft sign-in ----------
+   The interactive sign-in itself cannot be automated — it needs a real password
+   at a Microsoft page. What IS testable is everything around it: PKCE
+   correctness, state validation, token rotation, and the behaviour that decides
+   whether being offline quietly signs someone out. */
+function authChecks(){
+  var A = window.DSAuth;
+  section('Microsoft sign-in');
+  ok(!!A, 'ds-auth.js loaded');
+  if(!A) return Promise.resolve();
+
+  function memStore(){
+    var m = {};
+    return {getItem: function(k){ return k in m ? m[k] : null; },
+            setItem: function(k, v){ m[k] = String(v); },
+            removeItem: function(k){ delete m[k]; },
+            _dump: m};
+  }
+  function res(status, body){
+    return {ok: status >= 200 && status < 300, status: status,
+            json: function(){ return Promise.resolve(body); }};
+  }
+  function make(fetchImpl, nowFn){
+    var st = memStore();
+    return {st: st, a: A.create({
+      clientId: 'CID', tenantId: 'TID',
+      redirectUri: 'http://localhost:8765',
+      fetchImpl: fetchImpl, storage: st,
+      now: nowFn || function(){ return 1000000; }
+    })};
+  }
+
+  /* The earliest silent stall in the chain: it happens before the upload it was
+     fetched for, so the transport's deadline never gets a chance to fire. */
+  var authDeadline = (function(){
+    var m = make(function(){ return new Promise(function(){}); });   /* never answers */
+    m.st.setItem('ds-auth-CID', JSON.stringify({
+      accessToken: null, refreshToken: 'RT', expiresAt: 0, account: {name: 'X'}
+    }));
+    var a2 = A.create({clientId: 'CID', tenantId: 'TID', redirectUri: 'http://localhost:8765',
+                       fetchImpl: function(){ return new Promise(function(){}); },
+                       storage: m.st, timeoutMs: 40,
+                       now: function(){ return 1000000; }});
+    return a2.getToken().then(function(){
+      record(false, 'a hung token request should reject', 'getToken resolved against a dead server');
+    }, function(e){
+      ok(e.timedOut === true, 'a sign-in server that never answers gives up rather than hanging');
+      ok(e.offline === true, 'it is treated as temporary, so the device is not signed out');
+      ok(!e.needsSignIn, 'and does not throw away a refresh token that may be perfectly good');
+      ok(a2.isSignedIn() === true, 'the device stays signed in after a timeout');
+    });
+  })();
+
+  ok(A.TOKEN_TIMEOUT_MS > 0, 'a token request deadline is set (' + A.TOKEN_TIMEOUT_MS + 'ms)');
+
+  test('verifier is a valid PKCE secret', function(){
+    var v = A.makeVerifier();
+    ok(v.length >= 43 && v.length <= 128, 'length within the RFC range (' + v.length + ')');
+    ok(/^[A-Za-z0-9\-._~]+$/.test(v), 'uses only unreserved characters');
+    ok(A.makeVerifier() !== A.makeVerifier(), 'a fresh secret each time');
+  });
+
+  /* RFC 7636 Appendix B reference vector — proves the hash and encoding are
+     right, rather than merely self-consistent. */
+  return authDeadline.then(function(){
+  return A.challengeFor('dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk');
+  }).then(function(c){
+    eq(c, 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM',
+       'challenge matches the RFC 7636 reference vector');
+  }).then(function(){
+    var m = make(function(){ return Promise.reject(new Error('should not call')); });
+    var navigated = null;
+    return m.a.signIn(function(u){ navigated = u; }).then(function(){
+      ok(/login\.microsoftonline\.com\/TID\/oauth2\/v2\.0\/authorize/.test(navigated),
+         'authorize endpoint built for the right tenant');
+      ok(navigated.indexOf('code_challenge_method=S256') > -1, 'uses S256, not plain');
+      ok(navigated.indexOf('client_id=CID') > -1, 'carries the client id');
+      ok(navigated.indexOf('redirect_uri=http%3A%2F%2Flocalhost%3A8765') > -1,
+         'redirect uri sent exactly as configured');
+      ok(navigated.indexOf('offline_access') > -1,
+         'requests offline_access, without which there is no refresh token');
+      ok(navigated.indexOf('code_verifier') === -1,
+         'the secret itself never travels — only its hash');
+    });
+  }).then(function(){
+    var m = make();
+    return m.a.handleRedirect('').then(function(r){
+      eq(r, null, 'an ordinary launch is not treated as a sign-in response');
+    });
+  }).then(function(){
+    /* a response that this device did not initiate must be refused */
+    var m = make(function(){ return Promise.resolve(res(200, {})); });
+    m.st.setItem('ds-auth-CID-pending', JSON.stringify({verifier: 'v', state: 'MINE'}));
+    return m.a.handleRedirect('?code=abc&state=SOMEONE_ELSE', function(){}).then(function(){
+      record(false, 'mismatched state should reject', 'accepted a foreign response');
+    }, function(e){
+      ok(/did not match/.test(e.message), 'refuses a response with the wrong state');
+    });
+  }).then(function(){
+    /* full code exchange */
+    var sent = null;
+    var idToken = 'x.' + btoa(JSON.stringify({preferred_username: 'inspector@example.com', name: 'Test Inspector'})) + '.y';
+    var m = make(function(url, init){ sent = init.body;
+      return Promise.resolve(res(200, {access_token: 'AT1', refresh_token: 'RT1',
+                                       expires_in: 3600, id_token: idToken})); });
+    m.st.setItem('ds-auth-CID-pending', JSON.stringify({verifier: 'VERIFIER1', state: 'S1'}));
+    return m.a.handleRedirect('?code=CODE1&state=S1', function(){}).then(function(saved){
+      ok(sent.indexOf('code_verifier=VERIFIER1') > -1, 'verifier sent to redeem the code');
+      ok(sent.indexOf('grant_type=authorization_code') > -1, 'authorization_code grant used');
+      eq(saved.accessToken, 'AT1', 'access token stored');
+      eq(saved.refreshToken, 'RT1', 'refresh token stored');
+      eq(m.a.account().name, 'Test Inspector', 'account name read from the id token');
+      ok(m.a.isSignedIn() === true, 'reports signed in');
+      ok(!m.st.getItem('ds-auth-CID-pending'), 'the one-time verifier is discarded after use');
+    });
+  }).then(function(){
+    /* cached token reused; expired token refreshed; rotation honoured */
+    var t = 1000000, calls = 0;
+    var m = make(function(){ calls++;
+      return Promise.resolve(res(200, {access_token: 'AT2', refresh_token: 'RT2', expires_in: 3600})); },
+      function(){ return t; });
+    m.st.setItem('ds-auth-CID', JSON.stringify({accessToken: 'OLD', refreshToken: 'RT1',
+                                                expiresAt: t + 3600000, account: null}));
+    return m.a.getToken().then(function(tok){
+      eq(tok, 'OLD', 'a valid token is reused rather than refreshed');
+      eq(calls, 0, 'no network call while the token is good');
+      t += 3600000;                              /* now expired */
+      return m.a.getToken();
+    }).then(function(tok){
+      eq(tok, 'AT2', 'an expired token is refreshed');
+      eq(calls, 1, 'exactly one refresh');
+      eq(JSON.parse(m.st.getItem('ds-auth-CID')).refreshToken, 'RT2',
+         'the rotated refresh token replaces the old one — Entra invalidates the previous');
+    });
+  }).then(function(){
+    /* several uploads starting at once must not each spend the single-use token */
+    var calls = 0;
+    var m = make(function(){ calls++;
+      return new Promise(function(r){ setTimeout(function(){
+        r(res(200, {access_token: 'AT3', refresh_token: 'RT3', expires_in: 3600})); }, 20); }); });
+    m.st.setItem('ds-auth-CID', JSON.stringify({accessToken: 'X', refreshToken: 'RT0', expiresAt: 0}));
+    return Promise.all([m.a.getToken(), m.a.getToken(), m.a.getToken()]).then(function(toks){
+      eq(calls, 1, 'concurrent callers share one refresh, not three');
+      eq(toks.join(','), 'AT3,AT3,AT3', 'all callers get the new token');
+    });
+  }).then(function(){
+    /* a dead refresh token must ask for sign-in */
+    var m = make(function(){ return Promise.resolve(res(400, {error: 'invalid_grant'})); });
+    m.st.setItem('ds-auth-CID', JSON.stringify({accessToken: 'X', refreshToken: 'DEAD', expiresAt: 0}));
+    return m.a.getToken().then(function(){
+      record(false, 'dead refresh token should reject', 'resolved unexpectedly');
+    }, function(e){
+      ok(e.needsSignIn === true, 'flags that a fresh sign-in is required');
+      ok(m.a.isSignedIn() === false, 'stale credentials cleared rather than retried forever');
+    });
+  }).then(function(){
+    /* being offline must NOT sign anyone out */
+    var m = make(function(){ return Promise.reject(new Error('Failed to fetch')); });
+    m.st.setItem('ds-auth-CID', JSON.stringify({accessToken: 'X', refreshToken: 'GOOD', expiresAt: 0}));
+    return m.a.getToken().then(function(){
+      record(false, 'offline refresh should reject', 'resolved with no connection');
+    }, function(e){
+      ok(e.offline === true, 'reports offline');
+      ok(m.a.isSignedIn() === true,
+         'credentials survive being offline — losing signal must not sign a field user out');
+    });
+  }).then(function(){
+    test('app config exposes the right redirect for this host', function(){
+      var W = APPW;
+      ok(!!W.SP_CONFIG.redirectUris, 'both redirect uris configured');
+      eq(W.spRedirectUri(), 'http://localhost:8765',
+         'localhost selects the local redirect uri');
+      ok(W.spConfigured() === true, 'app now reports itself configured');
+    });
+  });
+}
+
+function finish(){
+  var s = document.getElementById('summary');
+  s.className = fail === 0 ? 'pass' : 'fail';
+  s.textContent = fail === 0
+    ? 'All ' + pass + ' assertions passed.'
+    : fail + ' of ' + (pass + fail) + ' assertions FAILED.';
+}
+
+/* The service worker caches index.html AND ds-media-sync.js and serves them
+   cache-first, so a harness running under its control can silently test the
+   previous build — which it did, reporting a fixed bug as still broken. Clearing
+   is not enough on its own: this page parses its own <script src> before any
+   clearing code runs. So clear, then navigate once, arriving uncontrolled with
+   every resource fetched fresh. The flag stops it looping. */
+var APPW = null;
+if(location.search.indexOf('cleared=1') === -1){
+  document.getElementById('summary').textContent = 'Clearing caches…';
+  clearWorkers().then(function(){
+    location.replace('tests.html?cleared=1&r=' + Date.now());
+  });
+} else {
+clearWorkers()
+  .then(loadModules)
+  .then(loadApp)
+  .then(function(W){ APPW = W; return run(W); })
+  .then(function(){ return Promise.all(PENDING); })
+  .then(function(){ return crossCheckV111(APPW); })
+  .then(function(){ return releaseChecks(APPW); })
+  .then(mediaModuleChecks)
+  .then(sharePointChecks)
+  .then(authChecks)
+  .then(finish)
+  .catch(function(e){
+    var s = document.getElementById('summary');
+    s.className = 'fail';
+    s.textContent = 'Harness error: ' + (e && e.message || e);
+  });
+}
+</script>
+</body>
+</html>
