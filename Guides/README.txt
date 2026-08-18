@@ -1,20 +1,22 @@
 DRYSPACE — PRINTED GUIDES
-App v1.3 · Form 4.2
+App v1.4 · Form 4.2
 
 The four procedures a person follows away from a screen, as PDFs.
 
 
 WHAT BELONGS HERE
 ---------------------------------------------------------------------------
-01_Setup and User Guide_v1.3.pdf                 staff — installing and using it
-02_Iteration Guide_v1.3.pdf                      you — changing the app safely
-03_Handover and Version Control Protocol_v1.3.pdf staff — passing a job on
-05_Release Protocol_v1.3.pdf                     you — shipping a version
+01_Setup and User Guide_v1.4.0.pdf               staff — installing and using it
+02_Iteration Guide_v1.4.0.pdf                    you — changing the app safely
+03_Handover and Version Control Protocol_v1.4.0.pdf staff — passing a job on
+05_Release Protocol_v1.4.0.pdf                   you — shipping a version
 
-The gap at 04 is deliberate. 04_Project Context Brief exists to be pasted into
-an AI tool, and a PDF makes copying harder rather than easier. Same reasoning
-for docs\FIELD-APP-TEMPLATE.md. And docs\DECISION-LOG.md grows continuously, so
-a printed copy would be stale within a week.
+The gap at 04 is deliberate. The Dryspace Context Brief exists to be pasted into
+an AI tool, and a PDF makes copying harder rather than easier. Same reasoning for
+the Field App Architecture Template. Both of those now live outside this app
+folder, in 00_AI Tools in Development\_Shared\, because they describe how
+Dryspace builds any field app rather than this one. And docs\DECISION-LOG.md
+grows continuously, so a printed copy would be stale within a week.
 
 
 THESE ARE GENERATED — DO NOT EDIT THEM

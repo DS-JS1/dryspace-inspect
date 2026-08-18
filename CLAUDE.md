@@ -42,24 +42,25 @@ button placement, filing-critical gate and documentation set (D34–D35).
 record. Numbered 1.4.0 rather than 2.0.0 deliberately; the reasoning is in the
 decision log.
 
-**Two things are still owed before it can ship:**
+**Two things are still owed before it can ship**, and neither is a code change:
 
-- **The folder restructure** — start a fresh session and follow
-  `docs/HANDOFF-folder-restructure.md`, which carries the sharp edges. v1.3 to `Superseded`, a new v1.4 folder, and
-  `_Shared` for `docs/FIELD-APP-TEMPLATE.md` and `04_Project Context Brief.md`
-  — see the decision log §4. Do this *with* the restructure, not after it, or the
-  specification for four unbuilt apps ends up inside an archived folder.
 - **`Training/Setup_and_Use_Presentation.pptx`** still teaches the old five-step
   handover. It is the only training item not generated from source. Its stale
   PDF export has been deleted rather than left to be handed out.
 - **Julie and Mike's permission test** — confirm *Contribute - No Delete* really
   does permit the archive move. v1.4 moves a file at every handover; a refusal
   there leaves two files in `current/` every time.
-- **Batch 4 and the major-tier document set** — `01_Setup and User Guide`,
-  `04_Project Context Brief`, `Training/` as a set, `02_Iteration Guide`,
-  `docs/FIELD-APP-TEMPLATE.md`, then the new `v1.4` folder with this one moved to
-  `Superseded`. `03_Handover and Version Control Protocol.md` §4 is already done,
-  because the change made it factually wrong.
+
+**The folder restructure is done** — 18 August 2026. This is the `v1.4` working
+folder, and `FIELD-APP-TEMPLATE.md` and `04_Project Context Brief.md` have left
+it for `00_AI Tools in Development/_Shared/`, which is now its own repository.
+See the decision log §4.
+
+**The major-tier document set is complete** apart from the presentation above.
+`01_Setup and User Guide`, `04_Project Context Brief`, `Training/` as a set,
+`02_Iteration Guide` and the architecture template were all updated for v1.4.
+`03_Handover and Version Control Protocol.md` §4 was rewritten as the work
+happened, because the change made it factually wrong.
 
 **Do not let this reach a field device before that document set exists.** The
 buttons staff are trained on have changed.
@@ -95,7 +96,8 @@ These exist because breaking one of them lost, or nearly lost, real data.
 | Protocol | `05_Release Protocol.md` — what to update, when |
 | Decisions | `docs/DECISION-LOG.md` — what was decided and why |
 | Open work | `docs/v1.4-plan.md` — field findings and the next build |
-| Architecture | `docs/FIELD-APP-TEMPLATE.md` — for building sibling apps |
+| Architecture | `_Shared/Field App Architecture Template.md` — **outside this repository**, two levels up in `00_AI Tools in Development/`, because it is for building sibling apps |
+| Business background | `_Shared/Dryspace Context Brief.md` — same place, same reason |
 | Staff material | `Training/` — cards, chart, module |
 | Printed guides | `Guides/` — generated PDFs, never edited directly |
 

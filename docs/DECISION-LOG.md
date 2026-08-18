@@ -511,41 +511,55 @@ Not open questions. These are settled; they are simply not worth doing yet. Each
 records the event that should start it, so it surfaces at the right moment rather
 than being rediscovered.
 
-### Move the shared documents up a level
+### Move the shared documents up a level — **DONE, 18 August 2026**
 
-**Trigger: starting the second app** (progress inspections, completion reports,
-competency assessments, or equipment damage) — **superseded 18 Aug 2026: do it
-with the v1.3 → `Superseded` restructure instead, which now comes first.** The
-original trigger assumed the second app would arrive before this folder was
-archived. It will not.
+Done as part of the v1.3 → v1.4 folder restructure, which is what the trigger was
+changed to on the same day. The original trigger — *starting the second app* —
+assumed the second app would arrive before this folder was archived. It would not
+have.
 
-`docs/FIELD-APP-TEMPLATE.md` and `04_Project Context Brief.md` describe how
-Dryspace builds **any** field app, and the business and trade behind them. Neither
-is about the Site Inspection App, yet both live inside its folder.
-
-**The risk is concrete:** when v1.4 ships and v1.3 goes to Superseded, the
-specification for four unbuilt apps goes with it.
-
-**Intended shape:**
+**What moved**
 
 ```
 00_AI Tools in Development/
-    _Shared/                            ← applies to every app; its own repository
-        Field App Architecture Template.md
-        Dryspace Context Brief.md
+    _Shared/                            ← its own git repository
+        Field App Architecture Template.md   was docs/FIELD-APP-TEMPLATE.md
+        Dryspace Context Brief.md            was 04_Project Context Brief.md
     01_Contact to Contract/
-        Dryspace Inspection App v1.3/   ← this app only
+        Dryspace Inspection App v1.4/   ← this app only
 ```
 
 Above `01_Contact to Contract`, because the template reaches beyond that phase —
 the equipment damage app is not Contact-to-Contract at all.
 
-**Why not now.** Moving breaks cross-references in `CLAUDE.md` and
-`02_Iteration Guide.md`, and takes both documents out of version control — and the
-template is the document most likely to be revised as siblings are built, so
-losing its history costs most. Set `_Shared` up as its own small repository at the
-same time. Today it buys nothing; at app number two it costs the same and the
-benefit is real.
+**The risk this removed was concrete:** both documents describe how Dryspace
+builds *any* field app, and the business and trade behind them. Neither is about
+the Site Inspection App, yet both lived inside its folder — so retiring v1.3 would
+have taken the specification for four unbuilt apps with it.
+
+**The history was not carried across — decided on evidence, not convenience.**
+
+This section previously assumed the template's history was worth preserving, and
+that losing it was the main cost of moving. Looking at what the history actually
+contains reversed that. Of the six commits touching `FIELD-APP-TEMPLATE.md`, only
+two were about the template; the rest were app changes that happened to edit it.
+Of the two touching the Context Brief, one was a bulk move and one a release
+commit. A `filter-repo` extraction would therefore have produced a documentation
+repository whose log is mostly commit messages about SharePoint upload internals
+— technically preserved, semantically wrong, and confusing to anyone opening it
+later to ask why the template says what it says.
+
+Nothing is lost. Every one of those commits stays in `dryspace-inspect` for ever;
+the last to touch either document is `2ef0089`. This was a decision not to
+*duplicate* history into a place where it would read as noise. The history that
+matters for these two documents has not been written yet, because it is the
+revisions that come as sibling apps get built — and that history now starts clean,
+in a repository that is about them alone.
+
+**Cross-references updated in the same pass:** `CLAUDE.md`, `02_Iteration Guide.md`,
+`05_Release Protocol.md`, `Guides/README.txt`, and the dev-server and permission
+paths in `.claude/launch.json` and `.claude/settings.local.json`, which sit outside
+this repository and so do not show in `git status`.
 
 ---
 

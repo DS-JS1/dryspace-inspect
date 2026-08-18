@@ -55,14 +55,14 @@ Deployment: GitHub account **DS-JS1**, repository **dryspace-inspect**, live via
 GitHub Pages from `main`.
 
 > **Folder naming changed in v1.3.** The folder matches the **minor** version
-> (`v1.3`), not every patch. Git holds each version and tags each release, so
+> (`v1.4` today), not every patch. Git holds each version and tags each release, so
 > copying the whole folder for a typo fix creates snapshots nobody reads.
 
 ---
 
 ## 2. Starting an update session
 
-Point the session at the v1.3 folder so `CLAUDE.md` loads automatically. If that
+Point the session at the v1.4 folder so `CLAUDE.md` loads automatically. If that
 is awkward, start with:
 
 ```
@@ -237,8 +237,9 @@ counts, and the audit trail.
 > permanent **field id** (e.g. `s3.slab-design`) rather than label text. The
 > Proposal Builder must map against these ids.
 
-`docs/FIELD-APP-TEMPLATE.md` describes the whole architecture, written so a
-sibling app (progress inspections, completion reports, competency assessments,
+`_Shared/Field App Architecture Template.md` — two levels up, in
+`00_AI Tools in Development/`, and its own repository — describes the whole
+architecture, written so a sibling app (progress inspections, completion reports, competency assessments,
 equipment damage) can be built from it. Roughly 80% of the code moves across
 unchanged — the form is the only part that genuinely differs.
 

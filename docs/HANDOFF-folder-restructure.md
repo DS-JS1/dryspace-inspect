@@ -1,5 +1,13 @@
 # Handoff — the v1.4 folder restructure
 
+> ## DONE — 18 August 2026. Do not run this again.
+>
+> Kept because the reasoning is worth having, not because there is work left in
+> it. The outcome is recorded in `docs/DECISION-LOG.md` §4; the one departure from
+> the plan below is that **no physical v1.3 snapshot was placed in `Superseded/`** —
+> the working folder was renamed, so there is no v1.3 folder left to retire, and
+> the released v1.3.0 tree is held by git at tag `v1.3.0`.
+
 **Written:** 18 August 2026, at the end of the session that finished Batches 0–4.
 **For:** a fresh session doing the restructure and nothing else.
 **Status of the code:** finished. This job moves files; it does not change the app.

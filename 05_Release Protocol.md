@@ -46,7 +46,7 @@ current app", named for its minor version.
 
 - [ ] `01_Setup and User Guide` — if anything changed about what staff tap or see
 - [ ] `Training/` — cards, chart and module reviewed together, never singly
-- [ ] `04_Project Context Brief` — version numbers and feature list
+- [ ] `_Shared/Dryspace Context Brief.md` — version numbers and feature list (in the `_Shared` repository, not this one)
 - [ ] `docs/DECISION-LOG.md` — any decision taken during the work
 - [ ] New version folder created; previous moved to `Superseded`
 
@@ -54,9 +54,15 @@ current app", named for its minor version.
 
 - [ ] `03_Handover and Version Control Protocol` — if the record's lifecycle changed
 - [ ] `02_Iteration Guide` — if the rules for changing the code changed
-- [ ] `docs/FIELD-APP-TEMPLATE.md` — if the architecture changed, since sibling apps are built from it
+- [ ] `_Shared/Field App Architecture Template.md` — if the architecture changed, since sibling apps are built from it (in the `_Shared` repository, not this one)
 - [ ] Migration path written **and tested against a record from the previous version**
 - [ ] Record `schema` number bumped, with an `ensureSchema()` step
+
+> **Both `_Shared` documents live outside this repository**, in
+> `00_AI Tools in Development/_Shared/`, which is its own git repository. They
+> describe how Dryspace builds *any* field app, not this one — see
+> `docs/DECISION-LOG.md` §4. Updating them is still part of a release here; the
+> commit just lands in a different repository.
 
 ---
 
@@ -70,11 +76,11 @@ Which documents describe what. Consult this when deciding what a change touches.
 | `CLAUDE.md` | The non-negotiables | A rule is added or removed |
 | `docs/DECISION-LOG.md` | Why things are as they are | Any decision is taken |
 | `docs/RELEASE-PROTOCOL.md` | This process | The process changes |
-| `docs/FIELD-APP-TEMPLATE.md` | The architecture, for sibling apps | Architecture changes |
+| `_Shared/Field App Architecture Template.md` | The architecture, for sibling apps | Architecture changes |
 | `01_Setup and User Guide` | What staff tap and see | Visible behaviour changes |
 | `02_Iteration Guide` | How to change the code safely | The rules for changing code change |
 | `03_Handover Protocol` | How the record moves between people | The record's lifecycle changes |
-| `04_Project Context Brief` | Background for external tools | Version, features or terminology change |
+| `_Shared/Dryspace Context Brief.md` | Background for external tools | Version, features or terminology change |
 | `Training/` | How staff are taught | Anything staff-facing changes |
 
 **The training pack updates as a set.** The cards, the chart and the module say
@@ -118,9 +124,9 @@ point:
 `tests.html` fetches each expected path and fails if it is missing, so a release
 cannot pass while the guides are stale.
 
-**Not given a PDF, deliberately:** `04_Project Context Brief` and
-`docs/FIELD-APP-TEMPLATE.md` exist to be pasted into an AI, and a PDF makes copying
-harder; `docs/DECISION-LOG.md` grows continuously and would be stale within a week.
+**Not given a PDF, deliberately:** the two `_Shared` documents — the Dryspace
+Context Brief and the Field App Architecture Template — exist to be pasted into an
+AI, and a PDF makes copying harder; `docs/DECISION-LOG.md` grows continuously and would be stale within a week.
 The gap at 04 in the Guides folder is expected, not an omission.
 
 ### Generating them
