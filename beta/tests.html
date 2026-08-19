@@ -1389,6 +1389,80 @@ function mediaModuleChecks(){
     ok(M.backoffMs(99) <= 30000, 'backoff is capped');
   });
 
+  /* v1.4.0 patch - a read that fails once and succeeds next time is a flaky
+     read, not a lost photo. Observed on a device: pre-flight refused the file,
+     the very next attempt uploaded it. Being wrong the permanent way costs
+     somebody a drive back to site to retake a photo that was there all along. */
+  later('an unreadable file gets one retry before it is called permanent',
+    (function(){
+      var reads = 0;
+      var rec = {mid: 'flaky', name: 'IMG_1.jpg', up: 'queued', origSize: 10,
+                 original: new Blob(['0123456789'])};
+      var q = M.createQueue({
+        transport: {
+          upload: function(){ return Promise.resolve({itemId: 'I'}); },
+          verify: function(){ return Promise.resolve({size: 10}); }
+        },
+        list: function(){ return Promise.resolve([rec]); },
+        save: function(){ return Promise.resolve(); },
+        preflight: function(){
+          reads++;
+          if(reads === 1){
+            var e = new Error('the stored file could not be read back: The object can not be found here.');
+            e.unreadable = true; e.status = 0;
+            return Promise.reject(e);
+          }
+          return Promise.resolve(true);
+        },
+        stallMs: 0,
+        wait: function(){ return Promise.resolve(); }
+      });
+      return q.drain().then(function(){
+        eq(reads, 2, 'the file is read a second time rather than written off after one failure');
+        ok(M.stateOf(rec) === 'uploaded',
+           'and it uploads on the retry, with nobody having to tap anything',
+           'record ended as ' + M.stateOf(rec) + ' - ' + rec.upErr);
+        eq(rec.upReadFails, 0, 'the read-failure count is cleared once it lands');
+      });
+    })());
+
+  later('a file that fails the read twice is held for attention, as before',
+    (function(){
+      var rec = {mid: 'gone', name: 'IMG_2.jpg', up: 'queued', origSize: 10,
+                 original: new Blob(['0123456789'])};
+      var q = M.createQueue({
+        transport: {
+          upload: function(){ return Promise.resolve({itemId: 'I'}); },
+          verify: function(){ return Promise.resolve({size: 10}); }
+        },
+        list: function(){ return Promise.resolve([rec]); },
+        save: function(){ return Promise.resolve(); },
+        preflight: function(){
+          var e = new Error('the stored file could not be read back');
+          e.unreadable = true; e.status = 0;
+          return Promise.reject(e);
+        },
+        stallMs: 0,
+        wait: function(){ return Promise.resolve(); }
+      });
+      return q.drain().then(function(){
+        ok(M.stateOf(rec) === 'failed', 'it fails',
+           'record ended as ' + M.stateOf(rec));
+        ok(rec.upRetryable === false,
+           'and is held for attention rather than retried for ever',
+           'upRetryable was ' + rec.upRetryable);
+        ok(rec.upReadFails >= M.READ_ATTEMPTS,
+           'after the allowed number of read attempts (' + M.READ_ATTEMPTS + ')');
+      });
+    })());
+
+  test('asking by hand clears the read-failure count', function(){
+    var rec = {mid: 'r', up: 'failed', upRetryable: false, upTries: 3, upReadFails: 2};
+    M.requeue(rec);
+    eq(rec.upReadFails, 0, 'a clean slate, because they may have fixed what was wrong');
+    ok(rec.upRetryable === true, 'and it is eligible again');
+  });
+
   section('Media module — storage pressure');
 
   test('pressure levels', function(){

@@ -254,12 +254,21 @@ DSMedia.PREFLIGHT_TIMEOUT_MS = 15000;
 function unreadable(msg){
   var e = new Error(msg);
   e.unreadable = true;
-  /* Permanent: no amount of retrying restores a blob the browser has lost. It
-     surfaces under "needs attention" with the reason, where a person can retake
-     the photo — which is the only real remedy. */
+  /* Was flatly permanent, on the reasoning that no amount of retrying restores a
+     blob the browser has lost. A device disproved it: a photo failed the read,
+     and the very next attempt uploaded it. WebKit can report a blob as missing
+     transiently, so "unreadable" is not always "gone".
+
+     It is still permanent on the SECOND consecutive failure — see READ_ATTEMPTS.
+     One free retry costs a second; being wrong the other way costs somebody a
+     drive back to site to retake a photo that was there all along. */
   e.status = 0;
   return e;
 }
+
+/* How many times a file may fail the readability check before it is treated as
+   really gone rather than momentarily unavailable. */
+DSMedia.READ_ATTEMPTS = 2;
 
 function readSlice(blob){
   if(blob.arrayBuffer) return blob.arrayBuffer();
@@ -353,6 +362,9 @@ DSMedia.requeue = function(rec){
   rec.upTries = 0;
   rec.upRetryable = true;
   rec.upErr = null;
+  /* Somebody asking for it by hand deserves a clean slate, including the read
+     count: they may well have fixed whatever was wrong. */
+  rec.upReadFails = 0;
   return rec;
 };
 
@@ -548,6 +560,7 @@ DSMedia.createQueue = function(opts){
           };
           DSMedia.setState(rec, 'uploaded');
           rec.upErr = null;
+          rec.upReadFails = 0;
           return save(rec).then(function(){ onChange(rec); return rec; });
         });
       })
@@ -559,7 +572,16 @@ DSMedia.createQueue = function(opts){
         DSMedia.setState(rec, 'failed', {error: (err && err.message) || String(err)});
         /* A stall is worth another go: the step it names is a symptom, and the
            next attempt may well get past it. */
-        rec.upRetryable = DSMedia.isRetryable(err);
+        if(err && err.unreadable){
+          /* Counted separately from upTries, which counts whole attempts. A
+             read that fails once and succeeds next time is a flaky read, not a
+             lost photo, and only the second consecutive failure settles it. */
+          rec.upReadFails = (rec.upReadFails || 0) + 1;
+          rec.upRetryable = rec.upReadFails < DSMedia.READ_ATTEMPTS;
+        } else {
+          rec.upReadFails = 0;
+          rec.upRetryable = DSMedia.isRetryable(err);
+        }
         return save(rec).then(function(){ onChange(rec, err); throw err; });
       });
   }
