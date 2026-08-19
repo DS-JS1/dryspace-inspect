@@ -495,7 +495,13 @@ into "Waiting", which proved the uploading state had never been written.
   file - and nothing said so. Uploading now asks once per inspection, naming
   what is blank and the folder it would file as, with Cancel to go back and
   fill them in. Not at capture: capture is never blocked.
-- 422 assertions, up from 387. CACHE_VERSION -> ds-inspect-v1.4.0-7.
+- An unreadable file now gets one retry before it is called permanent (D47).
+  Observed on the device: pre-flight refused a photo, and the very next
+  attempt uploaded it. WebKit can report a blob as missing transiently, so
+  "unreadable" is not always "gone". Still permanent on the second
+  consecutive failure. Being wrong the permanent way costs somebody a drive
+  back to site to retake a photo that was there all along.
+- 430 assertions, up from 387. CACHE_VERSION -> ds-inspect-v1.4.0-8.
 
 The architectural change: the record now travels the same road as the photos,
 and in-progress work is backed up without anyone having to remember to do it.
