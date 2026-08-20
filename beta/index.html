@@ -2728,12 +2728,33 @@ function downloadBlob(blob, name){
   document.body.appendChild(a); a.click();
   setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 4000);
 }
+/* The share sheet's title becomes the SUBJECT LINE when somebody picks Mail,
+   and it was the generated filename: DS_Report_2026-08-21_1043.html. Nobody
+   scanning an inbox can tell one of those from another, and the office is the
+   audience for this.
+
+   Built from the record instead, in the order a person searches: what it is,
+   the number it files under, who it is for, where. Blank fields are left out
+   rather than leaving gaps or placeholders — an inspection number that has not
+   been allocated yet should not appear as "INS-" with nothing after it. */
+function reportSubject(kind){
+  var job = cur || {};
+  var bits = [];
+  if(job.inspNo)  bits.push(String(job.inspNo).trim());
+  if(job.client)  bits.push(String(job.client).trim());
+  if(job.address) bits.push(String(job.address).trim());
+  var what = 'Site inspection ' + (kind || 'report');
+  var dash = ' \u2014 ';
+  return bits.length ? what + dash + bits.join(dash) : what;
+}
+
 function shareReport(){
   if(!cur) return;
   buildReport().then(function(r){
     var file = new File([r.html], r.fname, {type: 'text/html'});
     if(navigator.canShare && navigator.canShare({files:[file]})){
-      navigator.share({files:[file], title: r.fname}).catch(function(e){
+      navigator.share({files:[file], title: reportSubject(),
+                       text: reportSubject()}).catch(function(e){
         if(e && e.name === 'AbortError') return;
         downloadBlob(new Blob([r.html], {type:'text/html'}), r.fname);
       });
@@ -2759,7 +2780,7 @@ function shareMedia(){
     var total = recs.reduce(function(s,r){ return s + (r.origSize || r.size); }, 0);
     if(navigator.canShare && navigator.canShare({files: files})){
       if(total > 40*1048576 && !confirm('Files total ' + fmtKB(total) + ' — sharing may be slow or fail over email. Continue?')) return;
-      navigator.share({files: files, title: reportName().replace('.html','') + ' — media'}).catch(function(e){
+      navigator.share({files: files, title: reportSubject('photos and video')}).catch(function(e){
         if(e && e.name !== 'AbortError') alert('Share failed: ' + e.message + '. Try sharing fewer files or use OneDrive.');
       });
     } else {
