@@ -3480,7 +3480,7 @@ function pickFromList(opts){
         '</div>' +
         '<div class="pick-lines"></div>' +
         '<input class="pick-filter" type="search" autocomplete="off" ' +
-               'placeholder="Filter by client, address or number">' +
+               'placeholder="Filter by client, address, number or stage">' +
         '<div class="pick-list"></div>' +
         '<div class="pick-foot"><button type="button" class="btn pick-cancel">Cancel</button></div>' +
       '</div>';
@@ -3583,13 +3583,18 @@ function importFromSharePoint(){
         title: 'Take over an inspection',
         note: found.length + ' waiting in SharePoint. Tap one to bring it onto this device.',
         items: found.map(function(x){
+          /* The stage is in the filename, put there by the handover. Surfacing
+             it makes it filterable, which is what somebody looking for "the
+             ones waiting on technical" actually wants. */
+          var st = (x.file.name.match(/_S0\d-[A-Z]+_/) || [''])[0].replace(/_/g, '');
           return {
             title: x.folder,
             sub: x.file.name,
-            meta: (x.file.modifiedAt
-                     ? 'handed over ' + fmtAUStamp(Date.parse(x.file.modifiedAt))
-                     : '') +
-                  (x.file.size ? '  ·  ' + fmtKB(x.file.size) : ''),
+            meta: [st,
+                   x.file.modifiedAt
+                     ? 'handed over ' + fmtAUStamp(Date.parse(x.file.modifiedAt)) : '',
+                   x.file.size ? fmtKB(x.file.size) : '']
+                   .filter(Boolean).join('  ·  '),
             value: x
           };
         })

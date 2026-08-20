@@ -613,7 +613,14 @@ into "Waiting", which proved the uploading state had never been written.
   native dialog renders that as a wall of text at whatever size iOS picks.
   Facts are laid out as labelled lines and the choices are named buttons -
   "Stop" and "Continue anyway" rather than Cancel and OK.
-- 507 assertions. CACHE_VERSION -> ds-inspect-v1.4.0-18.
+- Listing a SharePoint folder read only the FIRST PAGE. Graph returns a page
+  and a link to the next, and the link was ignored - a silent truncation
+  where nothing errors, the library simply appears to stop, and which
+  inspections vanish depends on how many exist. A folder that cannot be
+  listed is a baton that cannot be picked up. Every page is read now.
+- The take-over list shows each inspection's STAGE, and the filter covers
+  it, so "the ones waiting on technical" is one word rather than a scroll.
+- 509 assertions. CACHE_VERSION -> ds-inspect-v1.4.0-19.
 
 The architectural change: the record now travels the same road as the photos,
 and in-progress work is backed up without anyone having to remember to do it.

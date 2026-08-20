@@ -344,11 +344,23 @@ DSSharePoint.createTransport = function(opts){
          different URL shape, exactly as folder creation already knew.
          This is why "Take over an inspection from SharePoint" could not find
          anything: scanning starts by listing the library root. */
-      var sel = '?select=id,name,size,eTag,lastModifiedDateTime,folder,file';
+      var sel = '?select=id,name,size,eTag,lastModifiedDateTime,folder,file&$top=200';
       var url = path
         ? GRAPH + '/drives/' + id + '/root:/' + encodePath(path) + ':/children' + sel
         : GRAPH + '/drives/' + id + '/root/children' + sel;
-      return json(url);
+      /* Graph returns ONE PAGE and a link to the next. Reading only the first
+         page is a silent truncation: nothing errors, the library simply appears
+         to stop, and WHICH inspections vanish depends on how many exist. A
+         folder that cannot be listed is a baton that cannot be picked up. */
+      var all = [];
+      function page(u){
+        return json(u).then(function(r){
+          all = all.concat((r && r.value) || []);
+          var next = r && r['@odata.nextLink'];
+          return next ? page(next) : {value: all};
+        });
+      }
+      return page(url);
     }).then(function(r){
       return ((r && r.value) || []).map(function(it){
         return {itemId: it.id, name: it.name, size: it.size,
