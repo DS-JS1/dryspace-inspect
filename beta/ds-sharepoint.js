@@ -344,7 +344,11 @@ DSSharePoint.createTransport = function(opts){
          different URL shape, exactly as folder creation already knew.
          This is why "Take over an inspection from SharePoint" could not find
          anything: scanning starts by listing the library root. */
-      var sel = '?select=id,name,size,eTag,lastModifiedDateTime,folder,file,webUrl&$top=200';
+      /* listItem carries the library columns, which is where the baton status
+         lives. Expanded here so one listing answers both "what is this" and
+         "who has it" rather than a request per folder. */
+      var sel = '?select=id,name,size,eTag,lastModifiedDateTime,folder,file,webUrl' +
+                '&expand=listItem($select=fields)&$top=200';
       var url = path
         ? GRAPH + '/drives/' + id + '/root:/' + encodePath(path) + ':/children' + sel
         : GRAPH + '/drives/' + id + '/root/children' + sel;
@@ -368,6 +372,7 @@ DSSharePoint.createTransport = function(opts){
                 modifiedAt: it.lastModifiedDateTime || null,
                 /* So a folder nobody can take over can still be OPENED. */
                 webUrl: it.webUrl || null,
+                fields: (it.listItem && it.listItem.fields) || null,
                 isFolder: !!it.folder};
       });
     }, function(err){

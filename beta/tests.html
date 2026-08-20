@@ -1310,6 +1310,50 @@ function run(W){
        'take-over still lists only inspections with a file waiting in current/');
   });
 
+  /* v1.4.0 patch - the library columns are the index (D23) and said nothing
+     about who has the record, which is the question the baton exists to answer
+     and the one people were resolving by ringing each other. */
+  test('the library carries who holds the baton', function(){
+    ok(typeof W.spFields === 'function', 'spFields() defined');
+    ok(typeof W.batonState === 'function', 'batonState() defined');
+    if(typeof W.spFields !== 'function') return;
+
+    var job = {inspNo:'INS-1', client:'Smith', address:'12 A St', stage:'field',
+               inspDate:'2026-08-21', editedBy:'Jamie Stone'};
+    var plain = W.spFields(job);
+    ok(plain.BatonStatus === undefined,
+       'an ordinary column write does not touch the baton');
+
+    var handed = W.spFields(job, {status: W.BATON_WAITING, holder: 'Jamie Stone'});
+    eq(handed.BatonStatus, 'Waiting', 'handing over marks it waiting');
+    eq(handed.BatonHolder, 'Jamie Stone',
+       'and keeps the name - "last held by" is what somebody needs to ask a question');
+
+    var taken = W.spFields(job, {status: W.BATON_HELD, holder: 'Mike'});
+    eq(taken.BatonStatus, 'In progress', 'taking it over marks it in progress');
+    eq(taken.BatonHolder, 'Mike', 'by name');
+
+    /* An empty holder must survive: it is meaningful, unlike an empty address. */
+    var none = W.spFields(job, {status: W.BATON_WAITING, holder: ''});
+    ok('BatonHolder' in none, 'an empty holder is written rather than dropped');
+  });
+
+  test('one baton vocabulary serves every list', function(){
+    if(typeof W.batonState !== 'function') return;
+    var waiting = W.batonState({file: {name:'x'}, folder: {fields: {BatonHolder: 'Jamie'}}});
+    eq(waiting.label, 'WAITING', 'a file in current/ is waiting to be picked up');
+    ok(/last held by Jamie/.test(waiting.who), 'and says who put it there: ' + waiting.who);
+
+    var held = W.batonState({file: null, folder: {fields: {BatonHolder: 'Mike'}}});
+    eq(held.label, 'IN PROGRESS', 'no file in current/ means somebody has it');
+    ok(/held by Mike/.test(held.who), 'and names them: ' + held.who);
+    ok(held.cls !== waiting.cls, 'the two states are coloured differently');
+
+    var unknown = W.batonState({file: null, folder: {}});
+    ok(/held on a device/.test(unknown.who),
+       'and an unmarked folder says what is known rather than inventing a name');
+  });
+
   test('the per-file status panel exists and starts empty', function(){
     var box = D.getElementById('sy-detail');
     ok(!!box, 'sy-detail panel present in the sync bar');
