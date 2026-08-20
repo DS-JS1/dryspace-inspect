@@ -97,6 +97,10 @@ input[type=text],input[type=date],select,textarea{font-size:16px !important;padd
 /* ---- media items ---- */
 .m-item{position:relative;display:inline-flex;align-items:center}
 .m-item .img-thumb{width:76px;height:76px}
+.m-remote{position:relative}
+.m-remote .img-thumb{opacity:.72}
+.m-tag{position:absolute;left:0;right:0;bottom:0;background:rgba(11,42,74,.86);color:#fff;font-size:10px;line-height:1.3;padding:2px 4px;text-align:center;border-radius:0 0 6px 6px}
+
 .m-del{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:none;background:#a12622;color:#fff;font-size:11px;cursor:pointer;line-height:1}
 .m-file{background:var(--color-background-secondary);border:1px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:6px 26px 6px 10px;font-size:12px;color:var(--color-text-secondary);margin:3px 6px 3px 0}
 .m-file .m-del{top:50%;transform:translateY(-50%);right:4px;background:transparent;color:#a12622;font-size:13px}
@@ -1559,6 +1563,34 @@ function toBuffer(blob){
   });
 }
 
+/* A photo that came across as a reference has a thumbnail and an identity in
+   SharePoint, and no bytes here. Tapping it brings the original down and stores
+   it, after which it behaves like any other photo on this device.
+
+   The state is left alone. 'purged' describes the UPLOAD - landed, verified,
+   no local copy held - and fetching a copy back does not undo any of that. The
+   queue keeps ignoring it, which is what stops the same photo being uploaded a
+   second time under a second name. */
+function isRemoteOnly(rec){
+  return !!(rec && rec.remote && rec.remote.itemId && !rec.hasOriginal);
+}
+
+function fetchRemoteCopy(rec){
+  if(!isRemoteOnly(rec)) return Promise.resolve(false);
+  if(!dsTransport || !dsAuth || !dsAuth.isSignedIn()){
+    alert('Sign in to Microsoft first — the home screen has the button.');
+    return Promise.resolve(false);
+  }
+  return dsTransport.download(rec.remote.itemId)
+    .then(toBuffer)
+    .then(function(buf){ return putBytes(rec.mid, buf, buf); })
+    .then(function(){
+      rec.hasOriginal = true;
+      return dbPut('media', rec);
+    })
+    .then(function(){ return true; });
+}
+
 function putBytes(mid, originalBuf, reportBuf){
   return dbPut('bytes', {mid: mid, original: originalBuf || null, report: reportBuf || null});
 }
@@ -2341,6 +2373,26 @@ function renderMedia(field, containerId){
       if(r.thumb){
         var im = document.createElement('img'); im.className = 'img-thumb'; im.src = r.thumb;
         wrap.appendChild(im);
+        /* A photo held only in SharePoint looks identical to one held here, and
+           the difference matters the moment somebody is off signal. Say which
+           it is, and make the tap bring it down. */
+        if(isRemoteOnly(r)){
+          wrap.classList.add('m-remote');
+          var tag = document.createElement('span');
+          tag.className = 'm-tag';
+          tag.textContent = 'in SharePoint · tap to fetch';
+          wrap.appendChild(tag);
+          im.style.cursor = 'pointer';
+          im.onclick = function(){
+            tag.textContent = 'fetching…';
+            fetchRemoteCopy(r).then(function(got){
+              if(got) renderMedia(field, containerId);
+              else tag.textContent = 'in SharePoint · tap to fetch';
+            }, function(e){
+              tag.textContent = 'could not fetch — ' + ((e && e.message) || e);
+            });
+          };
+        }
       } else {
         var sp = document.createElement('span'); sp.className = 'm-name';
         sp.textContent = r.name + ' (' + fmtKB(r.size) + ')';
@@ -2750,18 +2802,30 @@ function reportSubject(kind){
 
 function shareReport(){
   if(!cur) return;
-  buildReport().then(function(r){
-    var file = new File([r.html], r.fname, {type: 'text/html'});
-    if(navigator.canShare && navigator.canShare({files:[file]})){
-      navigator.share({files:[file], title: reportSubject(),
-                       text: reportSubject()}).catch(function(e){
-        if(e && e.name === 'AbortError') return;
+  /* A report built on a device that took the record over embeds only the photos
+     it actually holds. Saying nothing would send a report that looks complete
+     and is not, which is the worst of the three possible outcomes. */
+  mediaFor(cur.id).then(function(recs){
+    var away = recs.filter(isRemoteOnly);
+    if(away.length && !confirm(
+        away.length + ' photo' + (away.length > 1 ? 's are' : ' is') +
+        ' held in SharePoint and not on this device, so ' +
+        (away.length > 1 ? 'they' : 'it') + ' cannot be embedded in the report.\n\n' +
+        'Tap a thumbnail on the form to bring one down first, or send without.\n\n' +
+        'OK = send anyway\nCancel = go back')) return;
+    return buildReport().then(function(r){
+      var file = new File([r.html], r.fname, {type: 'text/html'});
+      if(navigator.canShare && navigator.canShare({files:[file]})){
+        navigator.share({files:[file], title: reportSubject(),
+                         text: reportSubject()}).catch(function(e){
+          if(e && e.name === 'AbortError') return;
+          downloadBlob(new Blob([r.html], {type:'text/html'}), r.fname);
+        });
+      } else {
         downloadBlob(new Blob([r.html], {type:'text/html'}), r.fname);
-      });
-    } else {
-      downloadBlob(new Blob([r.html], {type:'text/html'}), r.fname);
-      alert('Report downloaded. Attach it to an email or upload it to SharePoint.');
-    }
+        alert('Report downloaded. Attach it to an email or upload it to SharePoint.');
+      }
+    });
   }).catch(function(e){ alert('Could not build report: ' + e); });
 }
 function shareMedia(){
@@ -2872,6 +2936,21 @@ function missingFilingFields(job){
   });
 }
 
+/* What travels with a record handed through SharePoint: not the photos, which
+   are already in photos/ beside it, but enough to show what is attached and to
+   fetch any of it back. Only files that have actually landed and been verified
+   are referenced; anything still waiting to upload would be a promise the
+   receiving device could not keep. */
+function photoReferences(recs){
+  return (recs || []).filter(function(r){
+    return r.remote && r.remote.itemId;
+  }).map(function(r){
+    return {ref: true, field: r.field, name: r.name, type: r.type,
+            seq: r.seq || 1, thumb: r.thumb || null, size: r.size,
+            origSize: r.origSize, origHash: r.origHash, remote: r.remote};
+  });
+}
+
 /* Returns true to go ahead. Asks once, never twice for the same handover, and
    never blocks outright — an inspection with a missing number is still worth
    handing on, and the person may have no way to find it right now. */
@@ -2955,7 +3034,9 @@ function handoverToSharePoint(){
       /* Now it is a fact rather than a guess: something is about to land in
          this folder, so the name is fixed from here on. */
       DSMedia.resolveFolder(job);
-      var blob = new Blob([JSON.stringify(draftPayload(job, []))], {type: 'application/json'});
+      return mediaFor(job.id).then(function(recs){
+      var blob = new Blob([JSON.stringify(draftPayload(job, photoReferences(recs)))],
+                          {type: 'application/json'});
       /* Upload BEFORE archiving the old one, deliberately. Were this to fail
          after the old file had already been moved, current/ would be empty — a
          state the protocol has no procedure for, and which reads as lost data to
@@ -2965,6 +3046,7 @@ function handoverToSharePoint(){
          protocol already knows how to handle. */
       return dsTransport.putSmall(currentPath + '/' + name, blob)
         .then(function(put){ return {put: put, held: held}; });
+      });
     })
     .then(function(r){
       /* Record the baton the moment the upload lands, before the archive move is
@@ -3357,10 +3439,36 @@ function importDraftMedia(payload, done){
   var chain = Promise.resolve(), n = 0;
   (payload.media || []).forEach(function(m){
     chain = chain.then(function(){
-      var b = dataURLToBlob(m.dataURL);
+      var mid = uuid();
       n++;
-      return dbPut('media', {mid: uuid(), iid: iid, field: m.field, name: m.name,
-                             type: m.type, size: b.size, thumb: m.thumb || null, blob: b, added: Date.now()});
+      /* A reference, not a file. The record travelled through SharePoint, so
+         its photos are already in photos/ beside it and were deliberately not
+         carried — sending megabytes past a copy that is already there would be
+         absurd. What comes across is the thumbnail and the identity of the
+         original, so the receiving device can SHOW what is attached and fetch
+         any of it on demand.
+
+         Written straight into 'purged', which already means exactly this:
+         uploaded, verified, and no local copy held. The queue ignores it, so it
+         can never be uploaded a second time. */
+      if(m.ref){
+        return dbPut('media', {mid: mid, iid: iid, field: m.field, name: m.name,
+                               type: m.type, size: m.size || 0, thumb: m.thumb || null,
+                               seq: m.seq || 1, origSize: m.origSize, origHash: m.origHash,
+                               remote: m.remote || null, hasOriginal: false,
+                               up: 'purged', upTries: 0, added: Date.now()});
+      }
+      /* The offline fallback carries the bytes themselves. They go to the bytes
+         store like everything else: a Blob written to IndexedDB here would
+         reintroduce the exact fault D49 removed. */
+      var b = dataURLToBlob(m.dataURL);
+      return toBuffer(b).then(function(buf){
+        return putBytes(mid, buf, buf);
+      }).then(function(){
+        return dbPut('media', {mid: mid, iid: iid, field: m.field, name: m.name,
+                               type: m.type, size: b.size, thumb: m.thumb || null,
+                               hasOriginal: true, up: 'local', upTries: 0, added: Date.now()});
+      });
     });
   });
   /* A draft exported by an older build keys its media by DOM id, so rekey

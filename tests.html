@@ -1071,6 +1071,43 @@ function run(W){
        'the INS- prefix filter is still in place');
   });
 
+  /* v1.4.0 patch - a record handed through SharePoint carries references to its
+     photos, not the photos. They are already in photos/ beside it. */
+  test('a handover carries references to photos that have landed', function(){
+    ok(typeof W.photoReferences === 'function', 'photoReferences() defined');
+    if(typeof W.photoReferences !== 'function') return;
+    var refs = W.photoReferences([
+      {field:'m.a', name:'IMG_1.jpg', type:'image/jpeg', seq:1, thumb:'data:x',
+       size:100, origSize:900, remote:{itemId:'I1', webUrl:'http://x'}},
+      {field:'m.b', name:'IMG_2.jpg', type:'image/jpeg', thumb:'data:y', up:'queued'}
+    ]);
+    eq(refs.length, 1,
+       'only a photo that has actually landed is referenced');
+    ok(refs[0].ref === true, 'and is marked as a reference, not a file');
+    ok(!refs[0].dataURL, 'no bytes travel with it');
+    ok(refs[0].thumb === 'data:x', 'the thumbnail does, so the far end can show it');
+    ok(refs[0].remote.itemId === 'I1', 'along with where to fetch the original');
+  });
+
+  test('a photo held only in SharePoint is recognised as such', function(){
+    ok(typeof W.isRemoteOnly === 'function', 'isRemoteOnly() defined');
+    if(typeof W.isRemoteOnly !== 'function') return;
+    ok(W.isRemoteOnly({remote:{itemId:'I'}, hasOriginal:false}) === true,
+       'a reference with no local bytes');
+    ok(W.isRemoteOnly({remote:{itemId:'I'}, hasOriginal:true}) === false,
+       'once fetched it is an ordinary photo again');
+    ok(W.isRemoteOnly({hasOriginal:false}) === false,
+       'and something never uploaded is not "in SharePoint"');
+  });
+
+  test('an imported reference can never be uploaded a second time', function(){
+    /* purged already means uploaded, verified, no local copy. The queue ignores
+       it, which is what stops one photo landing twice under two names. */
+    var ref = {mid:'r1', up:'purged', remote:{itemId:'I'}};
+    eq(W.pendingUploads([ref]).length, 0, 'the queue does not offer to upload it');
+    eq(W.unfinishedUploads([ref]).length, 0, 'and does not count it as outstanding');
+  });
+
   test('the per-file status panel exists and starts empty', function(){
     var box = D.getElementById('sy-detail');
     ok(!!box, 'sy-detail panel present in the sync bar');
