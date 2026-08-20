@@ -484,6 +484,17 @@ DSMedia.createQueue = function(opts){
       var s = DSMedia.stateOf(r);
       if(s === 'queued') return true;
       if(s === 'failed') return r.upRetryable !== false;
+      /* v1.4.0 patch — a record in 'uploading' that is NOT the file currently
+         in flight is stranded, by definition: this queue holds exactly one at a
+         time. Left out, such a record is invisible to everything until the next
+         page load, which is the same silent hole as B5 and cost three rounds of
+         diagnosis on a device: three photos each attempted once, each left in
+         'uploading', none carrying any recorded outcome, and the drain reporting
+         itself done with all three still sitting there.
+
+         Recovering here rather than only at start-up is the point. Start-up
+         recovery cannot help a device that is not restarted. */
+      if(s === 'uploading') return !inFlight || inFlight.mid !== r.mid;
       return false;
     });
   }
@@ -582,7 +593,20 @@ DSMedia.createQueue = function(opts){
           rec.upReadFails = 0;
           rec.upRetryable = DSMedia.isRetryable(err);
         }
-        return save(rec).then(function(){ onChange(rec, err); throw err; });
+        /* The outcome of an attempt must not be lost because it could not be
+           written down. If this save fails the record stays 'uploading' on
+           disk, which nothing counted before the stranded-record rule above.
+           Both reasons are carried, because "why did it fail" and "why could
+           we not say so" are different questions and a person needs each. */
+        return save(rec).catch(function(saveErr){
+          var note = ' (and the failure could not be saved: ' +
+                     ((saveErr && saveErr.message) || saveErr) + ')';
+          err.message = (err.message || String(err)) + note;
+          /* setState already wrote upErr from the original error, before this
+             save was even attempted, so the record has to be told separately.
+             In memory only, obviously: writing is the thing that just failed. */
+          rec.upErr = (rec.upErr || '') + note;
+        }).then(function(){ onChange(rec, err); throw err; });
       });
   }
 

@@ -1463,6 +1463,73 @@ function mediaModuleChecks(){
     ok(rec.upRetryable === true, 'and it is eligible again');
   });
 
+  /* v1.4.0 patch - the stranded-record hole, found on a device.
+
+     Three photos, each attempted once, each left in 'uploading', none carrying
+     any recorded outcome, and the drain reporting itself done with all three
+     sitting there. pending() ignored 'uploading' entirely, so nothing could see
+     them until the next page load - the same silent hole as B5, one level up.
+     A record in 'uploading' that is not the file in flight is stranded by
+     definition: this queue holds exactly one at a time. */
+  later('a record stranded in uploading is picked up, not left invisible',
+    (function(){
+      var rec = {mid: 'stranded', name: 'IMG_1.jpg', up: 'uploading', origSize: 10,
+                 original: new Blob(['0123456789']), upTries: 1};
+      var q = M.createQueue({
+        transport: {
+          upload: function(){ return Promise.resolve({itemId: 'I'}); },
+          verify: function(){ return Promise.resolve({size: 10}); }
+        },
+        list: function(){ return Promise.resolve([rec]); },
+        save: function(){ return Promise.resolve(); },
+        preflight: false,
+        stallMs: 0,
+        wait: function(){ return Promise.resolve(); }
+      });
+      return q.drain().then(function(r){
+        ok(M.stateOf(rec) === 'uploaded',
+           'the stranded record is attempted and lands, without a page reload',
+           'drain returned "' + r + '" and the record is ' + M.stateOf(rec));
+      });
+    })());
+
+  later('the outcome of an attempt survives a storage write that fails',
+    (function(){
+      /* Before this, a failed save discarded the whole attempt: the record kept
+         its 'uploading' state on disk and nothing counted it ever again. */
+      var rec = {mid: 'nosave', name: 'IMG_2.jpg', up: 'queued', origSize: 10,
+                 original: new Blob(['0123456789'])};
+      var saves = 0;
+      var q = M.createQueue({
+        transport: {
+          /* 400, not 500: a retryable error makes the queue try again, and the
+             second attempt's own failing save overwrites the reason being
+             asserted here. The first version of this test did exactly that. */
+          upload: function(){ var e = new Error('graph exploded'); e.status = 400; return Promise.reject(e); },
+          verify: function(){ return Promise.resolve({size: 10}); }
+        },
+        list: function(){ return Promise.resolve([rec]); },
+        save: function(){
+          saves++;
+          /* The first save (recording the attempt) works; the one that records
+             the failure does not. */
+          return saves === 1 ? Promise.resolve()
+                             : Promise.reject(new Error('storage transaction was aborted'));
+        },
+        preflight: false,
+        stallMs: 0,
+        wait: function(){ return Promise.resolve(); }
+      });
+      return q.drain().then(function(){
+        ok(/graph exploded/.test(rec.upErr || ''),
+           'the real reason is kept: ' + rec.upErr,
+           'upErr was: ' + rec.upErr);
+        ok(/could not be saved/.test(rec.upErr || ''),
+           'and so is the fact that it could not be written down',
+           'upErr was: ' + rec.upErr);
+      });
+    })());
+
   section('Media module — storage pressure');
 
   test('pressure levels', function(){
@@ -1610,18 +1677,35 @@ function mediaModuleChecks(){
             }).then(function(){
 
             /* B5 end to end. Changing the state is not the point — the point is
-               that the stranded photo actually reaches SharePoint afterwards. */
+               that the stranded photo actually reaches SharePoint.
+
+               This test used to assert the OPPOSITE of what follows: that the
+               queue could not see a record left in 'uploading', that nothing was
+               attempted, and that it stayed stranded until start-up recovery
+               rescued it. That was an accurate description of B5, and it was
+               also the hole itself. A device found the rest of it: three photos
+               each attempted once, each left in 'uploading' because the write
+               recording their failure did not land, and the drain reporting
+               itself done with all three sitting there invisible.
+
+               A record in 'uploading' that is not the file in flight is stranded
+               by definition — this queue holds exactly one at a time — so the queue
+               now picks it up itself. Start-up recovery still exists and still
+               matters; it simply is no longer the only thing standing between a
+               stranded photo and oblivion, because it cannot help a device that
+               is never restarted. */
             var h6 = harness({start: 'uploading', tries: 1});
-            return h6.q.drain().then(function(before){
-              eq(before, 'done', 'the queue cannot see a stranded record at all');
-              eq(h6.calls.upload, 0, 'so nothing is attempted — this is B5');
-              eq(h6.rec.up, 'uploading', 'and it stays stranded');
-              M.recoverInterrupted(h6.rec);
-              return h6.q.drain().then(function(after){
-                eq(after, 'done', 'after recovery the queue drains');
-                eq(h6.calls.upload, 1, 'the stranded photo is finally attempted');
-                eq(h6.rec.up, 'uploaded', 'and lands in SharePoint');
-              });
+            return h6.q.drain().then(function(after){
+              eq(after, 'done', 'the drain completes');
+              eq(h6.calls.upload, 1, 'the stranded photo is attempted without waiting for a reload');
+              eq(h6.rec.up, 'uploaded', 'and lands in SharePoint');
+            }).then(function(){
+              /* Start-up recovery still does its job on a record the queue never
+                 got the chance to see, which is the case it was written for. */
+              var h6b = harness({start: 'uploading', tries: 1});
+              ok(M.recoverInterrupted(h6b.rec) === true,
+                 'start-up recovery still claims a record left mid-flight');
+              eq(h6b.rec.up, 'queued', 'and puts it back in the queue');
             });
             });
           });
