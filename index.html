@@ -2724,7 +2724,13 @@ function buildReport(){
     var imgWork = recs.filter(function(r){ return r.type.indexOf('image/') === 0; })
       .map(function(r){
         return bytesFor(r, 'report').then(function(b){
-          return b ? blobToDataURL(b).then(function(u){ r._url = u; }) : null;
+          if(b) return blobToDataURL(b).then(function(u){ r._url = u; });
+          /* Held only in SharePoint. The thumbnail travelled with the record, so
+             the report can still SHOW the photo rather than listing a filename
+             and leaving the reader to guess. Marked, so the caption can be
+             honest about what they are looking at. */
+          if(r.thumb){ r._url = r.thumb; r._thumbOnly = true; }
+          return null;
         });
       });
     return Promise.all(imgWork).then(function(){ return recs; });
@@ -2754,7 +2760,23 @@ function buildReport(){
       if(imgs.length) mh += '<div class="figs">' + imgs.map(function(r){
         var inp = MFID_EL[r.field];
         var cap = inp ? groupLabelFor(inp) : r.field;
-        return '<figure><img src="' + r._url + '"><figcaption>' + esc(cap) + ' — ' + esc(r.name) + '</figcaption></figure>';
+        /* The report embeds a 1600px copy, which reads and prints well and keeps
+           the file emailable. The ORIGINAL never travels - it is already in the
+           inspection's photos/ folder, at full resolution, for anyone with
+           access to the library. Design, technical, sales and admin all want
+           that copy at some point, and until now nothing in the report said it
+           existed or where it was. A link costs nothing and answers it. */
+        var url = r.remote && r.remote.webUrl;
+        var note = r._thumbOnly
+          ? ' — thumbnail only, full size in SharePoint'
+          : (url ? ' — full size in SharePoint' : '');
+        var img = '<img src="' + r._url + '">';
+        return '<figure>' +
+                 (url ? '<a href="' + esc(url) + '" target="_blank" rel="noopener">' + img + '</a>' : img) +
+                 '<figcaption>' + esc(cap) + ' — ' + esc(r.name) +
+                 (url ? '<a class="full" href="' + esc(url) + '" target="_blank" rel="noopener">' +
+                        esc(note) + '</a>' : esc(note)) +
+               '</figcaption></figure>';
       }).join('') + '</div>';
       if(others.length) mh += '<div class="att">Attached separately (video/documents): ' +
         others.map(function(r){ return esc(r.name) + ' (' + fmtKB(r.size) + ')'; }).join('; ') + '</div>';
@@ -2798,6 +2820,10 @@ function buildReport(){
       '.figs{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}' +
       'figure{margin:0;width:calc(50% - 5px)}figure img{width:100%;border-radius:8px;border:1px solid #e3e7eb}' +
       'figcaption{font-size:11px;color:#8a939c;margin-top:3px}' +
+      'figcaption a.full{color:#0b5cab;text-decoration:none}' +
+      'figcaption a.full:hover{text-decoration:underline}' +
+      'figure a{display:block}' +
+      '@media print{figcaption a.full{color:#8a939c}}' +
       '.att{font-size:12px;color:#8a5a00;background:#fdf6e3;border-radius:6px;padding:8px 10px;margin-top:10px}' +
       'footer{font-size:11px;color:#8a939c;border-top:1px solid #e3e7eb;padding-top:10px;margin-top:24px}' +
       '@media print{body{padding:0}}' +
@@ -2857,26 +2883,58 @@ function shareReport(){
      and is not, which is the worst of the three possible outcomes. */
   mediaFor(cur.id).then(function(recs){
     var away = recs.filter(isRemoteOnly);
-    if(away.length && !confirm(
-        away.length + ' photo' + (away.length > 1 ? 's are' : ' is') +
-        ' held in SharePoint and not on this device, so ' +
-        (away.length > 1 ? 'they' : 'it') + ' cannot be embedded in the report.\n\n' +
-        'Tap a thumbnail on the form to bring one down first, or send without.\n\n' +
-        'OK = send anyway\nCancel = go back')) return;
-    return buildReport().then(function(r){
-      var file = new File([r.html], r.fname, {type: 'text/html'});
-      if(navigator.canShare && navigator.canShare({files:[file]})){
-        navigator.share({files:[file], title: reportSubject(),
-                         text: reportSubject()}).catch(function(e){
-          if(e && e.name === 'AbortError') return;
-          downloadBlob(new Blob([r.html], {type:'text/html'}), r.fname);
-        });
-      } else {
-        downloadBlob(new Blob([r.html], {type:'text/html'}), r.fname);
-        alert('Report downloaded. Attach it to an email or upload it to SharePoint.');
-      }
+    if(!away.length) return sendBuiltReport();
+    /* Asked rather than assumed, because the right answer depends on who the
+       report is for. Somebody at a desk, or printing it, wants the 1600px
+       copies embedded. Somebody in the field on a phone wants it sent now and
+       will follow the link if they need detail. Either way the full-resolution
+       original stays in the photos/ folder and the report links to it. */
+    return pickFromList({
+      title: 'Photos held in SharePoint',
+      note: away.length + ' photo' + (away.length > 1 ? 's are' : ' is') +
+            ' not on this device. The report will show ' +
+            (away.length > 1 ? 'their thumbnails' : 'its thumbnail') +
+            ' and link to the full-resolution original either way.',
+      items: [
+        {title: 'Bring ' + (away.length > 1 ? 'them' : 'it') + ' down first',
+         sub: 'Needs signal. Embeds the readable copies, best for a desk or for printing.',
+         value: 'fetch'},
+        {title: 'Send now',
+         sub: 'Thumbnails plus a link to each original in SharePoint. Smaller, and quick.',
+         value: 'send'}
+      ]
+    }).then(function(choice){
+      if(!choice) return;
+      if(choice === 'send') return sendBuiltReport();
+      setHandover('Bringing photos down…', 'busy');
+      return away.reduce(function(chain, rec){
+        return chain.then(function(){ return fetchRemoteCopy(rec); });
+      }, Promise.resolve())
+       .then(function(){ setHandover('', ''); return sendBuiltReport(); })
+       .catch(function(e){
+         setHandover('', '');
+         alert('Could not bring every photo down: ' + ((e && e.message) || e) +
+               '\n\nThe report will still show thumbnails and link to the originals.');
+         return sendBuiltReport();
+       });
     });
   }).catch(function(e){ alert('Could not build report: ' + e); });
+}
+
+function sendBuiltReport(){
+  return buildReport().then(function(r){
+    var file = new File([r.html], r.fname, {type: 'text/html'});
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      navigator.share({files:[file], title: reportSubject(),
+                       text: reportSubject()}).catch(function(e){
+        if(e && e.name === 'AbortError') return;
+        downloadBlob(new Blob([r.html], {type:'text/html'}), r.fname);
+      });
+    } else {
+      downloadBlob(new Blob([r.html], {type:'text/html'}), r.fname);
+      alert('Report downloaded. Attach it to an email or upload it to SharePoint.');
+    }
+  });
 }
 function shareMedia(){
   if(!cur) return;

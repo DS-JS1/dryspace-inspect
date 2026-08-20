@@ -590,7 +590,18 @@ into "Waiting", which proved the uploading state had never been written.
   land in the right folder and NOTHING references them: the draft in current/
   was written at handover. Not blocked, because adding a missed photo is
   legitimate, but said at the time, naming the fix - hand over again.
-- 489 assertions. CACHE_VERSION -> ds-inspect-v1.4.0-16.
+- EVERY PHOTO IN A REPORT NOW LINKS TO ITS FULL-RESOLUTION ORIGINAL (D54).
+  The report embeds the 1600px copy so it stays emailable; the original never
+  travels, because it is already in the inspection's photos/ folder at full
+  resolution. Nothing in the report said that copy existed, so design,
+  technical, sales and admin had no route to it except knowing to go and
+  look. The caption now says so and the photo is the link.
+- A photo held only in SharePoint is SHOWN as its thumbnail and labelled as
+  one, rather than listed as a filename. A report is never photo-less.
+- Sending asks whether to bring those photos down first: embedded copies for
+  a desk or for printing, or send now with thumbnails and links. Either way
+  the original is one tap away for anyone with access to the library.
+- 495 assertions. CACHE_VERSION -> ds-inspect-v1.4.0-17.
 
 The architectural change: the record now travels the same road as the photos,
 and in-progress work is backed up without anyone having to remember to do it.

@@ -1207,6 +1207,45 @@ function run(W){
     W.confirm = realConfirm; W.cur = realCur;
   });
 
+  /* v1.4.0 patch - who sees full-resolution photos, and how.
+
+     The report embeds the 1600px copy so it stays emailable. The ORIGINAL never
+     travels: it is in the inspection's photos/ folder at full resolution, for
+     anyone with access to the library. Nothing in the report used to say that
+     existed, so design, technical, sales and admin had no route to it. */
+  /* v1.4.0 patch - who sees full-resolution photos, and how.
+
+     The report embeds the 1600px copy so it stays emailable. The ORIGINAL never
+     travels: it is in the inspection's photos/ folder at full resolution, for
+     anyone with access to the library. Nothing in the report used to say that
+     existed, so design, technical, sales and admin had no route to it.
+
+     Checked against the source rather than by building a report: buildReport()
+     runs a full save cycle against the live form, and a stub record cannot
+     satisfy it. Same approach as the sw.js checks, and for the same reason. */
+  later('the report links every photo to its original, and shows the ones it cannot embed',
+    fetch('index.html?r=' + Date.now()).then(function(r){ return r.text(); })
+      .then(function(src){
+        var fig = src.match(/var url = r\.remote && r\.remote\.webUrl;[\s\S]{0,900}/);
+        ok(!!fig, 'the figure builder is in index.html');
+        if(!fig) return;
+        ok(fig[0].indexOf('full size in SharePoint') > -1,
+           'the caption tells the reader a full-resolution copy exists');
+        ok(fig[0].indexOf('thumbnail only') > -1,
+           'and is honest when only a thumbnail could be embedded');
+        ok(/<a href="' \+ esc\(url\)/.test(fig[0]),
+           'the photo itself links to the original in SharePoint',
+           'no link was emitted around the image');
+
+        /* A photo held only in SharePoint must still APPEAR. Listing a filename
+           and leaving the reader to guess is how a report looks complete and is
+           not. */
+        ok(/r\._url = r\.thumb; r\._thumbOnly = true;/.test(src),
+           'a photo held only in SharePoint falls back to its thumbnail');
+        ok(typeof W.sendBuiltReport === 'function',
+           'sending is separable from choosing, so the choice can be offered first');
+      }));
+
   test('the per-file status panel exists and starts empty', function(){
     var box = D.getElementById('sy-detail');
     ok(!!box, 'sy-detail panel present in the sync bar');
