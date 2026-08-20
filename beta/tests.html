@@ -1035,6 +1035,42 @@ function run(W){
     W.cur = realCur;
   });
 
+  /* v1.4.0 patch - asking where something WOULD file must not decide where it
+     does. resolveFolder() pins as a side effect of being asked, so merely
+     offering to hand over fixed the folder name, while the question on screen
+     promised that filling the details in would still change it. */
+  test('working out the folder does not pin it', function(){
+    var job = {client: 'Smith', address: '12 Marine Pde'};
+    var shown = W.batonFolder(job);
+    ok(/Smith/.test(shown), 'the name is worked out for the question: ' + shown);
+    ok(!job.mediaFolder,
+       'and the record is NOT pinned by having been asked',
+       'mediaFolder was set to "' + job.mediaFolder + '" just by looking');
+
+    /* Which means adding the number afterwards genuinely changes the answer. */
+    job.inspNo = 'INS-2026-0142';
+    ok(/INS-2026-0142/.test(W.batonFolder(job)),
+       'so filling in the number afterwards still changes where it files');
+
+    /* Once genuinely pinned, it stays put - that half must not regress. */
+    W.DSMedia.resolveFolder(job);
+    var pinned = job.mediaFolder;
+    job.client = 'Someone Else';
+    eq(W.batonFolder(job), pinned,
+       'and once something has uploaded, a later correction cannot move it');
+  });
+
+  /* v1.4.0 patch - an inspection handed over before its number was allocated
+     files as "Client - Address". The scan only looked at folders starting with
+     "INS-", so the baton could be put down where nobody could pick it up. */
+  test('the SharePoint scan does not assume a folder is named INS-something', function(){
+    ok(typeof W.scanInspectionFolders === 'function', 'scanInspectionFolders() defined');
+    var src = W.document.documentElement.outerHTML;
+    ok(!/indexOf\('INS-'\) === 0/.test(src),
+       'no folder is skipped for lacking an inspection number',
+       'the INS- prefix filter is still in place');
+  });
+
   test('the per-file status panel exists and starts empty', function(){
     var box = D.getElementById('sy-detail');
     ok(!!box, 'sy-detail panel present in the sync bar');

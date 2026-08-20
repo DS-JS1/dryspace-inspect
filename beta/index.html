@@ -2810,11 +2810,19 @@ function dataURLToBlob(u){
    a human decision: deleting someone's only copy of a day's work on their
    behalf is not a thing this app does. */
 
+/* NON-PINNING. resolveFolder() pins job.mediaFolder as a side effect of being
+   asked, which meant merely OFFERING to hand over fixed the folder name - and
+   the question then told the person "nothing has uploaded yet, so filling these
+   in now would still change how it files", which was no longer true by the time
+   they read it. Cancelling to go and add the inspection number left it filing
+   under the name it had a microsecond earlier.
+
+   Working out where something WOULD file must not decide where it does. The
+   pinning happens at the moment of upload, in metaFor() and in the handover
+   itself, which is the only point at which it is a fact rather than a guess. */
 function batonFolder(job){
-  return DSMedia.resolveFolder({
-    inspNo: job.inspNo || '', address: job.address || '', client: job.client || '',
-    date: job.inspDate || DSMedia.today(job.createdAt),
-    mediaFolder: job.mediaFolder, mediaTag: job.mediaTag
+  return job.mediaFolder || DSMedia.folderName({
+    inspNo: job.inspNo || '', address: job.address || '', client: job.client || ''
   });
 }
 
@@ -2944,6 +2952,9 @@ function handoverToSharePoint(){
     })
     .then(function(held){
       setHandover('Uploading the record\u2026', 'busy');
+      /* Now it is a fact rather than a guess: something is about to land in
+         this folder, so the name is fixed from here on. */
+      DSMedia.resolveFolder(job);
       var blob = new Blob([JSON.stringify(draftPayload(job, []))], {type: 'application/json'});
       /* Upload BEFORE archiving the old one, deliberately. Were this to fail
          after the old file had already been moved, current/ would be empty — a
@@ -3113,7 +3124,15 @@ function stopWipBackup(){
    queue. */
 function scanInspectionFolders(sub){
   return dsTransport.list('').then(function(top){
-    var folders = top.filter(function(f){ return f.isFolder && f.name.indexOf('INS-') === 0; });
+    /* Was: only folders whose name starts with "INS-". An inspection handed
+       over before its number was allocated files as "Client - Address", so it
+       was invisible here - the baton could be put down somewhere nobody could
+       pick it up from, which is worse than not being able to put it down.
+       Folders beginning with an underscore are ours (_diagnostics) and are
+       not inspections. */
+    var folders = top.filter(function(f){
+      return f.isFolder && f.name.charAt(0) !== '_';
+    });
     if(!folders.length) throw new Error('No inspection folders found in the library.');
     var found = [];
     return folders.reduce(function(chain, f){
@@ -3282,7 +3301,8 @@ function exportDraft(){
           excl.map(function(r){ return r.name; }).join(', ') + '. Share videos via OneDrive if the field team needs them.');
       };
       if(navigator.canShare && navigator.canShare({files:[file]})){
-        navigator.share({files:[file], title:fname}).then(after).catch(function(e){
+        navigator.share({files:[file], title: reportSubject('draft for handover'),
+                         text: reportSubject('draft for handover')}).then(after).catch(function(e){
           if(e && e.name !== 'AbortError'){ downloadBlob(blob, fname); after(); }
         });
       } else { downloadBlob(blob, fname); after(); }
