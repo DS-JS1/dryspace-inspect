@@ -601,7 +601,19 @@ into "Waiting", which proved the uploading state had never been written.
 - Sending asks whether to bring those photos down first: embedded copies for
   a desk or for printing, or send now with thumbnails and links. Either way
   the original is one tap away for anyone with access to the library.
-- 495 assertions. CACHE_VERSION -> ds-inspect-v1.4.0-17.
+- The form's Upload button vanished on a record that had photos waiting. It
+  was refreshed on a timer at the START of openInspection, before the record
+  had been read, so it asked about the wrong inspection - or none. Refreshed
+  after cur is set now.
+- That button shows progress: "Uploading - 2 left - 45%", with the bar drawn
+  across it. "Uploading" on its own is what made a stall unreadable, and the
+  same argument applies to a button.
+- The handover dialogs use the same box as the picker. confirm() was fine
+  while every message was one line; the handover ones grew to a dozen, and a
+  native dialog renders that as a wall of text at whatever size iOS picks.
+  Facts are laid out as labelled lines and the choices are named buttons -
+  "Stop" and "Continue anyway" rather than Cancel and OK.
+- 507 assertions. CACHE_VERSION -> ds-inspect-v1.4.0-18.
 
 The architectural change: the record now travels the same road as the photos,
 and in-progress work is backed up without anyone having to remember to do it.

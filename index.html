@@ -66,6 +66,12 @@ input[type=text],input[type=date],select,textarea{font-size:16px !important;padd
 .pick-head{padding:12px 14px 8px;border-bottom:1px solid #e5e7eb}
 .pick-title{font-weight:700;font-size:16px;color:#0b2a4a}
 .pick-note{font-size:12px;color:#4b5563;margin-top:3px;line-height:1.4}
+.pick-lines{margin:10px 14px 0;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden}
+.pick-line{display:flex;gap:8px;padding:6px 10px;font-size:12px;border-bottom:1px solid #f1f5f9}
+.pick-line:last-child{border-bottom:0}
+.pick-line-k{color:#6b7280;flex:0 0 34%}
+.pick-line-v{color:#0b2a4a;font-weight:600;word-break:break-word;flex:1}
+
 .pick-filter{margin:10px 14px 0;padding:9px 10px;font-size:14px;border:1px solid #cbd5e1;border-radius:8px;-webkit-appearance:none}
 .pick-list{overflow:auto;-webkit-overflow-scrolling:touch;padding:8px 8px 4px;flex:1}
 .pick-row{display:block;width:100%;text-align:left;background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;padding:9px 11px;margin:0 0 6px;font:inherit;cursor:pointer}
@@ -2517,7 +2523,6 @@ function newInspection(){
   });
 }
 function openInspection(id){
-  setTimeout(refreshFormUpload, 0);
   dbGet('inspections', id).then(function(rec){
     if(!rec){ alert('Inspection not found.'); return; }
     var wasOld = (!rec.schema || rec.schema < 2);
@@ -2528,6 +2533,10 @@ function openInspection(id){
     renderAllMedia();
     updateFormTitle(); renderStageBar(); renderFormMeta();
     refreshMediaState().then(refreshCompletion);
+    /* After cur is set, not before. Refreshing it on the way IN ran while the
+       record was still being read, so it asked about the wrong inspection - or
+       none - and the button vanished on a form that had photos waiting. */
+    refreshFormUpload();
     setSaveStatus('Loaded — autosave on');
     show('form');
     if(cur._gradeRemapped){
@@ -3120,20 +3129,30 @@ function handoverToSharePoint(){
          agreed with it, someone else has handed over in the meantime and this
          handover would bury their work. */
       if(held && (!job.baton || job.baton.eTag !== held.eTag)){
-        var msg = 'Someone else has handed this inspection over since you picked it up.\n\n' +
-          'In current/ : ' + held.name + '\n' +
-          'Changed     : ' + (held.modifiedAt ? fmtAUStamp(Date.parse(held.modifiedAt)) : 'unknown') + '\n\n' +
-          (job.baton
-             ? 'You took the baton from : ' + job.baton.name
-             : 'This device has never taken the baton from SharePoint.') + '\n\n' +
-          'Continuing archives their file and replaces it with yours. Their work stays ' +
-          'recoverable from archive/, but it stops being the live record.\n\n' +
-          'OK = continue anyway\nCancel = stop and go and talk to them';
-        if(!confirm(msg)){
-          var abort = new Error('cancelled');
-          abort.cancelled = true;
-          throw abort;
-        }
+        return showDialog({
+          title: 'Someone else has handed this over',
+          note: 'Continuing archives their file and replaces it with yours. Their ' +
+                'work stays recoverable from archive/, but it stops being the live ' +
+                'record.',
+          lines: [
+            {k: 'In current/', v: held.name},
+            {k: 'Changed', v: held.modifiedAt ? fmtAUStamp(Date.parse(held.modifiedAt)) : 'unknown'},
+            {k: 'You took', v: job.baton ? job.baton.name : 'never taken from SharePoint'}
+          ],
+          choices: [
+            {title: 'Stop', sub: 'Go and talk to them first. Nothing is changed.', value: 'stop'},
+            {title: 'Continue anyway', sub: 'Archive theirs and make yours the live record.',
+             value: 'go'}
+          ],
+          cancel: null
+        }).then(function(choice){
+          if(choice !== 'go'){
+            var abort = new Error('cancelled');
+            abort.cancelled = true;
+            throw abort;
+          }
+          return held;
+        });
       }
       return held;
     })
@@ -3430,6 +3449,24 @@ function recoverWorkInProgress(){
    dialog somebody cannot get out of on a phone in a basement is its own fault.
 
    Returns a promise of the chosen item, or null. */
+/* The same box as the picker, for saying something rather than choosing from a
+   list. confirm() and alert() were fine while every message was one line; the
+   handover ones grew to a dozen, and a native dialog renders them as an
+   undifferentiated wall at whatever size iOS picks.
+
+   opts.lines  - array of {k, v} shown as a small definition list
+   opts.choices- [{title, sub, value}], first is the affirmative
+   Resolves to the chosen value, or null on Cancel / Escape / backdrop. */
+function showDialog(opts){
+  return pickFromList({
+    title: opts.title,
+    note: opts.note,
+    lines: opts.lines,
+    items: (opts.choices || [{title: 'OK', value: true}]),
+    cancel: opts.cancel === undefined ? 'Cancel' : opts.cancel
+  });
+}
+
 function pickFromList(opts){
   return new Promise(function(resolve){
     var items = opts.items || [];
@@ -3441,6 +3478,7 @@ function pickFromList(opts){
           '<div class="pick-title"></div>' +
           '<div class="pick-note"></div>' +
         '</div>' +
+        '<div class="pick-lines"></div>' +
         '<input class="pick-filter" type="search" autocomplete="off" ' +
                'placeholder="Filter by client, address or number">' +
         '<div class="pick-list"></div>' +
@@ -3451,6 +3489,29 @@ function pickFromList(opts){
 
     var listEl = back.querySelector('.pick-list');
     var filterEl = back.querySelector('.pick-filter');
+    var linesEl = back.querySelector('.pick-lines');
+
+    /* Facts, laid out, rather than run together in a paragraph. Somebody
+       deciding whether to overwrite a colleague's work needs to SEE the two
+       filenames and the two dates, not read a sentence containing them. */
+    (opts.lines || []).forEach(function(l){
+      var row = document.createElement('div');
+      row.className = 'pick-line';
+      var k = document.createElement('span'); k.className = 'pick-line-k';
+      k.textContent = l.k;
+      var v = document.createElement('span'); v.className = 'pick-line-v';
+      v.textContent = l.v;
+      row.appendChild(k); row.appendChild(v);
+      linesEl.appendChild(row);
+    });
+    if(!(opts.lines || []).length) linesEl.style.display = 'none';
+
+    /* The filter is for a list. One or two choices do not need one, and a search
+       box over two buttons looks like something is missing. */
+    if(items.length < 6) filterEl.style.display = 'none';
+    var cancelBtn = back.querySelector('.pick-cancel');
+    if(opts.cancel === null) cancelBtn.style.display = 'none';
+    else if(opts.cancel) cancelBtn.textContent = opts.cancel;
 
     function close(val){
       document.removeEventListener('keydown', onKey);
@@ -3561,11 +3622,23 @@ function importFromSharePoint(){
             importDraftMedia(payload, function(n){
               renderHome();
               setSync('Imported from SharePoint.', 'ok');
-              alert('Brought onto this device:\n\n' + chosen.folder + '\n' + chosen.file.name +
-                    (n ? '\n\nwith ' + n + ' attached file(s).' : '') +
-                    '\n\nPhotos already uploaded for this job stay in SharePoint \u2014 they are ' +
-                    'not copied down.\n\nYou now hold the baton.');
-              res();
+              showDialog({
+                title: 'You now hold the baton',
+                note: 'Photos already uploaded for this job stay in SharePoint. ' +
+                      'They are shown as thumbnails on the form — tap one to bring ' +
+                      'the full-size original onto this device.',
+                lines: [
+                  {k: 'Inspection', v: chosen.folder},
+                  {k: 'File', v: chosen.file.name},
+                  {k: 'Photos attached', v: n ? String(n) : 'none referenced'}
+                ],
+                choices: [{title: 'Open it', value: 'open'},
+                          {title: 'Not now', value: 'later'}],
+                cancel: null
+              }).then(function(go){
+                if(go === 'open') openInspection(rec.id);
+                res();
+              });
             });
           }, res);
         });
@@ -3903,10 +3976,12 @@ function initSync(){
     onProgress: function(rec, frac){
       UP_PROGRESS[rec.mid] = frac;
       refreshSyncDetail();
+      refreshFormUpload();
     },
     onStep: function(rec, name){
       UP_STEP[rec.mid] = name;
       refreshSyncDetail();
+      refreshFormUpload();
     },
     bytesOf: function(rec){ return bytesFor(rec, 'original'); }
   });
@@ -4055,8 +4130,25 @@ function refreshFormUpload(){
   if(!cur || !dsAuth || !dsAuth.isSignedIn()){ b.style.display = 'none'; return Promise.resolve(); }
   return mediaFor(cur.id).then(function(recs){
     var waiting = pendingUploads(recs).length;
-    b.style.display = waiting ? '' : 'none';
-    b.textContent = waiting === 1 ? 'Upload 1 photo' : 'Upload ' + waiting + ' photos';
+    var busy = inFlightUploads(recs);
+    if(!waiting && !busy.length){ b.style.display = 'none'; b.style.backgroundImage = ''; return; }
+    b.style.display = '';
+    if(busy.length){
+      /* "Uploading" on its own is what made a stall unreadable, and the same
+         argument applies to a button. The percentage is the file in flight; the
+         count is everything still to go, so the number only ever falls. */
+      var frac = UP_PROGRESS[busy[0].mid];
+      var pct = typeof frac === 'number' ? Math.round(frac * 100) : 0;
+      var left = waiting + busy.length;
+      b.disabled = true;
+      b.textContent = 'Uploading · ' + left + ' left · ' + pct + '%';
+      b.style.backgroundImage =
+        'linear-gradient(to right, rgba(255,255,255,.35) ' + pct + '%, rgba(255,255,255,0) ' + pct + '%)';
+    } else {
+      b.disabled = false;
+      b.style.backgroundImage = '';
+      b.textContent = waiting === 1 ? 'Upload 1 photo' : 'Upload ' + waiting + ' photos';
+    }
   }).catch(function(){});
 }
 
