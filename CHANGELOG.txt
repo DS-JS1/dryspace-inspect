@@ -501,7 +501,17 @@ into "Waiting", which proved the uploading state had never been written.
   "unreadable" is not always "gone". Still permanent on the second
   consecutive failure. Being wrong the permanent way costs somebody a drive
   back to site to retake a photo that was there all along.
-- 430 assertions, up from 387. CACHE_VERSION -> ds-inspect-v1.4.0-8.
+- The footer names the BUILD that is serving the page, read from the live
+  cache name rather than a constant. APP_VER cannot answer that question: a
+  patch folded into an unreleased version leaves APP_VER alone and moves only
+  CACHE_VERSION, so several different builds all report v1.4.0 and no
+  screenshot can be told from any other. That cost real time.
+- diagnostics.html section 6 reads the media store directly and prints the
+  state the queue actually sees, per file. The home screen panel is a
+  rendering of the truth, and two rounds were lost treating it as the truth.
+  It flags more than one record in 'uploading' as impossible, because the
+  queue holds exactly one file in flight.
+- 430 assertions. CACHE_VERSION -> ds-inspect-v1.4.0-9.
 
 The architectural change: the record now travels the same road as the photos,
 and in-progress work is backed up without anyone having to remember to do it.

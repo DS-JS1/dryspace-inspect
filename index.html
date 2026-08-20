@@ -3751,6 +3751,18 @@ function init(){
   if(vl) vl.textContent = 'Dryspace Inspection App v' + APP_VER + ' — Form ' + FORM_VER +
                           ' · Version date ' + VER_DATE + ' · Works fully offline' +
                           (isBetaBuild() ? ' · TEST BUILD' : '');
+  /* Which BUILD is actually serving this page. APP_VER cannot answer that: a
+     patch folded into an unreleased version leaves APP_VER alone and moves only
+     CACHE_VERSION, so several different builds all report v1.4.0 and a
+     screenshot cannot be told apart from any other. Read from the live cache
+     name rather than a constant, so it reports what is really being served
+     rather than what somebody remembered to bump. */
+  if(vl && window.caches && caches.keys){
+    caches.keys().then(function(keys){
+      var k = keys.filter(function(x){ return x.indexOf('ds-inspect-') === 0; })[0];
+      if(k) vl.textContent += ' · build ' + k.replace('ds-inspect-', '');
+    }).catch(function(){});
+  }
   /* An unmistakable marker. A test build that looks identical to the live one is
      how somebody does a real inspection in it and files the result nowhere they
      expect. */
