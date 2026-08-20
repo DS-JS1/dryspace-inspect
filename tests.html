@@ -1294,6 +1294,22 @@ function run(W){
        'it is refreshed after cur is set');
   });
 
+  /* v1.4.0 patch - "what can I pick up" and "where is that job up to" are
+     different questions, and only the first had an answer. */
+  test('the library can be browsed, not only the batons waiting in it', function(){
+    ok(typeof W.browseAllInspections === 'function', 'browseAllInspections() defined');
+    ok(typeof W.takeOverChosen === 'function',
+       'and taking one over is shared with the take-over list, not written twice');
+    ok(!!D.querySelector('[onclick="browseAllInspections()"]'),
+       'the home screen offers it');
+    /* Take-over must keep listing only what is available: an inspection on
+       somebody's device is not waiting, and offering it invites two people to
+       pick up the same job. */
+    var src = W.document.documentElement.outerHTML;
+    ok(/scanInspectionFolders\('current'\)/.test(src),
+       'take-over still lists only inspections with a file waiting in current/');
+  });
+
   test('the per-file status panel exists and starts empty', function(){
     var box = D.getElementById('sy-detail');
     ok(!!box, 'sy-detail panel present in the sync bar');

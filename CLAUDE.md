@@ -49,6 +49,10 @@ button placement, filing-critical gate and documentation set (D34–D35).
 record. Numbered 1.4.0 rather than 2.0.0 deliberately; the reasoning is in the
 decision log.
 
+**The next session is the polish pass** — appearance, usability, and the
+guides. Follow `docs/HANDOFF-v1.4-polish.md`, which carries where things
+stand, what D43–D54 cost to learn, and the gaps left deliberately.
+
 **Two things are still owed before it can ship**, and neither is a code change:
 
 - **A replacement training deck.** `Training/Setup_and_Use_Presentation.pptx` and

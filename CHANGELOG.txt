@@ -620,7 +620,13 @@ into "Waiting", which proved the uploading state had never been written.
   listed is a baton that cannot be picked up. Every page is read now.
 - The take-over list shows each inspection's STAGE, and the filter covers
   it, so "the ones waiting on technical" is one word rather than a scroll.
-- 509 assertions. CACHE_VERSION -> ds-inspect-v1.4.0-19.
+- "Browse all inspections": every folder in the library with its state said
+  plainly, not only the ones with a baton waiting. Take-over still lists only
+  what is available - an inspection on somebody's device is not waiting for
+  anyone, and offering it would invite two people to pick up the same job -
+  but "where is that job up to" now has an answer too. Held ones open in
+  SharePoint, where the photos and the folder are.
+- 513 assertions. CACHE_VERSION -> ds-inspect-v1.4.0-20.
 
 The architectural change: the record now travels the same road as the photos,
 and in-progress work is backed up without anyone having to remember to do it.
