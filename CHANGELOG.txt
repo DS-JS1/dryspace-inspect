@@ -570,7 +570,15 @@ into "Waiting", which proved the uploading state had never been written.
 - The offline-fallback import wrote its photos into IndexedDB as Blobs,
   which would have reintroduced D49 by the back door. Found while building
   the above; it now goes through the bytes store like everything else.
-- 471 assertions. CACHE_VERSION -> ds-inspect-v1.4.0-14.
+- A handed-over inspection SAYS SO (D52). Nothing on screen distinguished a
+  record this device had sent from one it still holds: same card, same DRAFT
+  badge, and somebody could work for an hour on a copy that no longer
+  counted, only to be told at the next handover that it would create a
+  second version. The card now reads HANDED OVER with the date, says the
+  live record is in SharePoint, sorts below the live ones, and opening it
+  asks first - pointing at Take over, which is the action that actually
+  brings back whatever happened since.
+- 474 assertions. CACHE_VERSION -> ds-inspect-v1.4.0-15.
 
 The architectural change: the record now travels the same road as the photos,
 and in-progress work is backed up without anyone having to remember to do it.
