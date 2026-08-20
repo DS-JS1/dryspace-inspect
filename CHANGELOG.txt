@@ -547,7 +547,19 @@ into "Waiting", which proved the uploading state had never been written.
   nothing. It now reads "Site inspection report - INS-2026-0142 - Smith - 12
   Marine Pde, Kirra", in the order a person searches, with blank fields left
   out rather than showing as gaps. Sharing photos says which kind it is.
-- 453 assertions. CACHE_VERSION -> ds-inspect-v1.4.0-12.
+- "Take over an inspection from SharePoint" could not see an inspection handed
+  over before its number was allocated. The scan only looked at folders whose
+  name starts with INS-, and one with no number files as "Client - Address".
+  The baton could be put down somewhere nobody could pick it up from, which
+  is worse than not being able to put it down. Same fault in "Recover work in
+  progress", which shares the scan.
+- Offering to hand over no longer PINS the folder name (D50). resolveFolder()
+  pins as a side effect of being asked, so the question "filling these in now
+  would still change how it files" was false by the time it was read, and
+  cancelling to add the inspection number changed nothing. Pinning now
+  happens at the moment of upload.
+- The offline draft share carries the readable subject line too.
+- 459 assertions. CACHE_VERSION -> ds-inspect-v1.4.0-13.
 
 The architectural change: the record now travels the same road as the photos,
 and in-progress work is backed up without anyone having to remember to do it.
