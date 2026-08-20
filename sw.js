@@ -1,6 +1,6 @@
 /* Dryspace Site Inspections — service worker (offline caching)
    Bump CACHE_VERSION whenever any app file changes, so devices pick up the update. */
-var CACHE_VERSION = 'ds-inspect-v1.4.0-11';
+var CACHE_VERSION = 'ds-inspect-v1.4.0-12';
 var APP_FILES = [
   './',
   './index.html',

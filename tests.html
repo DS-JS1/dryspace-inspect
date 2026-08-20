@@ -1001,6 +1001,40 @@ function run(W){
         });
     })());
 
+  /* v1.4.0 patch - the share sheet's title becomes the mail subject, and it was
+     the generated filename. An inbox full of DS_Report_2026-08-21_1043.html
+     tells the office nothing. */
+  test('the emailed report carries a subject a person can read', function(){
+    ok(typeof W.reportSubject === 'function', 'reportSubject() defined');
+    if(typeof W.reportSubject !== 'function') return;
+    var realCur = W.cur;
+
+    W.cur = {inspNo: 'INS-2026-0142', client: 'Smith', address: '12 Marine Pde, Kirra'};
+    var full = W.reportSubject();
+    ok(/INS-2026-0142/.test(full), 'it carries the inspection number');
+    ok(/Smith/.test(full), 'and the client');
+    ok(/12 Marine Pde/.test(full), 'and the address');
+    ok(/^Site inspection report/.test(full), 'and says what it is first: ' + full);
+
+    /* Blank fields are left out rather than showing as gaps. An inspection
+       number that has not been allocated must not appear as an empty slot. */
+    W.cur = {inspNo: '', client: 'Smith', address: ''};
+    var part = W.reportSubject();
+    ok(!/undefined|null/.test(part), 'no placeholders leak in: ' + part);
+    ok(/Smith/.test(part), 'what is known is still there');
+    ok(part.split('—').length === 2, 'and only one separator is used: ' + part);
+
+    W.cur = {inspNo: '', client: '', address: ''};
+    eq(W.reportSubject(), 'Site inspection report',
+       'with nothing known it still says what it is');
+
+    W.cur = {inspNo: 'INS-1', client: 'Smith', address: 'X'};
+    ok(/photos and video/.test(W.reportSubject('photos and video')),
+       'the media share says which kind it is');
+
+    W.cur = realCur;
+  });
+
   test('the per-file status panel exists and starts empty', function(){
     var box = D.getElementById('sy-detail');
     ok(!!box, 'sy-detail panel present in the sync bar');

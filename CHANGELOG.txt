@@ -541,7 +541,13 @@ into "Waiting", which proved the uploading state had never been written.
   and no longer drags every photo's bytes along with it.
 - renderSyncBar() no longer reads account details off nothing if the user
   signs out between the storage read starting and finishing.
-- 443 assertions. CACHE_VERSION -> ds-inspect-v1.4.0-11.
+- The emailed report carries a readable SUBJECT LINE. The share sheet's title
+  becomes the subject when somebody picks Mail, and it was the generated
+  filename - an inbox full of DS_Report_2026-08-21_1043.html tells the office
+  nothing. It now reads "Site inspection report - INS-2026-0142 - Smith - 12
+  Marine Pde, Kirra", in the order a person searches, with blank fields left
+  out rather than showing as gaps. Sharing photos says which kind it is.
+- 453 assertions. CACHE_VERSION -> ds-inspect-v1.4.0-12.
 
 The architectural change: the record now travels the same road as the photos,
 and in-progress work is backed up without anyone having to remember to do it.
