@@ -578,7 +578,19 @@ into "Waiting", which proved the uploading state had never been written.
   live record is in SharePoint, sorts below the live ones, and opening it
   asks first - pointing at Take over, which is the action that actually
   brings back whatever happened since.
-- 474 assertions. CACHE_VERSION -> ds-inspect-v1.4.0-15.
+- Choosing an inspection to take over, or a backup to recover, is now a list
+  you can filter and tap. A numbered prompt() was fine for two and unusable
+  for fifty, and the library only grows. Closes on Escape, on the backdrop
+  and on Cancel.
+- "Upload" now sits on the inspection form, where the photos are attached,
+  and appears only when something is waiting. Uploading was possible only
+  from the home screen, so attaching photos and handing over took three
+  navigations - and the step people would skip is the upload.
+- Uploading photos to a record already handed over warns first (D53). They
+  land in the right folder and NOTHING references them: the draft in current/
+  was written at handover. Not blocked, because adding a missed photo is
+  legitimate, but said at the time, naming the fix - hand over again.
+- 489 assertions. CACHE_VERSION -> ds-inspect-v1.4.0-16.
 
 The architectural change: the record now travels the same road as the photos,
 and in-progress work is backed up without anyone having to remember to do it.
