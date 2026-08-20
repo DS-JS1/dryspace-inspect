@@ -261,6 +261,7 @@ input[type=text]:focus,input[type=date]:focus,select:focus,textarea:focus{outlin
     <div id="insp-list"></div>
     <div class="home-foot">
       <button class="btn btn-primary" onclick="importFromSharePoint()">Take over an inspection from SharePoint</button>
+      <button class="btn" onclick="browseAllInspections()">Browse all inspections</button>
       <label class="btn" style="cursor:pointer">Import from a file (offline fallback)
         <input type="file" accept=".json,.html,application/json,text/html" style="display:none" onchange="importFile(this)">
       </label>
@@ -3569,6 +3570,74 @@ function pickFromList(opts){
   });
 }
 
+/* Every inspection in the library, not only the ones with a baton waiting.
+
+   Take-over lists what is AVAILABLE, and that is right: an inspection sitting on
+   somebody's device is not waiting for anyone, and offering it would invite two
+   people to pick up the same job. But "what is available to me" and "where is
+   that job up to" are different questions, and only the first had an answer.
+
+   So: everything, with its state said plainly. Waiting ones can be taken over.
+   Held ones open in SharePoint, where the photos and the folder are. */
+function browseAllInspections(){
+  if(!dsTransport || !dsAuth || !dsAuth.isSignedIn()){
+    alert('Sign in to Microsoft first — the button is on the home screen.');
+    return;
+  }
+  setSync('Reading the library…', 'busy');
+  dsTransport.list('')
+    .then(function(top){
+      var folders = top.filter(function(f){
+        return f.isFolder && f.name.charAt(0) !== '_';
+      });
+      if(!folders.length) throw new Error('No inspection folders in the library yet.');
+      /* One listing per folder. Sequential on purpose: a phone on site does not
+         thank you for fifty simultaneous requests. */
+      var out = [];
+      return folders.reduce(function(chain, f){
+        return chain.then(function(){
+          return dsTransport.list(f.name + '/current').then(function(files){
+            var waiting = files.filter(function(x){ return !x.isFolder; })[0] || null;
+            out.push({folder: f, file: waiting});
+          }, function(){ out.push({folder: f, file: null}); });
+        });
+      }, Promise.resolve()).then(function(){ return out; });
+    })
+    .then(function(all){
+      setSync('');
+      var waiting = all.filter(function(x){ return x.file; }).length;
+      return pickFromList({
+        title: 'All inspections',
+        note: all.length + ' in the library · ' + waiting + ' waiting to be picked up. ' +
+              'Tap one that is waiting to bring it onto this device; tap any other ' +
+              'to open its folder in SharePoint.',
+        items: all.map(function(x){
+          var st = x.file
+            ? (x.file.name.match(/_S0\d-[A-Z]+_/) || [''])[0].replace(/_/g, '')
+            : '';
+          return {
+            title: x.folder.name,
+            sub: x.file ? x.file.name : 'held on a device — no file waiting in current/',
+            meta: [x.file ? 'WAITING' : 'in progress', st,
+                   x.file && x.file.modifiedAt
+                     ? 'handed over ' + fmtAUStamp(Date.parse(x.file.modifiedAt)) : '']
+                   .filter(Boolean).join('  ·  '),
+            value: x
+          };
+        })
+      });
+    })
+    .then(function(chosen){
+      if(!chosen) return;
+      if(chosen.file) return takeOverChosen(chosen.folder.name, chosen.file);
+      if(chosen.folder.webUrl){ window.open(chosen.folder.webUrl, '_blank', 'noopener'); return; }
+      alert('That inspection is held on a device and has no link to open.');
+    })
+    .catch(function(e){
+      setSync('Could not read the library: ' + ((e && e.message) || e), 'bad');
+    });
+}
+
 function importFromSharePoint(){
   if(!dsTransport || !dsAuth || !dsAuth.isSignedIn()){
     alert('Sign in to Microsoft first \u2014 the button is on the home screen.');
@@ -3605,6 +3674,19 @@ function importFromSharePoint(){
     })
     .then(function(chosen){
       if(!chosen) return;
+      return takeOverChosen(chosen.folder, chosen.file);
+    })
+    .catch(function(e){
+      setSync('Could not import: ' + ((e && e.message) || e), 'bad');
+    });
+}
+
+/* Bringing one inspection down. Shared by the take-over list and by browsing
+   the library, because they differ only in what is OFFERED, not in what happens
+   once something is chosen. */
+function takeOverChosen(folderName, file){
+  return Promise.resolve().then(function(){
+      var chosen = {folder: folderName, file: file};
       setSync('Downloading ' + chosen.file.name + '\u2026', 'busy');
       return dsTransport.download(chosen.file.itemId).then(function(blob){
         return blob.text ? blob.text() : new Response(blob).text();
