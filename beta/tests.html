@@ -2495,12 +2495,37 @@ function sharePointChecks(){
                                  message: "Resource not found for the segment 'root:'"}});
       }]
     ]);
+    /* v1.4.0 patch - Graph returns ONE page and a link to the next. Reading only
+       the first page is a silent truncation: nothing errors, the library simply
+       appears to stop, and which inspections vanish depends on how many exist. */
+    var pages = 0;
+    var mPaged = make([
+      [/\/root\/children/, 'GET', function(){
+        pages++;
+        if(pages === 1){
+          return res(200, {value: [{id:'A', name:'INS-1 - A', folder:{}}],
+                           '@odata.nextLink': 'https://graph.example/page2'});
+        }
+        return res(200, {value: [{id:'B', name:'INS-2 - B', folder:{}}]});
+      }],
+      [/page2/, 'GET', function(){
+        return res(200, {value: [{id:'B', name:'INS-2 - B', folder:{}}]});
+      }]
+    ]);
+    return mPaged.t.list('').then(function(items){
+      eq(items.length, 2,
+         'every page is read, not just the first',
+         'only ' + items.length + ' item(s) came back - the rest of the library is invisible');
+      ok(mPaged.f.calls.some(function(c){ return /page2/.test(c.url); }),
+         'the nextLink is followed');
+    }).then(function(){
     return mRoot.t.list('').then(function(items){
       eq(items.length, 1, 'the library root lists, so inspections can be scanned for');
       ok(items[0].isFolder === true, 'and its folders come back');
       ok(mRoot.f.calls.some(function(c){ return /\/root\/children/.test(c.url); }),
          'the root is listed with /root/children, not the root:/path: form',
          'called: ' + mRoot.f.calls.map(function(c){ return c.url; }).join(' | '));
+    });
     }).then(function(){
     return m10.t.list('INS-2026-0142 - Smith/current').then(function(items){
       eq(items.length, 2, 'the folder listing comes back');
