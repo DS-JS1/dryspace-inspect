@@ -511,7 +511,22 @@ into "Waiting", which proved the uploading state had never been written.
   rendering of the truth, and two rounds were lost treating it as the truth.
   It flags more than one record in 'uploading' as impossible, because the
   queue holds exactly one file in flight.
-- 430 assertions. CACHE_VERSION -> ds-inspect-v1.4.0-9.
+- THE STALL, found (D48). Three photos, each attempted once, each left in
+  'uploading', none carrying a recorded outcome, and the drain reporting
+  itself done with all three sitting there. pending() ignored 'uploading'
+  entirely, so a record left there was invisible until the next page load -
+  the same silent hole as B5, one level up. A record in 'uploading' that is
+  not the file in flight is stranded by definition, since the queue holds
+  exactly one, and is now picked up without waiting for a restart.
+- An attempt's outcome is no longer discarded when the write recording it
+  fails. Both reasons are kept: why it failed, and why that could not be
+  written down. Ironically this hole only opened when the onabort fix turned
+  a hanging storage write into a rejecting one.
+- diagnostics.html section 6 now snapshots the media store BEFORE the app
+  boots in its hidden frame. Start-up recovery moves anything in 'uploading'
+  back to the queue, so the state the page exists to capture was already gone
+  by the time anybody tapped the button. It ate its own evidence on first use.
+- 432 assertions. CACHE_VERSION -> ds-inspect-v1.4.0-10.
 
 The architectural change: the record now travels the same road as the photos,
 and in-progress work is backed up without anyone having to remember to do it.

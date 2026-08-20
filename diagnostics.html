@@ -123,6 +123,10 @@ input[type=file]{font:inherit;font-size:13px;margin:6px 0}
     database directly and reports what is really there — one row per photo, with
     the state the upload queue sees. If the screen and this disagree, the screen is
     wrong. Nothing here changes anything.
+    <br><br>Two readings are shown. Loading this page boots the app in a hidden
+    frame, and the app's start-up recovery moves anything left in
+    <code>uploading</code> back to the queue — so the state worth seeing is gone
+    by the time you tap. The first reading is taken before that happens.
   </p>
   <button id="btn-state">Read the stored state</button>
   <div id="state"></div>
@@ -470,10 +474,72 @@ function runUpload(){
    the truth. It is a rendering of the truth, and a rendering can be stale, can
    fail to repaint, and can carry a step marker left over from an attempt that
    has since moved on. This reads IndexedDB directly. Read-only, deliberately. */
+var STATE_SNAPSHOT = null;
+
+/* Read the media store and hand back plain rows. No writes, ever. */
+function collectStoredState(cb){
+  var open = indexedDB.open('ds-inspections');
+  open.onerror = function(){ cb(null, String(open.error || 'unknown')); };
+  open.onsuccess = function(){
+    var db = open.result;
+    if(!db.objectStoreNames.contains('media')) return cb([], null);
+    var rq = db.transaction('media').objectStore('media').getAll();
+    rq.onerror = function(){ cb(null, String(rq.error || 'unknown')); };
+    rq.onsuccess = function(){ cb(rq.result || [], null); };
+  };
+}
+
+function snapshotStoredState(next){
+  var moved = false;
+  function go(){ if(!moved){ moved = true; next(); } }
+  /* Never let a storage problem stop the rest of the page loading. */
+  var bail = setTimeout(go, 3000);
+  try {
+    collectStoredState(function(rows, err){
+      clearTimeout(bail);
+      STATE_SNAPSHOT = err ? null : rows.map(function(r){
+        var orig = r.original || r.blob;
+        return {name: r.name || r.mid, up: (r && r.up) || 'local',
+                upTries: r.upTries || 0, upReadFails: r.upReadFails || 0,
+                upRetryable: r.upRetryable, upErr: r.upErr,
+                bytes: orig && orig.size !== undefined ? orig.size : null,
+                origSize: r.origSize, uploaded: !!(r.remote && r.remote.itemId)};
+      });
+      go();
+    });
+  } catch(e){ clearTimeout(bail); go(); }
+}
+
+function stateRows(host, rows, label){
+  line(host, label, String(rows.length));
+  var counts = {};
+  rows.forEach(function(r){ counts[r.up] = (counts[r.up] || 0) + 1; });
+  Object.keys(counts).forEach(function(k){
+    var bad = (k === 'uploading' && counts[k] > 1);
+    line(host, 'state: ' + k,
+         String(counts[k]) + (bad ? '   IMPOSSIBLE \u2014 the queue holds one file in flight' : ''),
+         bad ? 'bad' : 'ok');
+  });
+  rows.forEach(function(r){
+    line(host, r.name,
+         'state=' + r.up + '  tries=' + r.upTries + '  readFails=' + r.upReadFails +
+         '  retryable=' + (r.upRetryable === false ? 'no' : 'yes') +
+         '  bytes=' + (r.bytes === null ? 'MISSING' : r.bytes) +
+         '  origSize=' + (r.origSize === undefined ? '?' : r.origSize) +
+         (r.uploaded ? '  uploaded' : '') +
+         (r.upErr ? '  err=' + r.upErr : ''));
+  });
+}
+
 function readStoredState(){
   clear('state');
   el('btn-state').disabled = true;
   function done(){ el('btn-state').disabled = false; }
+  if(STATE_SNAPSHOT){
+    stateRows('state', STATE_SNAPSHOT,
+              'AS FOUND when this page opened, before the app booted');
+    line('state', '', '');
+  }
   var open = indexedDB.open('ds-inspections');
   open.onerror = function(){
     line('state', 'Could not open the database', String(open.error || 'unknown'), 'bad');
@@ -492,7 +558,7 @@ function readStoredState(){
     };
     rq.onsuccess = function(){
       var all = rq.result || [];
-      line('state', 'Photos and files on this device', String(all.length));
+      line('state', 'NOW (the app has booted, so recovery has already run)', String(all.length));
       var counts = {};
       all.forEach(function(r){
         var st = (r && r.up) || 'local';
@@ -614,7 +680,13 @@ function copyAll(){
     fail('Could not load index.html.\n\nIt should sit in the same folder as this ' +
          'page. This page is at: ' + location.origin + location.pathname);
   };
-  f.src = 'index.html?nosw=1&diag=' + Date.now();
+  /* Snapshot the media store BEFORE the app boots. Loading it in this frame
+     runs its start-up recovery, which moves anything left in 'uploading' back
+     to 'queued' — so the very state this page exists to capture is gone by
+     the time anybody taps the button. It happened on the first real use. */
+  snapshotStoredState(function(){
+    f.src = 'index.html?nosw=1&diag=' + Date.now();
+  });
 
   el('btn-blobs').onclick = checkBlobs;
   el('btn-token').onclick = timeToken;
