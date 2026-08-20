@@ -79,6 +79,13 @@ input[type=text],input[type=date],select,textarea{font-size:16px !important;padd
 .pick-row-t{font-size:14px;font-weight:600;color:#0b2a4a;line-height:1.3}
 .pick-row-s{font-size:11px;color:#6b7280;word-break:break-all;line-height:1.35;margin-top:2px}
 .pick-row-m{font-size:11px;color:#4b5563;margin-top:3px}
+.pick-row-w{font-size:11px;margin-top:4px;font-weight:600}
+.bs{font-size:9px;font-weight:700;letter-spacing:.05em;padding:2px 6px;border-radius:4px;margin-left:6px;vertical-align:middle}
+.bs-waiting{background:#15803d;color:#fff}
+.bs-held{background:#b45309;color:#fff}
+.pick-row-w.bs-waiting{background:none;color:#15803d}
+.pick-row-w.bs-held{background:none;color:#b45309}
+
 .pick-none{font-size:13px;color:#6b7280;padding:14px;text-align:center}
 .pick-foot{padding:8px 14px 12px;border-top:1px solid #e5e7eb;text-align:right}
 
@@ -3208,7 +3215,10 @@ function handoverToSharePoint(){
          which is precisely when the stage and the editor are new. Failure is
          swallowed for the same reason as D24 — the columns are a convenience and
          the handover is the job. */
-      return dsTransport.setFields(folder, spFields(job))
+      return dsTransport.setFields(folder, spFields(job, {
+               status: BATON_WAITING,
+               holder: userName() || job.editedBy || ''
+             }))
         .catch(function(){ return null; })
         .then(function(){ return r; });
     })
@@ -3544,6 +3554,12 @@ function pickFromList(opts){
         row.className = 'pick-row';
         var t = document.createElement('div'); t.className = 'pick-row-t';
         t.textContent = it.title || '';
+        if(it.badge){
+          var bd = document.createElement('span');
+          bd.className = 'bs ' + it.badge.cls;
+          bd.textContent = it.badge.label;
+          t.appendChild(bd);
+        }
         row.appendChild(t);
         if(it.sub){
           var sb = document.createElement('div'); sb.className = 'pick-row-s';
@@ -3552,6 +3568,14 @@ function pickFromList(opts){
         if(it.meta){
           var m = document.createElement('div'); m.className = 'pick-row-m';
           m.textContent = it.meta; row.appendChild(m);
+        }
+        /* Who has it, said plainly. This is the question people were answering
+           by ringing each other. */
+        if(it.badge && it.badge.who){
+          var w = document.createElement('div');
+          w.className = 'pick-row-w ' + it.badge.cls;
+          w.textContent = it.badge.who;
+          row.appendChild(w);
         }
         row.onclick = function(){ close(it.value); };
         listEl.appendChild(row);
@@ -3579,6 +3603,19 @@ function pickFromList(opts){
 
    So: everything, with its state said plainly. Waiting ones can be taken over.
    Held ones open in SharePoint, where the photos and the folder are. */
+/* One vocabulary for baton state, used by the browse list, the take-over list
+   and the SharePoint columns, so the colour somebody learns in one place means
+   the same in the others. */
+function batonState(entry){
+  var f = (entry.folder && entry.folder.fields) || {};
+  if(entry.file){
+    return {key: 'waiting', label: 'WAITING', cls: 'bs-waiting',
+            who: f.BatonHolder ? 'last held by ' + f.BatonHolder : ''};
+  }
+  return {key: 'held', label: 'IN PROGRESS', cls: 'bs-held',
+          who: f.BatonHolder ? 'held by ' + f.BatonHolder : 'held on a device'};
+}
+
 function browseAllInspections(){
   if(!dsTransport || !dsAuth || !dsAuth.isSignedIn()){
     alert('Sign in to Microsoft first — the button is on the home screen.');
@@ -3614,11 +3651,13 @@ function browseAllInspections(){
         items: all.map(function(x){
           var st = x.file
             ? (x.file.name.match(/_S0\d-[A-Z]+_/) || [''])[0].replace(/_/g, '')
-            : '';
+            : ((x.folder.fields && x.folder.fields.Stage) || '');
+          var b = batonState(x);
           return {
             title: x.folder.name,
-            sub: x.file ? x.file.name : 'held on a device — no file waiting in current/',
-            meta: [x.file ? 'WAITING' : 'in progress', st,
+            sub: x.file ? x.file.name : 'no file waiting in current/',
+            badge: b,
+            meta: [st,
                    x.file && x.file.modifiedAt
                      ? 'handed over ' + fmtAUStamp(Date.parse(x.file.modifiedAt)) : '']
                    .filter(Boolean).join('  ·  '),
@@ -3659,6 +3698,7 @@ function importFromSharePoint(){
           return {
             title: x.folder,
             sub: x.file.name,
+            badge: {key: 'waiting', label: 'WAITING', cls: 'bs-waiting', who: ''},
             meta: [st,
                    x.file.modifiedAt
                      ? 'handed over ' + fmtAUStamp(Date.parse(x.file.modifiedAt)) : '',
@@ -3709,6 +3749,13 @@ function takeOverChosen(folderName, file){
             importDraftMedia(payload, function(n){
               renderHome();
               setSync('Imported from SharePoint.', 'ok');
+              /* The folder list is how everyone else finds out. Marking it here
+                 is what turns "somebody has it" from a phone call into a column.
+                 Failure is swallowed: the columns are a convenience and the
+                 takeover is the job. */
+              dsTransport.setFields(chosen.folder, spFields(rec, {
+                status: BATON_HELD, holder: userName() || rec.editedBy || ''
+              })).catch(function(){});
               showDialog({
                 title: 'You now hold the baton',
                 note: 'Photos already uploaded for this job stay in SharePoint. ' +
@@ -4020,7 +4067,19 @@ function metaFor(rec){
    is the index — no generated document to maintain and nothing that can drift.
    Blank values are omitted rather than sent as empty strings, so a field nobody
    has filled in yet cannot overwrite something typed into SharePoint by hand. */
-function spFields(job){
+/* The library columns ARE the index (D23), and until now they said what an
+   inspection is and said nothing about who has it. Two people can look at the
+   same folder list and neither can tell whether a job is waiting to be picked
+   up or sitting on somebody's phone - which is the question the baton exists to
+   answer, and the one people were resolving by ringing each other.
+
+   Two columns carry it: a status anyone can sort and colour on, and a name.
+   Written at both ends of the handover, because that is exactly when it
+   changes. */
+var BATON_WAITING = 'Waiting';
+var BATON_HELD    = 'In progress';
+
+function spFields(job, baton){
   var f = {
     InspectionNo:   job.inspNo || '',
     Client:         job.client || '',
@@ -4029,7 +4088,15 @@ function spFields(job){
     InspectionDate: job.inspDate || '',
     LastEditor:     job.editedBy || ''
   };
-  Object.keys(f).forEach(function(k){ if(!String(f[k]).trim()) delete f[k]; });
+  if(baton){
+    f.BatonStatus = baton.status;
+    /* Kept even when the baton is waiting: "last held by" is what somebody
+       needs in order to ask a question about it. */
+    f.BatonHolder = baton.holder || '';
+  }
+  Object.keys(f).forEach(function(k){
+    if(k !== 'BatonHolder' && !String(f[k]).trim()) delete f[k];
+  });
   return f;
 }
 

@@ -626,7 +626,16 @@ into "Waiting", which proved the uploading state had never been written.
   anyone, and offering it would invite two people to pick up the same job -
   but "where is that job up to" now has an answer too. Held ones open in
   SharePoint, where the photos and the folder are.
-- 513 assertions. CACHE_VERSION -> ds-inspect-v1.4.0-20.
+- WHO HOLDS THE BATON is now written to the library columns and shown in the
+  app (D55). BatonStatus is Waiting or In progress; BatonHolder is the name.
+  Written at BOTH ends of the handover, because that is when it changes. The
+  columns are the index (D23) and said nothing about who has the record -
+  the one question the baton exists to answer, and the one people were
+  resolving by ringing each other.
+- One vocabulary for baton state across the browse list, the take-over list
+  and SharePoint, so a colour learnt in one place means the same everywhere:
+  green WAITING, amber IN PROGRESS, with "held by <name>" beneath.
+- 527 assertions. CACHE_VERSION -> ds-inspect-v1.4.0-21.
 
 The architectural change: the record now travels the same road as the photos,
 and in-progress work is backed up without anyone having to remember to do it.
