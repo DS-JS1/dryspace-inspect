@@ -1108,6 +1108,40 @@ function run(W){
     eq(W.unfinishedUploads([ref]).length, 0, 'and does not count it as outstanding');
   });
 
+  /* v1.4.0 patch - handing a record on is the moment this copy stops being the
+     live one, and nothing said so. The baton pointer cannot answer it: it is set
+     both when taking a record over and when handing it on, because it means
+     "what this device last agreed with in current/". */
+  later('a handed-over record is marked, and sinks below the live ones',
+    (function(){
+      var box = D.getElementById('insp-list');
+      var realAll = W.dbAll;
+      W.dbAll = function(store){
+        if(store !== 'inspections') return Promise.resolve([]);
+        return Promise.resolve([
+          {id:'gone', client:'Sent Away', address:'1 A St', updatedAt: 2000,
+           status:'draft', stage:'office', handedOverAt: 1755000000000},
+          {id:'live', client:'Still Here', address:'2 B St', updatedAt: 1000,
+           status:'draft', stage:'office'}
+        ]);
+      };
+      return Promise.resolve(W.renderHome()).then(function(){
+        return new Promise(function(r){ setTimeout(r, 120); });
+      }).then(function(){
+        var html = box ? box.innerHTML : '';
+        W.dbAll = realAll;
+        ok(/HANDED OVER/.test(html),
+           'the badge says so rather than reading DRAFT like any other',
+           'card said: ' + html.slice(0, 260));
+        ok(/the live record is in SharePoint/.test(html),
+           'and the card explains what that means');
+        var gonePos = html.indexOf('Sent Away'), livePos = html.indexOf('Still Here');
+        ok(livePos > -1 && gonePos > -1 && livePos < gonePos,
+           'the live record is listed first despite being older',
+           'positions: live=' + livePos + ' gone=' + gonePos);
+      });
+    })());
+
   test('the per-file status panel exists and starts empty', function(){
     var box = D.getElementById('sy-detail');
     ok(!!box, 'sy-detail panel present in the sync bar');

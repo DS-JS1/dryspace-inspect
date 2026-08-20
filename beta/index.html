@@ -58,6 +58,9 @@ input[type=text],input[type=date],select,textarea{font-size:16px !important;padd
 .ic-meta{font-size:12px;color:var(--color-text-tertiary);margin-top:4px}
 .ic-actions{display:flex;gap:8px;flex-wrap:wrap}
 .ft-badge{font-size:10px;font-weight:700;letter-spacing:0.05em;padding:2px 8px;border-radius:4px}
+.bg-gone{background:#6b7280;color:#fff}
+.ic-gone{font-size:12px;color:#b45309;margin:2px 0 0}
+
 .bg-draft{background:#fdf1dc;color:#8a5a00}
 .bg-done{background:#e0f2e4;color:#1e6b34}
 .empty-note{text-align:center;color:var(--color-text-secondary);font-size:14px;line-height:1.7;background:var(--color-background-primary);border:1px dashed var(--color-border-secondary);border-radius:var(--border-radius-lg);padding:34px 20px}
@@ -2544,6 +2547,14 @@ function renderHome(){
       box.innerHTML = '<div class="empty-note">No inspections yet.<br>Tap <strong>+ New inspection</strong> to start. Everything you enter is saved on this device automatically — no signal needed.</div>';
       return;
     }
+    /* Handed-over copies sink below the live ones. They are still reachable,
+       because a snapshot of what was sent is worth having, but they are not
+       what anybody is looking for when they open the app. */
+    list = list.slice().sort(function(a, b){
+      var ga = a.handedOverAt ? 1 : 0, gb = b.handedOverAt ? 1 : 0;
+      if(ga !== gb) return ga - gb;
+      return (b.updatedAt || 0) - (a.updatedAt || 0);
+    });
     list.forEach(function(r){
       var card = document.createElement('div'); card.className = 'insp-card';
       var title = r.client || r.address || 'Untitled inspection';
@@ -2551,6 +2562,7 @@ function renderHome(){
                  r.inspDate ? 'Inspected ' + fmtAUDate(r.inspDate) : '',
                  r.inspNo || ''].filter(Boolean).join(' · ');
       var stg = stageDef(r.stage || 'office').short;
+      var gone = !!r.handedOverAt;
       /* "no files" was doing two jobs: "this inspection never had photos" and
          "they are all uploaded and the originals reclaimed". Those are very
          different things to read on an old record you think had photos, and the
@@ -2575,8 +2587,13 @@ function renderHome(){
           (stuck ? ' \u00b7 ' + stuck + (stuck > 1 ? ' need' : ' needs') + ' attention' : '');
       card.innerHTML =
         '<div class="ic-main">' +
-          '<div class="ic-title">' + esc(title) + ' <span class="ft-badge ' + (r.status==='complete'?'bg-done':'bg-draft') + '">' + (r.status==='complete'?'COMPLETE':'DRAFT') + '</span></div>' +
+          '<div class="ic-title">' + esc(title) +
+            ' <span class="ft-badge ' +
+              (gone ? 'bg-gone' : (r.status==='complete'?'bg-done':'bg-draft')) + '">' +
+              (gone ? 'HANDED OVER' : (r.status==='complete'?'COMPLETE':'DRAFT')) + '</span></div>' +
           '<div class="ic-sub">' + esc(sub || '—') + '</div>' +
+          (gone ? '<div class="ic-gone">Handed over ' + fmtAUStamp(r.handedOverAt) +
+                  ' — the live record is in SharePoint, not this copy</div>' : '') +
           '<div class="ic-meta">' + esc(stg) + ' · Updated ' + fmtAUStamp(r.updatedAt) +
             (r.editedBy ? ' by ' + esc(r.editedBy) : '') + ' · ' + media + '</div>' +
         '</div>' +
@@ -2585,7 +2602,19 @@ function renderHome(){
           '<button class="btn" data-act="share">Send</button>' +
           '<button class="btn btn-danger" data-act="del">Delete</button>' +
         '</div>';
-      card.querySelector('[data-act=open]').onclick = function(){ openInspection(r.id); };
+      card.querySelector('[data-act=open]').onclick = function(){
+        /* Asked HERE, not at the next handover. Being told at the end that the
+           work just done would create a second version is a warning that
+           arrives after the cost has been paid. */
+        if(gone && !confirm(
+            'This inspection was handed over ' + fmtAUStamp(r.handedOverAt) + '.' + '\n\n' +
+            'The live record is the file in SharePoint. This copy is a snapshot of' + '\n' +
+            'what you sent, and editing it changes nothing there.' + '\n\n' +
+            'If the job has come back to you, use "Take over an inspection from' + '\n' +
+            'SharePoint" instead — that brings down whatever has happened since.' + '\n\n' +
+            'OK = open this copy anyway\nCancel = go back')) return;
+        openInspection(r.id);
+      };
       card.querySelector('[data-act=share]').onclick = function(){
         openInspectionSilent(r.id).then(shareReport);
       };
@@ -3056,6 +3085,14 @@ function handoverToSharePoint(){
          handed over — a false alarm every time, on top of a real problem. */
       job.baton = {itemId: r.put.itemId, eTag: r.put.eTag, name: name,
                    at: Date.now(), by: userName() || cur.editedBy || ''};
+      /* The baton pointer alone cannot answer "do I still hold this?" - it is
+         set both when taking a record over and when handing it on, because it
+         means "what this device last agreed with in current/". Handing over is
+         the moment this copy stops being the live record, and nothing said so:
+         the screen looked identical afterwards, and somebody could work for an
+         hour on a copy that no longer counted. */
+      job.handedOverAt = Date.now();
+      job.handedOverTo = 'SharePoint';
       logAudit('Handed over through SharePoint as ' + name);
       return dbPut('inspections', job).then(function(){ return r; });
     })
@@ -3334,6 +3371,9 @@ function importFromSharePoint(){
            untouched folder from one somebody else has moved on. */
         rec.baton = {itemId: chosen.file.itemId, eTag: chosen.file.eTag,
                      name: chosen.file.name, at: Date.now(), by: userName() || ''};
+        /* Picking it back up makes this device the holder again. */
+        rec.handedOverAt = null;
+        rec.handedOverTo = null;
         return new Promise(function(res){
           importRecord(rec, function(){
             importDraftMedia(payload, function(n){
