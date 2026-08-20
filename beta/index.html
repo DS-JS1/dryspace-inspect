@@ -58,6 +58,24 @@ input[type=text],input[type=date],select,textarea{font-size:16px !important;padd
 .ic-meta{font-size:12px;color:var(--color-text-tertiary);margin-top:4px}
 .ic-actions{display:flex;gap:8px;flex-wrap:wrap}
 .ft-badge{font-size:10px;font-weight:700;letter-spacing:0.05em;padding:2px 8px;border-radius:4px}
+.btn-up{background:#b45309;color:#fff;border-color:#b45309}
+
+.pick-back{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;z-index:9999}
+.pick-box{background:#fff;width:100%;max-width:620px;max-height:86vh;display:flex;flex-direction:column;border-radius:12px 12px 0 0;overflow:hidden}
+@media(min-width:768px){.pick-back{align-items:center}.pick-box{border-radius:12px}}
+.pick-head{padding:12px 14px 8px;border-bottom:1px solid #e5e7eb}
+.pick-title{font-weight:700;font-size:16px;color:#0b2a4a}
+.pick-note{font-size:12px;color:#4b5563;margin-top:3px;line-height:1.4}
+.pick-filter{margin:10px 14px 0;padding:9px 10px;font-size:14px;border:1px solid #cbd5e1;border-radius:8px;-webkit-appearance:none}
+.pick-list{overflow:auto;-webkit-overflow-scrolling:touch;padding:8px 8px 4px;flex:1}
+.pick-row{display:block;width:100%;text-align:left;background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;padding:9px 11px;margin:0 0 6px;font:inherit;cursor:pointer}
+.pick-row:active{background:#eef2f7}
+.pick-row-t{font-size:14px;font-weight:600;color:#0b2a4a;line-height:1.3}
+.pick-row-s{font-size:11px;color:#6b7280;word-break:break-all;line-height:1.35;margin-top:2px}
+.pick-row-m{font-size:11px;color:#4b5563;margin-top:3px}
+.pick-none{font-size:13px;color:#6b7280;padding:14px;text-align:center}
+.pick-foot{padding:8px 14px 12px;border-top:1px solid #e5e7eb;text-align:right}
+
 .bg-gone{background:#6b7280;color:#fff}
 .ic-gone{font-size:12px;color:#b45309;margin:2px 0 0}
 
@@ -267,6 +285,7 @@ input[type=text]:focus,input[type=date]:focus,select:focus,textarea:focus{outlin
       <span class="ft-badge bg-draft" id="ft-badge">DRAFT</span>
       <button class="btn btn-gaps" id="btn-gaps" onclick="toggleGaps()" title="Highlight fields with no content">Highlight gaps</button>
       <button class="btn" id="btn-status" onclick="toggleComplete()">Mark complete</button>
+      <button class="btn btn-up" id="btn-form-upload" style="display:none" onclick="uploadNow()"></button>
       <button class="btn btn-primary" onclick="shareReport()">Send</button>
       <img class="ft-logo" id="ft-logo" src="" alt="Dryspace Solutions">
     </div>
@@ -2360,6 +2379,7 @@ function addMedia(input, containerId){
   chain.then(function(){
     renderMedia(mfid, containerId);
     refreshMediaState().then(refreshCompletion);
+    refreshFormUpload();
     renderSyncBar();   /* without this the bar keeps saying "No photos yet" and
                           the Upload button never appears */
     setSaveStatus('Saved ' + new Date().toLocaleTimeString());
@@ -2497,6 +2517,7 @@ function newInspection(){
   });
 }
 function openInspection(id){
+  setTimeout(refreshFormUpload, 0);
   dbGet('inspections', id).then(function(rec){
     if(!rec){ alert('Inspection not found.'); return; }
     var wasOld = (!rec.schema || rec.schema < 2);
@@ -3281,20 +3302,26 @@ function recoverWorkInProgress(){
   scanInspectionFolders('wip')
     .then(function(found){
       if(!found.length) throw new Error('No work-in-progress backups found.');
-      var list = found.map(function(x, i){
-        return (i + 1) + '. ' + x.folder + '\n     ' + x.file.name +
-               (x.file.modifiedAt ? '\n     backed up ' + fmtAUStamp(Date.parse(x.file.modifiedAt)) : '');
-      }).join('\n');
-      var pick = prompt(
-        'WORKING COPIES \u2014 these are automatic backups, NOT the handover baton.\n\n' +
-        'Use these only if the device that wrote one has been lost or damaged. If the ' +
-        'inspection is simply being handed to you, cancel and use "Take over an ' +
-        'inspection from SharePoint" instead.\n\n' + list +
-        '\n\nType the number to recover:', '');
-      if(pick === null || pick === ''){ setSync('Cancelled.', ''); return null; }
-      var n = parseInt(pick, 10);
-      if(!(n >= 1 && n <= found.length)) throw new Error('That was not one of the numbers offered.');
-      return found[n - 1];
+      setSync('');
+      return pickFromList({
+        title: 'Recover work in progress',
+        note: 'These are automatic backups, NOT the handover baton. Use one only if ' +
+              'the device that wrote it has been lost or damaged. If the inspection ' +
+              'is simply being handed to you, cancel and use "Take over an ' +
+              'inspection from SharePoint" instead.',
+        items: found.map(function(x){
+          return {
+            title: x.folder,
+            sub: x.file.name,
+            meta: x.file.modifiedAt
+                    ? 'backed up ' + fmtAUStamp(Date.parse(x.file.modifiedAt)) : '',
+            value: x
+          };
+        })
+      }).then(function(chosen){
+        if(!chosen) setSync('Cancelled.', '');
+        return chosen;
+      });
     })
     .then(function(chosen){
       if(!chosen) return;
@@ -3336,6 +3363,93 @@ function recoverWorkInProgress(){
 
 /* B8 — picking the baton up. Lists every inspection folder that has a file in
    current/, so the receiving device never needs the file sent to it at all. */
+/* A numbered prompt() was fine for two inspections and unusable for fifty: the
+   whole list has to be read to find one, the text is whatever iOS decides, and
+   the answer is typed rather than chosen. The library only grows.
+
+   A list you can filter and tap. Deliberately plain — no framework, no
+   animation, and it closes on Escape, on the backdrop, and on Cancel, because a
+   dialog somebody cannot get out of on a phone in a basement is its own fault.
+
+   Returns a promise of the chosen item, or null. */
+function pickFromList(opts){
+  return new Promise(function(resolve){
+    var items = opts.items || [];
+    var back = document.createElement('div');
+    back.className = 'pick-back';
+    back.innerHTML =
+      '<div class="pick-box" role="dialog" aria-modal="true">' +
+        '<div class="pick-head">' +
+          '<div class="pick-title"></div>' +
+          '<div class="pick-note"></div>' +
+        '</div>' +
+        '<input class="pick-filter" type="search" autocomplete="off" ' +
+               'placeholder="Filter by client, address or number">' +
+        '<div class="pick-list"></div>' +
+        '<div class="pick-foot"><button type="button" class="btn pick-cancel">Cancel</button></div>' +
+      '</div>';
+    back.querySelector('.pick-title').textContent = opts.title || 'Choose one';
+    back.querySelector('.pick-note').textContent = opts.note || '';
+
+    var listEl = back.querySelector('.pick-list');
+    var filterEl = back.querySelector('.pick-filter');
+
+    function close(val){
+      document.removeEventListener('keydown', onKey);
+      if(back.parentNode) back.parentNode.removeChild(back);
+      resolve(val);
+    }
+    function onKey(e){ if(e.key === 'Escape') close(null); }
+
+    function draw(){
+      var q = filterEl.value.trim().toLowerCase();
+      var shown = items.filter(function(it){
+        if(!q) return true;
+        return ((it.title || '') + ' ' + (it.sub || '') + ' ' + (it.meta || ''))
+                 .toLowerCase().indexOf(q) > -1;
+      });
+      listEl.innerHTML = '';
+      if(!shown.length){
+        var none = document.createElement('div');
+        none.className = 'pick-none';
+        none.textContent = items.length
+          ? 'Nothing matches "' + filterEl.value.trim() + '".'
+          : 'Nothing to choose from.';
+        listEl.appendChild(none);
+        return;
+      }
+      shown.forEach(function(it){
+        var row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'pick-row';
+        var t = document.createElement('div'); t.className = 'pick-row-t';
+        t.textContent = it.title || '';
+        row.appendChild(t);
+        if(it.sub){
+          var sb = document.createElement('div'); sb.className = 'pick-row-s';
+          sb.textContent = it.sub; row.appendChild(sb);
+        }
+        if(it.meta){
+          var m = document.createElement('div'); m.className = 'pick-row-m';
+          m.textContent = it.meta; row.appendChild(m);
+        }
+        row.onclick = function(){ close(it.value); };
+        listEl.appendChild(row);
+      });
+    }
+
+    filterEl.oninput = draw;
+    back.querySelector('.pick-cancel').onclick = function(){ close(null); };
+    back.onclick = function(e){ if(e.target === back) close(null); };
+    document.addEventListener('keydown', onKey);
+    document.body.appendChild(back);
+    draw();
+    /* Not focused on a phone: it would raise the keyboard over the list before
+       anybody has seen what is in it. */
+    if(window.matchMedia && window.matchMedia('(min-width: 768px)').matches) filterEl.focus();
+  });
+}
+
 function importFromSharePoint(){
   if(!dsTransport || !dsAuth || !dsAuth.isSignedIn()){
     alert('Sign in to Microsoft first \u2014 the button is on the home screen.');
@@ -3345,15 +3459,25 @@ function importFromSharePoint(){
   scanInspectionFolders('current')
     .then(function(found){
       if(!found.length) throw new Error('No inspections are waiting in a current/ folder.');
-      var list = found.map(function(x, i){
-        return (i + 1) + '. ' + x.folder + '\n     ' + x.file.name;
-      }).join('\n');
-      var pick = prompt('Inspections waiting in SharePoint:\n\n' + list +
-                        '\n\nType the number to bring onto this device:', '1');
-      if(pick === null){ setSync('Cancelled.', ''); return null; }
-      var n = parseInt(pick, 10);
-      if(!(n >= 1 && n <= found.length)) throw new Error('That was not one of the numbers offered.');
-      return found[n - 1];
+      setSync('');
+      return pickFromList({
+        title: 'Take over an inspection',
+        note: found.length + ' waiting in SharePoint. Tap one to bring it onto this device.',
+        items: found.map(function(x){
+          return {
+            title: x.folder,
+            sub: x.file.name,
+            meta: (x.file.modifiedAt
+                     ? 'handed over ' + fmtAUStamp(Date.parse(x.file.modifiedAt))
+                     : '') +
+                  (x.file.size ? '  ·  ' + fmtKB(x.file.size) : ''),
+            value: x
+          };
+        })
+      }).then(function(chosen){
+        if(!chosen) setSync('Cancelled.', '');
+        return chosen;
+      });
     })
     .then(function(chosen){
       if(!chosen) return;
@@ -3715,6 +3839,7 @@ function initSync(){
       /* The detail list is live even mid-drain — that is the whole point of it.
          Only the headline message is left alone while syncBusy. */
       refreshSyncDetail();
+      refreshFormUpload();
       if(!syncBusy) renderSyncBar();
     },
     onProgress: function(rec, frac){
@@ -3861,6 +3986,22 @@ function renderSyncDetail(all){
    stopped repainting and a frozen row looked like a stalled upload. A status
    panel that cannot be trusted to update is worse than none, so a failure to
    render now says so. */
+/* Photos are attached in the form; uploading them was only possible from the
+   home screen. Going back, uploading, and opening the record again to hand it on
+   is three navigations for one thought, and the step people would skip is the
+   upload - which is the one that matters. Shown only when something is waiting,
+   so it is never a button that does nothing. */
+function refreshFormUpload(){
+  var b = document.getElementById('btn-form-upload');
+  if(!b) return Promise.resolve();
+  if(!cur || !dsAuth || !dsAuth.isSignedIn()){ b.style.display = 'none'; return Promise.resolve(); }
+  return mediaFor(cur.id).then(function(recs){
+    var waiting = pendingUploads(recs).length;
+    b.style.display = waiting ? '' : 'none';
+    b.textContent = waiting === 1 ? 'Upload 1 photo' : 'Upload ' + waiting + ' photos';
+  }).catch(function(){});
+}
+
 function refreshSyncDetail(){
   return dbAll('media').then(renderSyncDetail).catch(function(e){
     var box = document.getElementById('sy-detail');
@@ -4017,8 +4158,29 @@ function confirmFilingBeforeFirstUpload(){
     .catch(function(){ return true; });   /* never block an upload on the nudge */
 }
 
+/* Photos uploaded against a record this device has already handed over land in
+   the right folder in SharePoint, and nothing references them: the draft sitting
+   in current/ was written at handover and lists the photos as they were then.
+   Whoever takes the inspection over next does not see them.
+
+   Not blocked — adding a photo somebody missed is a legitimate thing to do, and
+   the file itself is safely stored either way. But it has to be said at the
+   time, and it has to name the action that fixes it, which is handing over again
+   so the record catches up with the folder. */
+function warnIfHandedOver(){
+  if(!cur || !cur.handedOverAt) return true;
+  return confirm(
+    'This inspection was handed over ' + fmtAUStamp(cur.handedOverAt) + '.' + '\n\n' +
+    'The photos will upload to the right folder, but the record waiting in' + '\n' +
+    'SharePoint was written when you handed over and will not know about' + '\n' +
+    'them. Whoever picks the inspection up will not see them attached.' + '\n\n' +
+    'To fix that, hand the inspection over again once they have uploaded.' + '\n\n' +
+    'OK = upload anyway\nCancel = stop');
+}
+
 function uploadNow(){
   if(!dsQueue || syncBusy) return;
+  if(!warnIfHandedOver()) return;
   if(navigator.onLine === false){
     setSync('No connection \u2014 photos stay on this device until you have signal.', 'bad');
     return;

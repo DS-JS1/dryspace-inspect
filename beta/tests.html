@@ -1142,6 +1142,71 @@ function run(W){
       });
     })());
 
+  /* v1.4.0 patch - a numbered prompt() was fine for two inspections and unusable
+     for fifty. The library only grows. */
+  later('the picker lists, filters and returns what was tapped',
+    (function(){
+      var pick = W.pickFromList({
+        title: 'Take over an inspection',
+        items: [
+          {title: 'INS-2026-0142 - Smith - 12 Marine Pde', sub: 'a.json', meta: 'x', value: 'A'},
+          {title: 'INS-2026-0999 - Jones - 4 Hill St',     sub: 'b.json', meta: 'y', value: 'B'}
+        ]
+      });
+      var box = D.querySelector('.pick-back');
+      ok(!!box, 'the picker opens');
+      if(!box){ return pick.then(function(){}); }
+      eq(box.querySelectorAll('.pick-row').length, 2, 'both are listed');
+
+      var f = box.querySelector('.pick-filter');
+      f.value = 'jones'; f.oninput();
+      eq(box.querySelectorAll('.pick-row').length, 1,
+         'filtering narrows it, and is not case sensitive');
+
+      f.value = 'nothing like this'; f.oninput();
+      eq(box.querySelectorAll('.pick-row').length, 0, 'a filter matching nothing shows no rows');
+      ok(!!box.querySelector('.pick-none'), 'and says so rather than looking broken');
+
+      f.value = 'hill'; f.oninput();
+      box.querySelector('.pick-row').click();
+      return pick.then(function(v){
+        eq(v, 'B', 'the tapped item comes back, not the one at that position before filtering');
+        ok(!D.querySelector('.pick-back'), 'and the picker closes');
+      });
+    })());
+
+  later('cancelling the picker resolves to nothing',
+    (function(){
+      var pick = W.pickFromList({title: 'x', items: [{title: 'a', value: 1}]});
+      D.querySelector('.pick-cancel').click();
+      return pick.then(function(v){
+        eq(v, null, 'Cancel means null, not a guess');
+        ok(!D.querySelector('.pick-back'), 'and it closes');
+      });
+    })());
+
+  /* v1.4.0 patch - photos uploaded against a record already handed over land in
+     the right folder and are referenced by nothing. */
+  test('uploading to a handed-over record warns first', function(){
+    ok(typeof W.warnIfHandedOver === 'function', 'warnIfHandedOver() defined');
+    if(typeof W.warnIfHandedOver !== 'function') return;
+    var realCur = W.cur, realConfirm = W.confirm, asked = null;
+    W.confirm = function(m){ asked = m; return false; };
+
+    W.cur = {id:'x'};
+    ok(W.warnIfHandedOver() === true, 'a record this device still holds is not questioned');
+    ok(asked === null, 'and nothing is put in front of the person');
+
+    W.cur = {id:'x', handedOverAt: 1755000000000};
+    ok(W.warnIfHandedOver() === false, 'a handed-over one asks, and Cancel stops it');
+    ok(/will not know about/.test(asked || ''),
+       'the warning says the record in SharePoint will not know about them');
+    ok(/hand the inspection over again/.test(asked || ''),
+       'and names the action that fixes it');
+
+    W.confirm = realConfirm; W.cur = realCur;
+  });
+
   test('the per-file status panel exists and starts empty', function(){
     var box = D.getElementById('sy-detail');
     ok(!!box, 'sy-detail panel present in the sync bar');
