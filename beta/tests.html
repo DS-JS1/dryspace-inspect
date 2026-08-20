@@ -1246,6 +1246,54 @@ function run(W){
            'sending is separable from choosing, so the choice can be offered first');
       }));
 
+  /* v1.4.0 patch - the same box for choosing and for saying. confirm() was fine
+     while every message was one line; the handover ones grew to a dozen. */
+  later('a dialog can lay out facts and offer named choices',
+    (function(){
+      var d = W.showDialog({
+        title: 'Someone else has handed this over',
+        note: 'Continuing archives their file.',
+        lines: [{k: 'In current/', v: 'DS_Draft_b.json'},
+                {k: 'Changed', v: 'yesterday'}],
+        choices: [{title: 'Stop', value: 'stop'},
+                  {title: 'Continue anyway', value: 'go'}],
+        cancel: null
+      });
+      var box = D.querySelector('.pick-back');
+      ok(!!box, 'the dialog opens');
+      if(!box) return d.then(function(){});
+      eq(box.querySelectorAll('.pick-line').length, 2,
+         'the facts are laid out, not run together in a sentence');
+      ok(/DS_Draft_b\.json/.test(box.innerHTML), 'and carry the values');
+      eq(box.querySelectorAll('.pick-row').length, 2, 'both choices are offered');
+      ok(box.querySelector('.pick-filter').style.display === 'none',
+         'no filter box over two choices');
+      ok(box.querySelector('.pick-cancel').style.display === 'none',
+         'and no Cancel when both outcomes are already named',
+         'a third way out would be ambiguous');
+      Array.prototype.slice.call(box.querySelectorAll('.pick-row'))
+        .filter(function(r){ return /Continue/.test(r.textContent); })[0].click();
+      return d.then(function(v){
+        eq(v, 'go', 'the chosen value comes back');
+        ok(!D.querySelector('.pick-back'), 'and it closes');
+      });
+    })());
+
+  /* v1.4.0 patch - the form's Upload button was refreshed before the record had
+     loaded, so it asked about the wrong inspection and vanished. */
+  test('the form upload control is refreshed after the record loads', function(){
+    ok(typeof W.refreshFormUpload === 'function', 'refreshFormUpload() defined');
+    var src = W.document.documentElement.outerHTML;
+    var fn = src.match(/function openInspection\(id\)[\s\S]{0,400}/);
+    ok(!!fn, 'openInspection found');
+    if(!fn) return;
+    ok(fn[0].indexOf('setTimeout(refreshFormUpload') === -1,
+       'it is not refreshed on a timer before cur is set',
+       'the button is still refreshed before the record has loaded');
+    ok(/cur = ensureSchema\(rec\)[\s\S]*refreshFormUpload\(\)/.test(src),
+       'it is refreshed after cur is set');
+  });
+
   test('the per-file status panel exists and starts empty', function(){
     var box = D.getElementById('sy-detail');
     ok(!!box, 'sy-detail panel present in the sync bar');
