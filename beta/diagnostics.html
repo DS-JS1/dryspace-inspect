@@ -117,6 +117,16 @@ input[type=file]{font:inherit;font-size:13px;margin:6px 0}
     Tidy the folder up yourself afterwards.
   </p>
 
+  <h2>6 &middot; What the app has actually stored</h2>
+  <p class="note">
+    The panel on the home screen draws what it thinks is happening. This reads the
+    database directly and reports what is really there — one row per photo, with
+    the state the upload queue sees. If the screen and this disagree, the screen is
+    wrong. Nothing here changes anything.
+  </p>
+  <button id="btn-state">Read the stored state</button>
+  <div id="state"></div>
+
   <h2>Request trace</h2>
   <p class="note">Every Graph request this page made, in order, with timings.</p>
   <button id="btn-copy">Copy everything</button>
@@ -455,6 +465,64 @@ function runUpload(){
   });
 }
 
+/* ---------- 6 · what is actually in the database ----------
+   Two rounds were lost reading the home screen's status panel as though it were
+   the truth. It is a rendering of the truth, and a rendering can be stale, can
+   fail to repaint, and can carry a step marker left over from an attempt that
+   has since moved on. This reads IndexedDB directly. Read-only, deliberately. */
+function readStoredState(){
+  clear('state');
+  el('btn-state').disabled = true;
+  function done(){ el('btn-state').disabled = false; }
+  var open = indexedDB.open('ds-inspections');
+  open.onerror = function(){
+    line('state', 'Could not open the database', String(open.error || 'unknown'), 'bad');
+    done();
+  };
+  open.onsuccess = function(){
+    var db = open.result;
+    if(!db.objectStoreNames.contains('media')){
+      line('state', 'No media store', 'nothing has been stored yet', 'warn');
+      return done();
+    }
+    var rq = db.transaction('media').objectStore('media').getAll();
+    rq.onerror = function(){
+      line('state', 'Could not read media', String(rq.error || 'unknown'), 'bad');
+      done();
+    };
+    rq.onsuccess = function(){
+      var all = rq.result || [];
+      line('state', 'Photos and files on this device', String(all.length));
+      var counts = {};
+      all.forEach(function(r){
+        var st = (r && r.up) || 'local';
+        counts[st] = (counts[st] || 0) + 1;
+      });
+      Object.keys(counts).forEach(function(k){
+        /* More than one record in 'uploading' is impossible if the queue is
+           behaving: it holds exactly one file in flight at a time. */
+        var bad = (k === 'uploading' && counts[k] > 1);
+        line('state', 'state: ' + k,
+             String(counts[k]) + (bad ? '   IMPOSSIBLE — the queue holds one file in flight' : ''),
+             bad ? 'bad' : 'ok');
+      });
+      all.forEach(function(r){
+        var orig = r.original || r.blob;
+        line('state', (r.name || r.mid),
+             'state=' + ((r && r.up) || 'local') +
+             '  tries=' + (r.upTries || 0) +
+             '  readFails=' + (r.upReadFails || 0) +
+             '  retryable=' + (r.upRetryable === false ? 'no' : 'yes') +
+             '  bytes=' + (orig && orig.size !== undefined ? orig.size : 'MISSING') +
+             '  origSize=' + (r.origSize === undefined ? '?' : r.origSize) +
+             (r.remote && r.remote.itemId ? '  uploaded' : '') +
+             (r.upErr ? '  err=' + r.upErr : ''));
+      });
+      done();
+    };
+  };
+}
+
 /* ---------- copy everything ---------- */
 function copyAll(){
   var text = ['Dryspace upload diagnostics', new Date().toISOString(),
@@ -553,6 +621,7 @@ function copyAll(){
   el('btn-refresh').onclick = forceRefresh;
   el('btn-drive').onclick = checkDrive;
   el('btn-upload').onclick = runUpload;
+  el('btn-state').onclick = readStoredState;
   el('btn-copy').onclick = copyAll;
 })();
 </script>
