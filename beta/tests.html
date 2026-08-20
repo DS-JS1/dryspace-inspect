@@ -946,6 +946,61 @@ function run(W){
     W.FILING_NUDGED = {};
   });
 
+  /* v1.4.0 patch - photo bytes live in their own store, as ArrayBuffers.
+
+     A Blob in IndexedDB is a reference to a separate file WebKit can lose: the
+     record survives, reports the right size, and reading its contents throws
+     "The object can not be found here". That happened on a device AFTER the app
+     started building the Blobs itself, which is what proved that owning the
+     bytes was never the point - being a Blob in IndexedDB was. */
+  test('the byte store and its accessors exist', function(){
+    ok(W.DB_VERSION >= 2, 'the database is at version ' + W.DB_VERSION + ', which has the bytes store');
+    ok(typeof W.bytesFor === 'function', 'bytesFor() defined');
+    ok(typeof W.putBytes === 'function', 'putBytes() defined');
+    ok(typeof W.toBuffer === 'function', 'toBuffer() defined');
+    ok(typeof W.migrateMediaBytes === 'function',
+       'migrateMediaBytes() defined - existing photos must not be left behind');
+  });
+
+  later('a record is stored with no Blob on it at all',
+    (function(){
+      /* The whole point: nothing byte-bearing on the record itself. */
+      return W.toBuffer(new Blob(['0123456789'], {type: 'image/jpeg'})).then(function(buf){
+        ok(buf && buf.byteLength === 10, 'toBuffer returns the bytes');
+        ok(!(buf instanceof Blob), 'as an ArrayBuffer, not a Blob');
+      });
+    })());
+
+  later('bytes come back as a Blob rebuilt on demand',
+    (function(){
+      var mid = '__test-bytes__';
+      return W.toBuffer(new Blob(['0123456789'], {type: 'image/jpeg'}))
+        .then(function(buf){ return W.putBytes(mid, buf, buf); })
+        .then(function(){
+          return W.bytesFor({mid: mid, type: 'image/jpeg'}, 'original');
+        })
+        .then(function(blob){
+          /* W.Blob, not Blob: the app runs in an iframe, so its Blob
+             constructor is a different realm's and instanceof across the two
+             is always false. */
+          ok(blob instanceof W.Blob, 'a Blob is rebuilt from the stored bytes',
+             'got ' + Object.prototype.toString.call(blob));
+          eq(blob.size, 10, 'with the right length');
+          eq(blob.type, 'image/jpeg', 'and the right type');
+          return W.dbDel('bytes', mid);
+        });
+    })());
+
+  later('a record that still carries its own blob keeps working',
+    (function(){
+      /* An upload racing the migration must not fail because of it. */
+      var b = new Blob(['abc'], {type: 'image/jpeg'});
+      return W.bytesFor({mid: '__legacy__', type: 'image/jpeg', original: b}, 'original')
+        .then(function(out){
+          ok(out === b, 'the blob on the record is used directly, no store lookup');
+        });
+    })());
+
   test('the per-file status panel exists and starts empty', function(){
     var box = D.getElementById('sy-detail');
     ok(!!box, 'sy-detail panel present in the sync bar');
