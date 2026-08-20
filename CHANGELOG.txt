@@ -526,7 +526,22 @@ into "Waiting", which proved the uploading state had never been written.
   boots in its hidden frame. Start-up recovery moves anything in 'uploading'
   back to the queue, so the state the page exists to capture was already gone
   by the time anybody tapped the button. It ate its own evidence on first use.
-- 432 assertions. CACHE_VERSION -> ds-inspect-v1.4.0-10.
+- PHOTO BYTES MOVE OUT OF BLOBS AND INTO THEIR OWN STORE (D49). A Blob in
+  IndexedDB is not held inside the record: WebKit writes it to a separate
+  file and keeps a reference, and that file is what goes missing. The record
+  survives, reports the right size, and reading it throws "The object can not
+  be found here". It kept happening AFTER the app started building the Blobs
+  itself, which proved owning the bytes was never the point - being a Blob in
+  IndexedDB was. Bytes are now ArrayBuffers, serialised inside their record,
+  in a separate 'bytes' store keyed by mid. A Blob is rebuilt only when one
+  is needed and never stored. Database version 1 -> 2, with a migration.
+  Photos whose bytes are already gone are marked as needing retaking, once,
+  rather than failing mysteriously at every upload for ever.
+- Rendering got cheaper as a side effect: dbAll('media') runs on every render
+  and no longer drags every photo's bytes along with it.
+- renderSyncBar() no longer reads account details off nothing if the user
+  signs out between the storage read starting and finishing.
+- 443 assertions. CACHE_VERSION -> ds-inspect-v1.4.0-11.
 
 The architectural change: the record now travels the same road as the photos,
 and in-progress work is backed up without anyone having to remember to do it.

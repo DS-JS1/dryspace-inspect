@@ -428,7 +428,11 @@ DSSharePoint.createTransport = function(opts){
     setFields: setFolderFields,
 
     upload: function(rec, meta, onProgress){
-      var blob = (global.DSMedia && global.DSMedia.originalOf(rec)) || rec.original || rec.blob;
+      /* meta.blob is how the queue hands over bytes that live in their own
+         store rather than on the record. The fallbacks keep a record that
+         still carries its own blob working. */
+      var blob = (meta && meta.blob) ||
+                 (global.DSMedia && global.DSMedia.originalOf(rec)) || rec.original || rec.blob;
       if(!blob) return Promise.reject(new Error('no original to upload'));
       var folder = folderOf(rec, meta);
       var name = nameOf(rec, meta);

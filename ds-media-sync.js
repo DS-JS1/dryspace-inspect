@@ -468,6 +468,13 @@ DSMedia.createQueue = function(opts){
      is what made a stall unreadable; this is the same argument as B6, one level
      finer. */
   var onStep = opts.onStep || function(){};
+  /* Where the bytes come from. Photo bytes live in their own store now rather
+     than on the record, so fetching them is asynchronous. The default keeps
+     working for a record that still carries its own blob, which is what every
+     test and every pre-migration record does. */
+  var bytesOf = opts.bytesOf || function(rec){
+    return Promise.resolve(DSMedia.originalOf(rec));
+  };
   var stallMs = opts.stallMs === undefined ? DSMedia.STALL_MS : opts.stallMs;
   var now = opts.now || function(){ return Date.now(); };
   var timer = opts.timer || {set: function(f, ms){ return setInterval(f, ms); },
@@ -529,6 +536,7 @@ DSMedia.createQueue = function(opts){
     inFlight = rec;
     onChange(rec);
 
+    var body = null;                 /* the bytes, held only for this attempt */
     var mark = {step: 'recording the attempt', at: now()};
     function step(name){ mark.step = name; mark.at = now(); onStep(rec, name); }
     var guard = watchStall(mark);
@@ -540,12 +548,20 @@ DSMedia.createQueue = function(opts){
            and still readable. A dead blob otherwise reaches fetch() as a request
            body and stalls where nothing is watching. */
         step('checking the file is readable');
-        return preflight(DSMedia.originalOf(rec), rec.origSize);
+        return bytesOf(rec).then(function(blob){
+          body = blob;
+          return preflight(blob, rec.origSize);
+        });
       })
       .then(function(){
         step('sending');
         onProgress(rec, 0);
-        return transport.upload(rec, meta(rec), function(frac){
+        var m = meta(rec);
+        /* Handed over rather than left on the record: the record is written to
+           storage, and putting megabytes of image on it would store the very
+           thing this change moved out. */
+        m.blob = body;
+        return transport.upload(rec, m, function(frac){
           /* Progress is what "no progress" means, so the marker moves here. */
           mark.at = now();
           onProgress(rec, frac);

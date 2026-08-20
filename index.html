@@ -1501,10 +1501,29 @@ var MFID_EL = {};     // stable media id -> file input element
 var LEGACY_MFID = {}; // pre-v1.3 DOM id -> stable media id (migration only)
 
 /* ---------- IndexedDB ---------- */
+/* v1.4.0 patch — photo bytes live in their own store, as ArrayBuffers.
+
+   A Blob in IndexedDB is not stored inside the record. WebKit writes it to a
+   separate file and keeps a reference, and that file is what goes missing: the
+   record survives intact, reports the right size, and reading its contents
+   throws "The object can not be found here". It cost a real photo, and it kept
+   happening after the app started building the Blobs itself — because who made
+   the Blob was never the point. Being a Blob in IndexedDB was.
+
+   An ArrayBuffer is serialised INSIDE the record. There is no second file and
+   nothing for the browser to lose track of. A Blob is rebuilt from it at the
+   moment it is needed and never stored.
+
+   They live in their own store rather than on the media record because dbAll
+   ('media') runs on every render, and deserialising every photo's bytes to draw
+   a status panel would be its own kind of absurd. Metadata is small and read
+   constantly; bytes are large and read twice - once to upload, once to share. */
+var DB_VERSION = 2;
+
 function openDB(){
   return new Promise(function(res, rej){
     if(_db) return res(_db);
-    var rq = indexedDB.open(DB_NAME, 1);
+    var rq = indexedDB.open(DB_NAME, DB_VERSION);
     rq.onupgradeneeded = function(e){
       var db = e.target.result;
       if(!db.objectStoreNames.contains('inspections')) db.createObjectStore('inspections', {keyPath:'id'});
@@ -1512,9 +1531,50 @@ function openDB(){
         var m = db.createObjectStore('media', {keyPath:'mid'});
         m.createIndex('iid','iid',{unique:false});
       }
+      /* The bytes themselves. Keyed by the same permanent mid, so a record and
+         its bytes cannot drift apart. */
+      if(!db.objectStoreNames.contains('bytes')) db.createObjectStore('bytes', {keyPath:'mid'});
     };
     rq.onsuccess = function(){ _db = rq.result; res(_db); };
     rq.onerror = function(){ rej(rq.error); };
+    rq.onblocked = function(){
+      /* Another tab holding version 1 open stops the upgrade dead, and silence
+         here looks exactly like a hang. */
+      rej(new Error('storage upgrade is blocked — close any other tab running this app, then reload'));
+    };
+  });
+}
+
+/* ---------- photo bytes ---------- */
+
+function toBuffer(blob){
+  if(!blob) return Promise.resolve(null);
+  if(blob instanceof ArrayBuffer) return Promise.resolve(blob);
+  if(typeof blob.arrayBuffer === 'function') return blob.arrayBuffer();
+  return new Promise(function(res, rej){
+    var fr = new FileReader();
+    fr.onload = function(){ res(fr.result); };
+    fr.onerror = function(){ rej(fr.error || new Error('could not read the file')); };
+    fr.readAsArrayBuffer(blob);
+  });
+}
+
+function putBytes(mid, originalBuf, reportBuf){
+  return dbPut('bytes', {mid: mid, original: originalBuf || null, report: reportBuf || null});
+}
+
+/* Rebuilt on demand, never stored. A Blob made here lives only as long as the
+   upload or the share that needs it. */
+function bytesFor(rec, which){
+  if(!rec) return Promise.resolve(null);
+  /* Records written before this change still carry their Blobs. They are
+     migrated at start-up, but an upload racing the migration must still work. */
+  var legacy = which === 'report' ? rec.blob : (rec.original || rec.blob);
+  if(legacy) return Promise.resolve(legacy);
+  return dbGet('bytes', rec.mid).then(function(b){
+    var buf = b && (which === 'report' ? (b.report || b.original) : (b.original || b.report));
+    if(!buf) return null;
+    return new Blob([buf], {type: rec.type || 'application/octet-stream'});
   });
 }
 /* v1.4.0 patch — a storage call must always end, one way or another.
@@ -2237,15 +2297,28 @@ function addMedia(input, containerId){
          copy bound for SharePoint. Non-images keep one copy; duplicating a
          video to no purpose would just consume the iPad's storage. */
       return DSMedia.makeRenditions(f, compressImage).then(function(r){
-        var rec = {mid: uuid(), iid: cur.id, field: mfid, name: f.name,
+        var mid = uuid();
+        var rec = {mid: mid, iid: cur.id, field: mfid, name: f.name,
                    type: r.type, size: r.reportSize, thumb: r.thumb,
-                   blob: r.report,
-                   original: r.derived ? r.original : null,
+                   /* No Blobs on the record. They go to the bytes store as
+                      ArrayBuffers, because a Blob in IndexedDB is a reference to
+                      a separate file the browser can lose. */
+                   hasOriginal: !!(r.derived ? r.original : r.report),
                    origSize: r.origSize, origHash: r.origHash,
                    up: 'local', upTries: 0, remote: null,
                    seq: seqBase + (++n),
                    added: Date.now()};
-        return dbPut('media', rec);
+        return Promise.all([
+          toBuffer(r.derived ? r.original : r.report),
+          toBuffer(r.report)
+        ]).then(function(bufs){
+          /* Bytes first. A record with no bytes behind it is the failure this
+             whole change exists to prevent, so it must never be the state left
+             behind if the second write fails. */
+          return putBytes(mid, bufs[0], bufs[1]).then(function(){
+            return dbPut('media', rec);
+          });
+        });
       });
     });
   });
@@ -2547,7 +2620,11 @@ function buildReport(){
     return mediaFor(cur.id);
   }).then(function(recs){
     var imgWork = recs.filter(function(r){ return r.type.indexOf('image/') === 0; })
-      .map(function(r){ return blobToDataURL(r.blob).then(function(u){ r._url = u; }); });
+      .map(function(r){
+        return bytesFor(r, 'report').then(function(b){
+          return b ? blobToDataURL(b).then(function(u){ r._url = u; }) : null;
+        });
+      });
     return Promise.all(imgWork).then(function(){ return recs; });
   }).then(function(recs){
     var secsJson = [], secsHtml = '';
@@ -2672,10 +2749,12 @@ function shareMedia(){
     if(!recs.length){ alert('No photos, videos or documents saved on this inspection yet.'); return; }
     /* Shares the untouched originals. Before v1.3 this shared the 1600px report
        copies while calling itself full-size media. */
-    var files = recs.map(function(r){
+    return Promise.all(recs.map(function(r){ return bytesFor(r, 'original'); }))
+      .then(function(blobs){
+    var files = recs.map(function(r, i){
       var nm = r.name;
       if(r.type === 'image/jpeg' && !/\.jpe?g$/i.test(nm)) nm = nm.replace(/\.[^.]+$/, '') + '.jpg';
-      return new File([DSMedia.originalOf(r)], nm, {type: r.type});
+      return new File([blobs[i] || new Blob([])], nm, {type: r.type});
     });
     var total = recs.reduce(function(s,r){ return s + (r.origSize || r.size); }, 0);
     if(navigator.canShare && navigator.canShare({files: files})){
@@ -2686,7 +2765,8 @@ function shareMedia(){
     } else {
       alert('This browser cannot share multiple files. Photos are embedded in the report; use a mobile device to share video files.');
     }
-  });
+      });
+  }).catch(function(e){ alert('Could not prepare the files to share: ' + e); });
 }
 /* ---------- Draft handover (office pre-fill → field team) ---------- */
 function dataURLToBlob(u){
@@ -3161,10 +3241,13 @@ function exportDraft(){
     var total = incl.reduce(function(s,r){ return s + r.size; }, 0);
     if(total > 20*1048576 && !confirm('Attached files total ' + fmtKB(total) + ' — this draft may be too large to email (Teams/OneDrive will still work). Continue?')) return;
     Promise.all(incl.map(function(r){
-      return blobToDataURL(r.blob).then(function(u){
-        return {field:r.field, name:r.name, type:r.type, thumb:r.thumb || null, dataURL:u};
+      return bytesFor(r, 'report').then(function(b){
+        return b ? blobToDataURL(b).then(function(u){
+          return {field:r.field, name:r.name, type:r.type, thumb:r.thumb || null, dataURL:u};
+        }) : null;
       });
     })).then(function(media){
+      media = media.filter(Boolean);
       var payload = {docType:'dryspace-inspection-draft', appVersion:APP_VER, formVersion:FORM_VER,
                      exportedAt:new Date().toISOString(),
                      note:'Offline fallback handover file. Normally the record moves through the inspection\u2019s current/ folder in SharePoint; this copy was exported by hand because there was no connection.',
@@ -3452,7 +3535,8 @@ function initSync(){
     onStep: function(rec, name){
       UP_STEP[rec.mid] = name;
       refreshSyncDetail();
-    }
+    },
+    bytesOf: function(rec){ return bytesFor(rec, 'original'); }
   });
   dsAuth.handleRedirect()
     .then(function(r){ if(r) setSync('Signed in as ' + ((r.account && r.account.name) || 'you') + '.'); })
@@ -3466,6 +3550,57 @@ function setSync(msg, cls){
   bar.style.display = '';
   bar.className = 'sync-bar' + (cls ? ' sy-' + cls : '');
   document.getElementById('sy-msg').textContent = msg;
+}
+
+/* v1.4.0 patch — move existing photos into the bytes store.
+
+   Records written before this change carry their Blobs directly. Each one is
+   read once, rewritten as bytes, and the Blob dropped from the record. A blob
+   that has already died cannot be rescued by moving it - nothing can - so the
+   record is marked failed with a reason a person can act on, rather than being
+   left to fail later at the point of upload with the same message and no
+   explanation of why it never recovers.
+
+   Runs before recovery and before the queue, so nothing is mid-flight. */
+function migrateMediaBytes(){
+  return dbAll('media').then(function(all){
+    var old = all.filter(function(r){ return r && (r.blob || r.original); });
+    if(!old.length) return 0;
+    var done = 0;
+    return old.reduce(function(chain, rec){
+      return chain.then(function(){
+        var orig = rec.original || rec.blob, report = rec.blob || rec.original;
+        return Promise.all([toBuffer(orig), toBuffer(report)])
+          .then(function(bufs){
+            return putBytes(rec.mid, bufs[0], bufs[1]);
+          })
+          .then(function(){
+            delete rec.blob;
+            delete rec.original;
+            rec.hasOriginal = true;
+            done++;
+            return dbPut('media', rec);
+          })
+          .catch(function(e){
+            /* The bytes are gone. Say so once, here, rather than letting it
+               surface as a mystery at every upload attempt for ever. */
+            if(DSMedia.stateOf(rec) !== 'uploaded' && DSMedia.stateOf(rec) !== 'purged'){
+              try { DSMedia.setState(rec, 'failed', {error:
+                'the stored file was lost by the browser before it could be uploaded ' +
+                '— this photo needs retaking'}); } catch(_){}
+              rec.upRetryable = false;
+            }
+            delete rec.blob;
+            delete rec.original;
+            rec.hasOriginal = false;
+            return dbPut('media', rec);
+          });
+      });
+    }, Promise.resolve()).then(function(){ return done; });
+  }).catch(function(e){
+    console.warn('Could not migrate media bytes', e);
+    return 0;
+  });
 }
 
 /* B5 recovery — run once at start-up, before the queue exists, so nothing can
@@ -3589,6 +3724,9 @@ function renderSyncBar(){
   }
   dbAll('media').then(function(all){
     renderSyncDetail(all);
+    /* Signing out between the read starting and finishing left this reading
+       account details off nothing. The read is asynchronous; sign-out is not. */
+    if(!dsAuth || !dsAuth.isSignedIn()) return renderSyncBar();
     var pend = pendingUploads(all), stuck = stuckUploads(all), busy = inFlightUploads(all);
     var acc = dsAuth.account() || {};
     var who = acc.name || acc.username || 'you';
@@ -3787,10 +3925,13 @@ function init(){
   renderHome();
   /* B5 — before the queue is built, so nothing can be draining while stranded
      records are moved back into it. */
-  recoverInterruptedUploads().then(function(n){
+  migrateMediaBytes().then(function(moved){
+    if(moved) console.info('Moved ' + moved + ' file(s) into the bytes store.');
+    return recoverInterruptedUploads();
+  }).then(function(n){
     if(n) console.info('Recovered ' + n + ' interrupted upload(s) — queued again.');
     initSync();
-    if(n) renderHome();
+    renderHome();
   });
   show('home');
   if(navigator.storage && navigator.storage.persist){
