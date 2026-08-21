@@ -75,7 +75,7 @@ Which documents describe what. Consult this when deciding what a change touches.
 | `CHANGELOG.txt` | What changed, per version | Every change |
 | `CLAUDE.md` | The non-negotiables | A rule is added or removed |
 | `docs/DECISION-LOG.md` | Why things are as they are | Any decision is taken |
-| `docs/RELEASE-PROTOCOL.md` | This process | The process changes |
+| `05_Release Protocol.md` | This process | The process changes |
 | `_Shared/Field App Architecture Template.md` | The architecture, for sibling apps | Architecture changes |
 | `01_Setup and User Guide` | What staff tap and see | Visible behaviour changes |
 | `02_Iteration Guide` | How to change the code safely | The rules for changing code change |
@@ -91,11 +91,15 @@ the same things three ways. Editing one is how they come to contradict each othe
 ## 4. Output format
 
 **PDF only.** The `.md`, `.svg` and `.html` files are the editable sources; PDFs
-are generated from them and are not committed, so there is never a stale PDF
-disagreeing with its source.
+are generated from them and **are committed alongside them**, because `tests.html`
+fetches each expected path over HTTP and fails when one is missing. Never edit a
+PDF — regenerate it, or the artefact and its source drift apart.
 
-Generate with the browser's Print → Save as PDF. **Background graphics ON**, or
-navy headers and coloured panels print as empty white boxes.
+Most of them come from `tools\make_guides.py` (§4a). Two do not, and are generated
+with the browser's Print → Save as PDF: `Training/Workflow_Chart.html` at A3
+landscape, and `Training/Setup_and_Use_Deck.html` at A4 landscape. For both,
+**Background graphics ON**, or navy headers and coloured panels print as empty
+white boxes.
 
 ---
 
@@ -106,10 +110,10 @@ in `Guides/`, generated from the markdown and **never edited directly**:
 
 | Source (root) | Generated |
 |---|---|
-| `01_Setup and User Guide.md` | `Guides/01_Setup and User Guide_v1.3.pdf` |
-| `02_Iteration Guide.md` | `Guides/02_Iteration Guide_v1.3.pdf` |
-| `03_Handover and Version Control Protocol.md` | `Guides/03_Handover and Version Control Protocol_v1.3.pdf` |
-| `05_Release Protocol.md` | `Guides/05_Release Protocol_v1.3.pdf` |
+| `01_Setup and User Guide.md` | `Guides/01_Setup and User Guide_v1.4.0.pdf` |
+| `02_Iteration Guide.md` | `Guides/02_Iteration Guide_v1.4.0.pdf` |
+| `03_Handover and Version Control Protocol.md` | `Guides/03_Handover and Version Control Protocol_v1.4.0.pdf` |
+| `05_Release Protocol.md` | `Guides/05_Release Protocol_v1.4.0.pdf` |
 
 **The PDF carries the version; the markdown does not.** That asymmetry is the whole
 point:

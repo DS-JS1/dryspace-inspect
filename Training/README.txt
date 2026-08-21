@@ -13,7 +13,7 @@ Workflow_Chart.html        The whole picture. Six stages, the handover, what
                            happens to a photo, and where the record goes next.
                            Open in a browser. Prints to A3 landscape, one
                            section per sheet, so any single part can be pinned
-                           up on its own.
+                           up on its own. 5 sheets.
 
 Quick_Card_Handover.svg    A4 portrait. Print, laminate, one per person and one
                            in each vehicle. The four handover steps and where
@@ -53,10 +53,23 @@ until the guides match.
 
 Still done by hand:
   Chart      Open Workflow_Chart.html, then Print → Save as PDF → A3 landscape,
-             background graphics ON.
+             background graphics ON. Save as Workflow_Chart_v<APP_VER>.pdf.
   Deck       Open Setup_and_Use_Deck.html, then Print → Save as PDF → A4
              landscape, background graphics ON. One slide per page, presenter
-             notes included — that export is the handout.
+             notes included — that export is the handout. Save as
+             Setup_and_Use_Deck_v<APP_VER>.pdf.
+
+             Chart is 5 sheets, deck is 17 — one slide per sheet, presenter
+             notes on every one. If you get a blank sheet, or a note alone on a
+             sheet, the print CSS did not apply: do not issue it.
+
+             Both were first exported on 21 August 2026, at v1.4.0. Neither had
+             ever been exported before, and both had print faults that only an
+             export could show — the chart's section 01 diagram is square and
+             overran its sheet, and the deck's slide 14 stranded its note. Both
+             were fixed in the print stylesheets that day; screen layout is
+             unchanged. The deck also now forces background colours in print
+             rather than relying on the export tick.
 
 Background graphics ON matters. Without it the navy headers and the coloured
 panels print as empty white boxes.

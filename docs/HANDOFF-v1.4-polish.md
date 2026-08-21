@@ -143,12 +143,83 @@ throughout.
   is `Training/Setup_and_Use_Deck.html`, HTML rather than `.pptx` on purpose —
   decision log §4a.
 
-**Still to do:** the `Guides/` PDFs and the two quick cards, plus
-`05_Release Protocol`'s printed-guides table. See
-`docs/HANDOFF-batch-D-guides-and-pdfs.md`. **Batch C is the last of the markdown
-— the sources have settled, so Batch D can regenerate.**
+- **Batch D — the printed set.** Done, 21 August 2026. All four rows of
+  `05_Release Protocol` §4a said `_v1.3.pdf`, not just the `02` row this file
+  had noted; the four `Guides/` PDFs and both A4 cards were regenerated at
+  `v1.4.0`; and the two by-hand exports were produced —
+  `Training/Workflow_Chart_v1.4.0.pdf` (A3 landscape) and
+  `Training/Setup_and_Use_Deck_v1.4.0.pdf` (A4 landscape), backgrounds on.
+  The cards came back word-for-word and position-for-position identical to the
+  committed ones, which is what Batch C predicted and what was checked.
 
-**Two assertions in the suite are flaky — read this before trusting a failure.**
+  **Two more wrong statements in `05_Release Protocol`, both found by reading
+  past the table this batch was sent to fix.** §4 said PDFs "are not committed";
+  all six are tracked, and `tests.html` fails if one is missing — the sentence,
+  acted on, breaks the gate it sits inside. §3 pointed at
+  `docs/RELEASE-PROTOCOL.md`, which does not exist. Both corrected.
+
+  **The chart and the deck had never been exported.** No chart PDF appears
+  anywhere in the history, so the "still done by hand" step had evidently never
+  been performed and neither file had ever been seen in print. Both carried print
+  faults only an export could reveal, and all three were fixed **in the print
+  stylesheet only** — no screen layout and no wording changed:
+
+  - Chart §01's diagram is square, so at the 396 mm A3 width it stood ~396 mm
+    tall against a 273 mm printable height: a blank sheet then two broken ones,
+    nine in all, against `README.txt`'s "one section per sheet". A print-only
+    `max-height` gives **5 sheets**, one section each.
+  - Deck slide 14 stranded its presenter note; the print rhythm was tightened to
+    give **17 sheets for 17 slides**, notes on every one.
+  - The deck had no `print-color-adjust:exact` — the chart has had it all along —
+    so its coloured panels depended on whoever exported it ticking "background
+    graphics", and the **warning** callouts are the ones that lose their colour.
+    Now forced in the stylesheet.
+
+**Documentation is complete.** `CLAUDE.md`'s "do not let this reach a field
+device before that document set exists" is satisfied. What stands between here
+and a release is in `docs/HANDOFF-batch-D-guides-and-pdfs.md` §8a — the git tag,
+`VER_DATE`, the push, and above all the **outstanding baton-status and forced-
+handover test against real SharePoint**, which has still never been run.
+
+> ### The orphan-bytes assertion is NOT fixed. Read this before the next batch.
+>
+> The rewrite of 21 August (`1088070`, test-only) changed *what* is asserted —
+> outcome per key rather than the count — and halved the blast radius from two
+> assertions to one. **It did not remove the race.** Measured across Batch D:
+>
+> | | |
+> |---|---|
+> | Run 1, before any edit | **FAIL** 1 of 550 — *the orphan is reclaimed* |
+> | Runs 2–4 | pass 550/0 |
+> | Runs 5–8, after the PDF work | **FAIL** 1 of 550, four consecutive |
+> | Run 7 was from a **cleared store** | still failed |
+>
+> So "re-run and it will pass" is no longer true, and a clean run is no longer
+> evidence of anything. **What is still true:** the app is not at fault.
+> `sweepOrphanBytes()` called by hand on a failing page reclaims the exact record
+> the assertion says it missed — verified again in Batch D:
+> `before ['__orphan-swept__'] → reclaimed 1 → after []`.
+>
+> **New evidence Batch D found, from the console rather than from reasoning.**
+> On failing runs the app's own start-up chain logs
+> *"Reclaimed bytes for 1 deleted file(s)"* — the boot sweep is still acting on
+> the test's key. That is the same contention Batch C identified; changing the
+> assertion never addressed it, because **both sweeps still operate on the same
+> key in the same store.** The fix is the one Batch C already wrote down: give
+> the orphan tests their own key namespace and sequence them after boot.
+>
+> **Two unrelated console faults, present on every load, neither investigated —
+> both are app-level and outside a documentation batch:**
+>
+> - `Uncaught (in promise) VersionError: The requested version (1) is less than
+>   the existing version (2)` — something opens the database at the old version.
+> - `refreshSyncDetail failed — Error: storage unavailable at dbAll` — a
+>   `withDbDeadline` trip. Note `sweepOrphanBytes()` **swallows** exactly this
+>   class of error and returns 0, which would look identical to the failure above.
+>
+> **Do not treat the suite as green.** It is 549/550 as Batch D closes.
+
+**Two assertions in the suite were flaky — read this before trusting a failure.**
 Batch C opened with *"2 of 550 assertions FAILED"*, both in
 *bytes already orphaned are swept up*. It is **not** a regression:
 `sweepOrphanBytes()` called by hand reclaims the exact record the assertion says
@@ -175,9 +246,9 @@ nothing else, it is this. A real regression will not come and go.
   correct; do not treat either as a duplicate of the other.
 - Cards also show **`· 1 uploading`**, a fourth state the earlier list omitted.
 
-**Noted, not fixed:** `05_Release Protocol` still names
-`Guides/02_Iteration Guide_v1.3.pdf` in its printed-guides table. The files are
-at v1.4.0. Left for Batch D so the fix and the regenerated files move together.
+**Fixed in Batch D:** `05_Release Protocol`'s printed-guides table. Worth keeping
+as a lesson — this note named the `02` row alone, and all four were wrong. The
+note recorded what somebody happened to notice, not what was there.
 
 `CHANGELOG.txt` and `docs/DECISION-LOG.md` **are current.** Keep them that way as
 you go rather than reconstructing them afterwards.

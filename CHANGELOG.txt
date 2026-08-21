@@ -2,6 +2,69 @@ Dryspace Site Inspection App — Changelog
 ========================================
 
 DOCUMENTATION PASS - 21 August 2026 (continued)
+- TEST STATUS AT THE CLOSE OF BATCH D: 549 of 550. The orphan-bytes assertion
+  "the orphan is reclaimed" failed on 5 of 8 runs, including four consecutively
+  and once from a cleared store, so the 21 August rewrite reduced this fault but
+  did not remove it. The app is not at fault - sweepOrphanBytes() called by hand
+  on a failing page reclaims the exact record the assertion says it missed. On
+  failing runs the app's start-up chain logs "Reclaimed bytes for 1 deleted
+  file(s)", so the boot sweep is still acting on the test's key: both sweeps
+  still operate on the same key in the same store, which is what the rewrite did
+  not change. Fix remains the one already written down - give the orphan tests
+  their own key namespace and sequence them after boot. Needs a batch permitted
+  to edit tests.html. Batch D was not, and changed no app file.
+- Batch D - the printed set. Regenerated the four Guides\ PDFs and both A4 quick
+  cards at v1.4.0 from their sources, and exported the two items make_guides.py
+  does not produce: Workflow_Chart_v1.4.0.pdf (A3 landscape) and
+  Setup_and_Use_Deck_v1.4.0.pdf (A4 landscape), both with background graphics on.
+  The chart export is the first one that carries Batch C's corrected section 02 -
+  four handover steps, not five. The deck has never been exported before at all;
+  it replaces the deleted .pptx.
+- The two quick cards regenerated to the same byte length as the committed ones,
+  and word-for-word and position-for-position identical when the PDFs are
+  compared by extracted layout. Only the embedded document ID differs. That was
+  the expected outcome and it is what was checked, rather than assumed.
+- 05_Release Protocol section 4a: all FOUR rows of the printed-guides table said
+  _v1.3.pdf. The files have been _v1.4.0.pdf since 18 August, three-part because
+  make_guides.py reads APP_VER. Left deliberately across three batches so the fix
+  and the regenerated files move in one commit.
+- 05_Release Protocol section 4 said PDFs "are not committed, so there is never a
+  stale PDF disagreeing with its source". That is false and was load-bearing in
+  the wrong direction: all six PDFs are tracked, there is no .gitignore rule for
+  them, and tests.html fetches each expected path over HTTP and fails when one is
+  missing. Acting on the sentence as written - deleting the PDFs - would fail the
+  release gate it appears in. Corrected, and the two by-hand exports are now named
+  there instead of being described only as "the browser's Print - Save as PDF".
+- 05_Release Protocol section 3 pointed at docs/RELEASE-PROTOCOL.md for "this
+  process". No such file exists; the document is 05_Release Protocol.md at the
+  root. A self-referential row that had never resolved.
+- CLAUDE.md still listed "a replacement training deck" as one of two things owed
+  before v1.4 can ship. Batch C built it and Batch D exported it. Corrected to
+  one outstanding item - Julie and Mike's Contribute - No Delete permission test.
+  CLAUDE.md is loaded at the start of every session, so a stale instruction there
+  is the most expensive kind: it was telling each new session to build from
+  scratch a deck that already exists.
+- The chart and the deck had NEVER been exported. No chart PDF appears anywhere
+  in the history, so the "still done by hand" step had evidently never been
+  performed, and neither file had ever been seen in print. Both carried print
+  faults that only an export could reveal, and both were fixed in the print
+  stylesheet only - no screen layout, and no wording, changed:
+    Chart   Training/README.txt claimed "one section per sheet, so any single
+            part can be pinned up on its own". Sections 02-05 obeyed it; section
+            01 did not. Its diagram is square (viewBox 880x880), so at the 396mm
+            A3 print width it stood about 396mm tall against a 273mm printable
+            height - break-inside:avoid pushed it to a fresh sheet and then broke
+            it anyway, giving a blank sheet followed by two. Nine sheets. A
+            print-only max-height on that one SVG restores the promise: 5 sheets,
+            one section each, all six stages intact on sheet 1.
+    Deck    Slide 14 - the densest, a table and two callouts and a note - ran a
+            few millimetres over and stranded its presenter note on a sheet of
+            its own. The print rhythm was tightened slightly; 17 sheets for 17
+            slides, presenter notes on every one.
+    Deck    It also had no print-color-adjust:exact, which the chart has had all
+            along. Its coloured panels therefore depended entirely on whoever
+            exported it ticking "background graphics" - and the warning callouts
+            are the ones that lose their colour. Now forced in the stylesheet.
 - The orphan-bytes test is no longer flaky. It asserted the COUNT that
   sweepOrphanBytes() returned, which is a property of global state: the app runs
   its own sweep at start-up and the sibling test sweeps too, so whichever got

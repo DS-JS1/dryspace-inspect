@@ -131,8 +131,24 @@
     .slide{display:block!important;break-after:page;border:none;box-shadow:none;
            max-width:none;padding:0 0 10mm;margin:0}
     .slide:last-of-type{break-after:auto}
-    .notes{display:block!important}
+    .notes{display:block!important;break-inside:avoid;margin-top:16px;padding-top:12px}
     .bar{display:none}
+
+    /* Backgrounds. The chart carries this too. Without it the navy headers and
+       every coloured callout print as empty white boxes, and the warning
+       callouts are the ones that lose their colour - so it must not depend on
+       whoever exports remembering the browser's "background graphics" tick. */
+    *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+
+    /* Slide 14 is the densest - a table, two callouts and a presenter note -
+       and it ran a few millimetres past A4 landscape, stranding its note on a
+       sheet of its own. Tightening the print rhythm keeps one slide to one
+       sheet without changing what any slide says. */
+    p{margin:7px 0}
+    table{margin:11px 0}
+    th,td{padding:6px 12px}
+    .callout{margin:11px 0;padding:11px 16px}
+    .grid,.tree,ol.steps{margin:12px 0}
   }
   @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>

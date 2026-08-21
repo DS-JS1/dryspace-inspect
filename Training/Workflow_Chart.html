@@ -106,6 +106,12 @@
     section:last-of-type{break-after:auto}
     figure{break-inside:avoid;overflow:visible}
     figure svg{min-width:0}
+    /* Section 01's diagram is square, so at the 396mm A3 print width it stands
+       about 396mm tall against a 273mm printable height: break-inside:avoid
+       pushes it to a fresh sheet and then breaks it anyway, giving a blank sheet
+       followed by two. Capping its height in print keeps the promise this sheet
+       set makes - one section per sheet. Screen layout is untouched. */
+    section:first-of-type figure svg{max-height:165mm;width:auto;margin:0 auto}
     .rules li{break-inside:avoid}
     footer{break-before:avoid}
   }

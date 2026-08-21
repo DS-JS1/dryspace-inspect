@@ -57,14 +57,14 @@ not yet exercised against real SharePoint. Do it before deploying.
 guides. Follow `docs/HANDOFF-v1.4-polish.md`, which carries where things
 stand, what D43–D54 cost to learn, and the gaps left deliberately.
 
-**Two things are still owed before it can ship**, and neither is a code change:
+**One thing is still owed before it can ship**, and it is not a code change:
 
-- **A replacement training deck.** `Training/Setup_and_Use_Presentation.pptx` and
-  its PDF export have been **deleted** — the deck taught the old five-step
-  handover and was the only training item not generated from source, so it could
-  not be brought to v1.4 by regenerating it. A new one is to be built from
-  scratch. Until it exists, `Training/Training_Module.html` and the Workflow
-  Chart carry a group session on their own.
+- **The replacement training deck is done.** `Training/Setup_and_Use_Deck.html`,
+  built from scratch in August 2026 and exported to PDF at v1.4.0. It replaces
+  `Training/Setup_and_Use_Presentation.pptx`, which was **deleted** because it
+  taught the old five-step handover and was the only training item not generated
+  from source. HTML rather than PowerPoint on purpose — decision log §4a, and not
+  a decision to revisit casually.
 - **Julie and Mike's permission test** — confirm *Contribute - No Delete* really
   does permit the archive move. v1.4 moves a file at every handover; a refusal
   there leaves two files in `current/` every time.
