@@ -1,6 +1,38 @@
 Dryspace Site Inspection App — Changelog
 ========================================
 
+PROCESS - 22 August 2026 - one register for open items, wired so it cannot rot
+- docs/OPEN-ITEMS.md is now THE list. Eight open items with stable IDs, each with
+  an exit criterion, plus nine closed ones kept so they are not reopened. Cite the
+  ID - OI-3, not "the storage thing". IDs are never reused.
+- The problem it solves is real and has already bitten twice: Julie and Mike's
+  permission test sat answered-but-unstruck in CLAUDE.md, and the library-column
+  fault survived a release cycle because the failure that would have shown it was
+  swallowed by design. Open work was spread across seven handoffs, decision log
+  section 5, CLAUDE.md's work-in-progress and the bug tests, so "outstanding" and
+  "forgotten" looked identical.
+- WIRED INTO THREE PLACES, because a document nothing checks always rots:
+  1. CLAUDE.md, as step 2 of "before you touch the code" - it loads every session
+     and now says to check whether the work closes an item, touches one, or adds
+     one, and to add it before finishing.
+  2. 05_Release Protocol section 2, in the EVERY TIER list: no item marked BLOCKS
+     RELEASE may be open, and anything the change discovered must be on the
+     register with an exit criterion.
+  3. tests.html - three assertions, following the idiom already used for the
+     Guides PDFs.
+- THE TEST DOES NOT FAIL BECAUSE ITEMS ARE OPEN. Open work is normal, and a suite
+  that goes red for honest outstanding work teaches people to ignore it. It fails
+  when the REGISTER has decayed: missing, or carrying an open item with no "Done
+  means" - which is how a worry gets filed as a task and then forgotten.
+- Verified by breaking it on purpose: an item seeded without an exit criterion
+  turned the suite red and the failure named the offending heading. Restored, and
+  green again. A guard that has never been seen to fail is not a guard.
+- 553 of 553 - three new assertions, no failures, including the orphan-bytes
+  assertion on this run.
+- Deleted "!Remaining Tasks.txt" from the root. Empty since 17 August, and it was
+  evidently meant to do this job. Two places to look for outstanding work is the
+  same as none.
+
 STAFF-FACING FIX - 22 August 2026 - the footer told staff a number that was not theirs
 - PATCH tier. index.html and sw.js. CACHE_VERSION -27 -> -28. APP_VER stays
   1.4.0, still unreleased. No staff document quotes the old wording - checked

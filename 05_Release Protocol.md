@@ -34,6 +34,9 @@ current app", named for its minor version.
 
 ### Every tier, without exception
 
+- [ ] `docs/OPEN-ITEMS.md` reviewed — **no item marked BLOCKS RELEASE is open**,
+      and anything this change discovered has been added to it with an exit
+      criterion. An item without a "Done means" is a worry, not a task.
 - [ ] `tests.html` passes with zero failures
 - [ ] `APP_VER`, `FORM_VER`, `VER_DATE` in `index.html` updated
 - [ ] `CACHE_VERSION` in `sw.js` bumped — **the tests check this**

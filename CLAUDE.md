@@ -14,10 +14,14 @@ and point you here.
    has to be updated. See `05_Release Protocol.md` §1. If the user has not said
    enough to tell, ask; do not guess, because the tier decides which documents
    must be updated alongside the code.
-2. **Read `docs/DECISION-LOG.md`** before proposing anything architectural. Many
+2. **Read `docs/OPEN-ITEMS.md`.** It is the single register of what is
+   outstanding, each item with an ID and an exit criterion. Anything not on it is
+   not tracked. Check whether your work closes an item, touches one, or adds one —
+   and if it adds one, put it there before you finish.
+3. **Read `docs/DECISION-LOG.md`** before proposing anything architectural. Many
    questions that look open are already settled, with reasons. Reopening one
    without new information wastes a session and risks regressing a fix.
-3. **Run the tests** — serve the folder over HTTP and open `tests.html`. Expect
+4. **Run the tests** — serve the folder over HTTP and open `tests.html`. Expect
    zero failures before you start and zero when you finish.
 
 ## Work in progress
@@ -124,6 +128,7 @@ These exist because breaking one of them lost, or nearly lost, real data.
 | Tests | `tests.html` — run over HTTP; expect zero failures |
 | Device diagnostics | `diagnostics.html` — run on the phone that fails; names the hypothesis |
 | Protocol | `05_Release Protocol.md` — what to update, when |
+| Open items | `docs/OPEN-ITEMS.md` — **the single register.** Read it first |
 | Decisions | `docs/DECISION-LOG.md` — what was decided and why |
 | Open work | `docs/v1.4-plan.md` — field findings and the next build |
 | Architecture | `_Shared/Field App Architecture Template.md` — **outside this repository**, two levels up in `00_AI Tools in Development/`, because it is for building sibling apps |

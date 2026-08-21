@@ -1754,6 +1754,46 @@ function releaseChecks(W){
   })
 
   .then(function(){
+    /* The open-items register is only worth having if it cannot quietly rot, and
+       a document nothing checks always does. This does NOT fail because items are
+       open - open work is normal, and a suite that goes red for honest
+       outstanding work teaches people to ignore it. It fails when the register
+       itself has decayed: gone missing, or carrying an open item with no exit
+       criterion, which is how "outstanding" turns into "forgotten". */
+    return fetch('docs/OPEN-ITEMS.md' + bust)
+      .then(function(r){
+        if(!r.ok){
+          record(false, 'open-items register exists',
+                 'docs/OPEN-ITEMS.md is missing - it is referenced by CLAUDE.md ' +
+                 'and gates every release in 05_Release Protocol section 2');
+          return null;
+        }
+        return r.text();
+      })
+      .then(function(md){
+        if(md === null) return;
+        ok(true, 'open-items register exists');
+
+        /* Every "### OI-n - title" heading in the open sections must be followed
+           by a "Done means:" before the next heading. Closed items live in a
+           table and are deliberately not checked. */
+        var open = md.split(/^## 4\. Closed/m)[0];
+        var blocks = open.split(/^### /m).slice(1);
+        var missing = blocks.filter(function(b){
+          return /^OI-\d+/.test(b) && b.indexOf('Done means') === -1;
+        }).map(function(b){ return b.split('\n')[0].trim(); });
+
+        ok(blocks.length > 0, 'register lists at least one item',
+           'no "### OI-n" headings found - has the format changed?');
+        ok(missing.length === 0,
+           'every open item says what would close it',
+           missing.length ? 'no "Done means" for: ' + missing.join('; ') : '');
+      })
+      .catch(function(e){
+        record(false, 'open-items register readable', String(e && e.message || e));
+      });
+  })
+  .then(function(){
     /* The printed guides are the one thing a person can be holding weeks later
        with no way to tell it is out of date. Each PDF carries the version in its
        name, so checking is simply asking whether the current one exists. This is
