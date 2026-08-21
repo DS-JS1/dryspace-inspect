@@ -148,13 +148,16 @@ input[type=text]{font:inherit;font-size:13px;padding:9px 10px;border-radius:9px;
     The baton lives in two library columns — <code>BatonStatus</code> and
     <code>BatonHolder</code>. On 21 August 2026 the library showed both set on a
     folder while the app, reading that same folder at that same moment, saw
-    neither. One of them is wrong and this decides which.
+    neither. <strong>That was proved here on 22 August and fixed</strong>: the
+    listing asked for <code>$select</code> on a nested navigation property, which
+    names it without populating it, so Graph returned a <code>listItem</code>
+    carrying nothing but an etag.
     <br><br>
-    Three readings are taken of the <em>same</em> library root. The first runs the
-    app's own listing code, so it cannot drift from what the app really does. The
-    second and third issue the current query and the documented one directly, and
-    print the raw response, because a query string can be read all day without
-    revealing what Graph actually sends back.
+    The section now earns its keep as a <strong>regression check</strong>. Three
+    readings of the <em>same</em> library root: the app's own listing code, which
+    cannot drift from what the app really does; the old broken form, kept as a
+    control that should still come back empty; and the documented form. A healthy
+    result is the app and the documented form agreeing, with the control blind.
     <br><br>
     Only <strong>top-level</strong> folders carry the baton, so the library root is
     what gets listed — the same listing the take-over picker uses. Name a folder
@@ -664,21 +667,19 @@ function readStoredState(){
 
    The handoff says PROVE IT BEFORE FIXING IT. This is the proof. */
 
-/* The query the app ships with, repeated here so its RAW response can be seen:
-   list() parses the response and throws the rest away.
+/* The form the app used until 22 August 2026, kept deliberately as a CONTROL.
 
-   A second copy of anything drifts, so this one is checked rather than trusted.
-   Reading 1 below runs the real list(); reading 2 runs this literal. If the two
-   disagree about how many folders came back carrying columns, then THIS STRING
-   IS OUT OF STEP with ds-sharepoint.js, and the page says so instead of quietly
-   reporting on a query the app no longer makes. */
-var Q_SHIPPED  = '?select=id,name,size,eTag,lastModifiedDateTime,folder,file,webUrl' +
+   It is not here for nostalgia. It is the thing that must keep failing: if this
+   ever starts returning fields, the control has stopped discriminating and a
+   pass from this section stops meaning anything. Graph confirmed the mechanism
+   on the device - under this form listItem came back holding nothing but an
+   etag, and under the documented form the same folder carried BatonHolder. */
+var Q_OLD      = '?select=id,name,size,eTag,lastModifiedDateTime,folder,file,webUrl' +
                  '&expand=listItem($select=fields)&$top=200';
 
-/* The documented form. $expand on the nested navigation property, not $select —
-   selecting a navigation property names it, it does not populate it. Whether
-   that difference is the fault is the whole question, and this page answers it
-   rather than assuming it. */
+/* The documented form, and since 22 August 2026 the one ds-sharepoint.js uses.
+   $expand on the nested navigation property, not $select. Reading 1 should now
+   match this; if it does not, the fix has been undone. */
 var Q_PROPOSED = '?$select=id,name,size,eTag,lastModifiedDateTime,folder,file,webUrl' +
                  '&$expand=listItem($expand=fields)&$top=200';
 
@@ -774,20 +775,20 @@ function compareColumnQueries(){
          withF.length ? 'ok' : 'bad');
 
     /* ---- reading 2: the same query again, raw ---- */
-    return graphGet(r.base + Q_SHIPPED);
+    return graphGet(r.base + Q_OLD);
   }).then(function(raw){
     var folders = rawFolders(raw);
     r.shipFolders = folders.length;
     r.shipWith    = withFieldsCount(folders);
     r.shipFocus   = pickFocus(folders, want);
-    line('cols', '2 · The current query, raw — folders returned', String(folders.length));
+    line('cols', '2 · The OLD form, raw (control) — folders returned', String(folders.length));
     line('cols', '2 · …with a populated listItem.fields',
-         r.shipWith + ' of ' + folders.length,
-         r.shipWith ? 'ok' : 'bad');
+         r.shipWith + ' of ' + folders.length + '   (nought is correct)',
+         r.shipWith ? 'warn' : 'ok');
     if(raw && raw['@odata.nextLink']){
       line('cols', '2 · More pages exist', 'only the first page was read — enough to decide this', 'warn');
     }
-    dump.push('== 2 · CURRENT QUERY ==\n' + r.base + Q_SHIPPED + '\n\n' +
+    dump.push('== 2 · OLD FORM (control) ==\n' + r.base + Q_OLD + '\n\n' +
               (r.shipFocus ? JSON.stringify(r.shipFocus, null, 2) : '(no folders returned)'));
 
     /* ---- reading 3: the documented form ---- */
@@ -797,7 +798,7 @@ function compareColumnQueries(){
     r.fixFolders = folders.length;
     r.fixWith    = withFieldsCount(folders);
     r.fixFocus   = pickFocus(folders, want);
-    line('cols', '3 · The documented query, raw — folders returned', String(folders.length));
+    line('cols', '3 · The documented form, raw — folders returned', String(folders.length));
     line('cols', '3 · …with a populated listItem.fields',
          r.fixWith + ' of ' + folders.length,
          r.fixWith ? 'ok' : 'bad');
@@ -815,12 +816,12 @@ function compareColumnQueries(){
       line('cols', '…and ' + (folders.length - COLS_LIST_CAP) + ' more', 'not listed, to keep this readable');
     }
 
-    /* ---- the drift check ---- */
+    /* ---- is the control still a control? ---- */
     line('cols', '', '');
-    if(r.shipWith !== r.appWith || r.shipFolders !== r.appFolders){
-      line('cols', 'WARNING — readings 1 and 2 disagree',
-           'the query literal on this page is out of step with ds-sharepoint.js. ' +
-           'Reading 1 is the app; trust it, and update Q_SHIPPED here.', 'bad');
+    if(r.shipWith > 0){
+      line('cols', 'WARNING — the old form returned columns',
+           'the control has stopped discriminating, so a pass here no longer ' +
+           'proves anything about the fix. Graph\u2019s behaviour has changed.', 'warn');
     }
 
     /* ---- the verdict ---- */
@@ -831,9 +832,11 @@ function compareColumnQueries(){
                 'Nothing is proved either way — run this where inspections exist.';
       cls = 'warn';
     } else if(blind && r.fixWith > 0){
-      verdict = 'FAULT 1 CONFIRMED. The app receives no columns; the documented ' +
-                'query receives them from the same folders at the same moment. ' +
-                'The query string is the fault and the change is the fix.';
+      verdict = 'REGRESSION. The app receives no columns while the documented ' +
+                'form receives them from the same folders at the same moment — ' +
+                'which is exactly the 21 August fault, back again. Check the ' +
+                'listing query in ds-sharepoint.js still uses ' +
+                '$expand=listItem($expand=fields).';
       cls = 'bad';
     } else if(blind && r.fixWith === 0){
       verdict = 'the app is blind to the columns — but so is the documented query, ' +
@@ -846,10 +849,15 @@ function compareColumnQueries(){
                 ' folders. Partial, not blind — so the query works, and the folders ' +
                 'without columns were never tagged. That is a different fault.';
       cls = 'warn';
+    } else if(r.shipWith > 0){
+      verdict = 'the app reads the columns from every folder, but so does the ' +
+                'control, so this run cannot tell a working fix from a Graph that ' +
+                'no longer cares which form is used. Healthy, but unproven.';
+      cls = 'warn';
     } else {
-      verdict = 'the app reads the columns from every folder. Fault 1 is NOT ' +
-                'reproducing here — do not change the query. Check this is the ' +
-                'device, the account and the library that failed.';
+      verdict = 'HEALTHY. The app reads the columns from every folder, and the ' +
+                'old form still returns none from those same folders — so the fix ' +
+                'is in place and doing the work.';
       cls = 'ok';
     }
     line('cols', 'VERDICT', verdict, cls);

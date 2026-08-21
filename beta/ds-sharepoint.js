@@ -346,9 +346,21 @@ DSSharePoint.createTransport = function(opts){
          anything: scanning starts by listing the library root. */
       /* listItem carries the library columns, which is where the baton status
          lives. Expanded here so one listing answers both "what is this" and
-         "who has it" rather than a request per folder. */
-      var sel = '?select=id,name,size,eTag,lastModifiedDateTime,folder,file,webUrl' +
-                '&expand=listItem($select=fields)&$top=200';
+         "who has it" rather than a request per folder.
+
+         $expand on the nested property, NOT $select. This read
+         expand=listItem($select=fields) until 22 August 2026, and $select on a
+         navigation property NAMES it without populating it: Graph returned a
+         listItem carrying nothing but an etag, list() mapped every folder to
+         fields:null, and five consumers degraded in silence. The visible cost
+         was that batonState() could never return 'held', so "Force the
+         handover" could not be offered to anybody and the baton test could not
+         be passed. Proved against real Graph on an iPhone before it was
+         changed - the same folder returned BatonHolder under this form and
+         nothing under the old one - and diagnostics.html section 7 keeps the
+         old form beside this one as a standing regression check. */
+      var sel = '?$select=id,name,size,eTag,lastModifiedDateTime,folder,file,webUrl' +
+                '&$expand=listItem($expand=fields)&$top=200';
       var url = path
         ? GRAPH + '/drives/' + id + '/root:/' + encodePath(path) + ':/children' + sel
         : GRAPH + '/drives/' + id + '/root/children' + sel;
