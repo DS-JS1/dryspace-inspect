@@ -1726,6 +1726,33 @@ function releaseChecks(W){
        outstanding work teaches people to ignore it. It fails when the register
        itself has decayed: gone missing, or carrying an open item with no exit
        criterion, which is how "outstanding" turns into "forgotten". */
+    /* index.html and diagnostics.html each decide the database name for
+       themselves - diagnostics cannot ask the app, because its first read
+       happens before the app boots. Two copies of a name is two things to get
+       wrong, and getting it wrong points a diagnostic at an empty store and has
+       it report an empty device with total confidence. So the copies are
+       checked against each other rather than trusted. */
+    return Promise.all([
+      fetch('index.html' + bust).then(function(r){ return r.text(); }),
+      fetch('diagnostics.html' + bust).then(function(r){ return r.text(); })
+    ]).then(function(src){
+      var re = /'(ds-inspections-beta)'\s*:\s*'(ds-inspections)'/;
+      var a = src[0].match(re), b = src[1].match(re);
+      ok(!!a, 'index.html picks the database name by build',
+         'the isBetaBuild() ternary on DB_NAME is gone or reworded');
+      ok(!!b, 'diagnostics.html picks the same way',
+         'dbName() no longer names both databases');
+      if(a && b){
+        ok(a[1] === b[1] && a[2] === b[2],
+           'the app and the diagnostics agree on both database names',
+           'index.html says ' + a[1] + '/' + a[2] +
+           ' but diagnostics.html says ' + b[1] + '/' + b[2] +
+           ' — a diagnostic pointed at the wrong store reports an empty device');
+      }
+    }, function(e){
+      record(false, 'database names could be compared', String(e && e.message || e));
+    })
+    .then(function(){
     return fetch('docs/OPEN-ITEMS.md' + bust)
       .then(function(r){
         if(!r.ok){
@@ -1758,6 +1785,7 @@ function releaseChecks(W){
       .catch(function(e){
         record(false, 'open-items register readable', String(e && e.message || e));
       });
+    });
   })
   .then(function(){
     /* The printed guides are the one thing a person can be holding weeks later

@@ -240,6 +240,16 @@ input[type=text]{font:inherit;font-size:13px;padding:9px 10px;border-radius:9px;
 
 var W = null, CFG = null, auth = null, TRACE = [];
 
+/* Which database this page should be looking at. It has to be derived from the
+   path rather than read from the app, because the first read happens BEFORE the
+   app boots - and a diagnostic pointed at the wrong store is worse than none,
+   since it reports an empty device with total confidence. Mirrors DB_NAME in
+   index.html; the two must move together. */
+function dbName(){
+  return location.pathname.indexOf('/beta/') !== -1
+    ? 'ds-inspections-beta' : 'ds-inspections';
+}
+
 function el(id){ return document.getElementById(id); }
 function ms(n){ return Math.round(n) + ' ms'; }
 
@@ -571,7 +581,7 @@ var STATE_SNAPSHOT = null;
 
 /* Read the media store and hand back plain rows. No writes, ever. */
 function collectStoredState(cb){
-  var open = indexedDB.open('ds-inspections');
+  var open = indexedDB.open(dbName());
   open.onerror = function(){ cb(null, String(open.error || 'unknown')); };
   open.onsuccess = function(){
     var db = open.result;
@@ -633,7 +643,7 @@ function readStoredState(){
               'AS FOUND when this page opened, before the app booted');
     line('state', '', '');
   }
-  var open = indexedDB.open('ds-inspections');
+  var open = indexedDB.open(dbName());
   open.onerror = function(){
     line('state', 'Could not open the database', String(open.error || 'unknown'), 'bad');
     done();
@@ -701,7 +711,7 @@ function readStoredState(){
    something. */
 function countAllStores(onProgress){
   return new Promise(function(res, rej){
-    var open = indexedDB.open('ds-inspections');
+    var open = indexedDB.open(dbName());
     var settled = false;
     var t0 = Date.now();
 
@@ -846,7 +856,7 @@ function dropDatabase(){
     return new Promise(function(r){ setTimeout(r, 400); });
   }).then(function(){
     return new Promise(function(res, rej){
-      var rq = indexedDB.deleteDatabase('ds-inspections');
+      var rq = indexedDB.deleteDatabase(dbName());
       var settled = false;
       /* 45 seconds, and the message names the real culprit. WebKit does not
          reliably fire onblocked for a delete, so a held connection shows up as
@@ -1367,7 +1377,7 @@ function measureStorage(){
       line('storage', 'Databases on this origin', String(list.length));
       list.forEach(function(d){
         line('storage', '  · ' + (d.name || '(unnamed)'), 'version ' + (d.version === undefined ? '?' : d.version),
-             d.name === 'ds-inspections' ? '' : 'warn');
+             d.name === dbName() ? '' : 'warn');
       });
     }, function(){
       line('storage', 'Databases on this origin', 'could not be listed', 'warn');
@@ -1378,9 +1388,9 @@ function measureStorage(){
   /* ---- every store in this app's database, counted and weighed ---- */
   function stepStores(){
     return new Promise(function(res){
-      var open = indexedDB.open('ds-inspections');
+      var open = indexedDB.open(dbName());
       var bail = setTimeout(function(){
-        line('storage', 'ds-inspections', 'did not open within 8 seconds — another tab may hold it', 'bad');
+        line('storage', dbName(), 'did not open within 8 seconds — another tab may hold it', 'bad');
         res();
       }, 8000);
       open.onerror = function(){

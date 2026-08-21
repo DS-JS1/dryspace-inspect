@@ -1555,7 +1555,26 @@ function spRedirectUri(){
 }
 function spConfigured(){ return !!(SP_CONFIG.clientId && SP_CONFIG.tenantId); }
 
-var DB_NAME = 'ds-inspections';
+/* The beta gets its OWN database, and this is the whole of the fix for a trap
+   that had been set since the beta first went on this origin.
+
+   IndexedDB is scoped to the ORIGIN, not the path. ds-js1.github.io serves the
+   live app at / and the beta at /beta/, so a single name meant one database
+   shared between two builds. The live v1.3 app opens it at version 1 and
+   rejects hard on error; v1.4 upgrades it to version 2. One visit to the beta
+   therefore left the live app unable to open its own storage - and it fails
+   quietly, rendering the shell with no list and no storage line, which reads as
+   working.
+
+   Separating them is right on its own terms as well: a test build has no
+   business writing to the storage a real inspection lives in, and CLAUDE.md
+   already says real inspections belong in the live app.
+
+   Done on 22 August 2026, while the cost was nothing. The same collision would
+   otherwise have returned at the v1.5 beta against v1.4 live, by which time
+   staff would have had photographs on their phones and it would have been a
+   migration rather than a line. Decision log 4h. */
+var DB_NAME = isBetaBuild() ? 'ds-inspections-beta' : 'ds-inspections';
 var _db = null, cur = null, loading = false, saveTimer = null, savePending = false;
 /* v1.3 — media is keyed by a permanent data-mfid rather than the file input's
    DOM id. Renaming an input's id previously orphaned every photo attached to it:
