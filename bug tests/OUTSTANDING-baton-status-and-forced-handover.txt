@@ -20,6 +20,26 @@ Two features have never been exercised end to end against real SharePoint:
 Everything else in v1.4 has been tested on a real device. These two have not.
 
 
+ALREADY CHECKED FOR YOU - 21 August 2026
+---------------------------------------------------------------------------
+These were verified against the code, so you do not need to worry about them:
+
+  * The beta app IS running the right code. Every app file deployed at /beta/
+    is identical to the finished v1.4 build, and it carries v1.4.0-25.
+  * The colour formatting JSON in "03_Handover and Version Control Protocol",
+    section 10 item 7, DOES include purple for "Recovered".
+  * The words in that JSON match the words the app writes exactly - Waiting,
+    In progress, Recovered.
+  * Step 5's odd-looking expected result, "Jamie Stone, recovered from Jamie
+    Stone", is CORRECT. That is genuinely what the app writes.
+
+  STILL YOUR JOB, and it is the important one: check in SharePoint that the two
+  columns really are named exactly BatonStatus and BatonHolder. A wrong name
+  fails SILENTLY - on purpose, so a column problem can never block a handover.
+  It will look like "the app didn't write the status" when the app is fine.
+  Check the column names before you start, not after something looks wrong.
+
+
 BEFORE YOU START
 ---------------------------------------------------------------------------
 1. Delete the test folders from the Site Inspections library.
