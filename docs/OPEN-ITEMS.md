@@ -32,7 +32,8 @@ when the register itself has decayed.
 
 ## 1. Blocks release
 
-Nothing ships while any of these is open.
+Nothing ships while any of these is open. **OI-2 closed 22 August 2026**, so this
+list is down to one.
 
 ### OI-1 · "Force the handover" has never been seen to work
 **Status:** open · **Tier:** test-only run, no code expected
@@ -48,23 +49,31 @@ two different people** — one administrator, one holder. Every run so far has h
 one person as both, which is not what the feature is for and is part of why this
 went unnoticed. Result appended to the bug-test file.
 
-### OI-2 · The orphan-bytes assertion fails intermittently
-**Status:** open · **Tier:** patch, **`tests.html` only**
-**Detail:** `docs/HANDOFF-orphan-bytes-race.md` · gated by decision log §4c
-
-`the orphan is reclaimed` fails on roughly 5 runs in 8 under load, and passes on a
-quiet machine. **The app is not at fault** — `sweepOrphanBytes()` called by hand on
-a *failing* page reclaims the exact record. The harness races the app's own boot
-sweep over one key.
-
-**Done means:** **20 consecutive runs at 550/550** over HTTP — at least 5 from a
-cleared `ds-inspections`, at least 5 under deliberate machine load — with the run
-count and conditions written into `CHANGELOG.txt`. **Not "it passes now."** That
-claim has been made twice and been wrong twice.
-
 ---
 
 ## 2. Open, not blocking
+
+### OI-9 · `dbAll()` can return `[]` from a store that is not empty
+**Status:** open — **guarded, not cured** · **Tier:** unknown
+**Detail:** decision log §4g
+
+Measured on Chromium under load: `dbAll('bytes')` returned `[]` while `dbGet`
+found every record and a fresh connection counted two by key. The point reads
+were right and the bulk listing was wrong.
+
+`sweepOrphanBytes()` is now guarded — it confirms every candidate with a point
+`dbGet` before deleting — so the data-loss path is closed. **But every other
+caller of `dbAll()` still trusts it**, and a listing that silently comes back
+short is a bad thing to have anywhere. `renderHome()`, `pendingUploads()` and
+`migrateMediaBytes()` all read it.
+
+The browser-level cause is not established. It reproduces only under heavy load
+and **disappears when instrumented** — adding one extra connection before the
+read was enough to mask it. Chase it knowing that.
+
+**Done means:** either the cause is identified and handled at the storage layer
+so every caller benefits, or a considered decision is recorded that the sweep
+guard is sufficient and the other callers can tolerate a short listing.
 
 ### OI-3 · `setFields()` failures are swallowed, by design, and nobody decided that
 **Status:** open — **needs a decision, not a change** · **Tier:** patch if changed
@@ -78,22 +87,6 @@ cycle undetected.
 **Done means:** a decision-log entry either way — a visible-but-non-blocking
 signal, or a recorded decision to keep the silence and why. **Do not just change
 it**; two handoffs have now asked for this to be decided rather than done.
-
-### OI-4 · `sweepOrphanBytes()` cannot tell failure from "nothing to do"
-**Status:** open · **Tier:** patch, app file + `CACHE_VERSION`
-**Detail:** `index.html:4572`, and `docs/HANDOFF-orphan-bytes-race.md` §6
-
-It ends `catch(e){ console.warn(...); return 0; }`. A storage failure and a clean
-sweep that found nothing **both return `0`**. On a real device that means orphaned
-bytes could be silently never reclaimed, and nothing would ever say so.
-
-Raised during the orphan-race work and deliberately left: it did **not** cause
-OI-2 (hypothesis 4, disproved), and fixing it means an app file and a different
-conversation. It is a real observation and it is still true.
-
-**Done means:** the failure path is distinguishable from the empty path by the
-caller — a distinct return, or a thrown error the caller handles — plus whatever
-the decision on OI-3 settles about surfacing it.
 
 ### OI-5 · Does iOS preserve EXIF GPS through the Safari file picker?
 **Status:** open · **Tier:** unknown until answered
@@ -141,7 +134,7 @@ agreed destination.
 - **Nothing is tagged.** The last release tag belongs to v1.3.
 - **`APP_VER` stays `1.4.0`** while it is unreleased; fixes fold into it.
   `CACHE_VERSION` still moves on every app-file change — currently
-  `ds-inspect-v1.4.0-28`.
+  `ds-inspect-v1.4.0-29`.
 
 ---
 
@@ -149,6 +142,8 @@ agreed destination.
 
 | ID | Item | Closed | By what |
 |---|---|---|---|
+| OI-C11 | The orphan-bytes assertion failed ~5 runs in 8 | 22 Aug 2026 | Not a harness race after all — `dbAll()` was returning `[]` from a non-empty store (OI-9). Checks lifted out of `later()` and sequenced after boot, with per-run keys. **20 consecutive runs 554/554**, 16 under load, 6 from a cleared store |
+| OI-C10 | `sweepOrphanBytes()` returned `0` both when it failed and when it found nothing | 22 Aug 2026 | Returns `SWEEP_FAILED` (-1) on failure; the boot caller warns rather than reporting a count |
 | OI-C1 | The app could not read the library columns back, so "Force the handover" could never be offered | 22 Aug 2026 | `$expand=listItem($expand=fields)`. Proved on device before changing: 0 of 3 folders under the old form, 3 of 3 under the documented one. `f19fec2` |
 | OI-C2 | ~140 MB held on a device with no inspections | 22 Aug 2026 | Not the app's data. WebKit keeps IndexedDB in a file that does not shrink when records are deleted; deleting the database removes it. Decision log §4f |
 | OI-C3 | The footer reported the whole origin's storage as "used by this app" | 22 Aug 2026 | Reports what the app holds; `pressure()` keeps the origin figure deliberately. Decision log §4d. `070b179` |

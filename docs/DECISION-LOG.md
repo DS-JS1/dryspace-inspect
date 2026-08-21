@@ -896,6 +896,54 @@ unreclaimed space attributed to the app.
 
 ---
 
+## 4g. `dbAll()` can return an empty array from a store that is not empty
+
+**22 August 2026, measured on Chromium under sustained CPU load.** While the
+app's start-up chain was still running, `dbAll('bytes')` returned `[]` from a
+store holding two records. Captured at the moment of failure, all within a few
+milliseconds of each other:
+
+| Read | Result |
+|---|---|
+| `dbAll('media')`, `dbAll('bytes')` — the app's cached connection | `[]`, `[]` |
+| `dbGet('bytes', orphan)`, `dbGet('bytes', live)`, `dbGet('media', live)` | all **found** |
+| A freshly opened connection: `count()` on `bytes` | **2** |
+| Same fresh connection, `getAllKeys()` | the exact two keys |
+
+The point lookups were right. The bulk listing was wrong. This is what had been
+failing the orphan-bytes assertion roughly five runs in eight since Batch C, and
+**three earlier investigations all looked in the wrong place** — a stale service
+worker, leftover store data, and a harness ordering race were each proposed and
+each disproved, because the fault was never in any of them.
+
+**Why it mattered far more than a flaky test.** `sweepOrphanBytes()` decided what
+to **delete** by comparing two `dbAll()` listings: every record in `bytes` whose
+`mid` was absent from `media` was treated as an orphan and removed. In the
+observed failures both listings came back empty together, so the sweep merely did
+nothing. **The same fault in only the first listing produces an empty `live` map
+and marks every byte record on the device as an orphan** — every photograph,
+deleted, on the strength of one bad read. Nothing in the code stood between that
+read and the deletion.
+
+**Decided: never delete on the strength of a bulk listing.** `sweepOrphanBytes()`
+now treats the listing as producing *candidates*, and confirms each one with a
+point `dbGet('media', mid)` before deleting anything. The point read is the one
+that stayed correct throughout, and it costs only one lookup per record already
+believed dead.
+
+**Rejected: retrying the listing until two agree.** It makes the window smaller
+without closing it, and it would still be a bulk read deciding a deletion. The
+non-negotiable is that a local original is never deleted until it is verified in
+SharePoint — deleting one on a misread listing breaks that rule just as
+completely as a bad upload would.
+
+**Not claimed:** the browser-level cause. It reproduces only under heavy load and
+disappears when instrumented — adding a second connection before the sweep was
+enough to mask it, which is worth knowing before anyone tries to chase it further.
+The guard does not depend on knowing the cause, and that is the point of it.
+
+---
+
 ## 5. Open questions
 
 | Question | Blocking | Notes |

@@ -1,6 +1,67 @@
 Dryspace Site Inspection App — Changelog
 ========================================
 
+OI-2 AND OI-4 CLOSED - 22 August 2026 - and the cause was NOT what three
+investigations had assumed
+- PATCH tier. tests.html, index.html, sw.js. CACHE_VERSION -28 -> -29. APP_VER
+  stays 1.4.0, still unreleased.
+- THE ORPHAN-BYTES ASSERTION WAS RIGHT EVERY TIME. Reproduced first - 5 failures
+  in 8 runs under 19-worker CPU load, matching the recorded rate exactly - then
+  instrumented at the moment of failure. Captured within milliseconds of each
+  other, on a store holding two records:
+      dbAll('media') and dbAll('bytes')  ->  [] and []
+      dbGet on all three written keys    ->  every one FOUND
+      a freshly opened connection        ->  count() = 2, and the exact two keys
+  The point lookups were right. The bulk listing was wrong. sweepOrphanBytes()
+  reads dbAll('bytes'), so it saw nothing to sweep, freed nought, and the orphan
+  survived.
+- SO IT WAS NEVER A HARNESS RACE, and the three earlier investigations - a stale
+  service worker, leftover store data, and later()'s ordering - all looked in the
+  wrong place. Hypothesis 3, "the app's sweep is broken", was recorded as
+  DISPROVED because calling the sweep by hand reclaims correctly. It does. By
+  hand is after the storm; the fault only appears while the boot chain is running
+  and the machine is loaded.
+- THE SERIOUS PART IS NOT THE TEST. sweepOrphanBytes() decided what to DELETE by
+  comparing two dbAll() listings. Both came back empty together in the observed
+  failures, so it merely did nothing. The same fault in only the FIRST listing
+  gives an empty live map and marks EVERY byte record on the device as an
+  orphan - every photograph, deleted, on one bad read. Nothing stood between
+  that read and the deletion.
+- FIXED, and deliberately not by trusting the listing more. The listing now
+  produces CANDIDATES, and every candidate is confirmed with a point
+  dbGet('media', mid) before anything is deleted. The point read is the one that
+  stayed correct throughout, and it costs one lookup per record already believed
+  dead. Rejected: retrying the listing until two agree - that shrinks the window
+  without closing it, and it is still a bulk read deciding a deletion. Decision
+  log 4g.
+- OI-4 in the same function: sweepOrphanBytes() returned 0 both when it failed
+  and when it found nothing. It now returns SWEEP_FAILED (-1), and the boot
+  caller warns "Orphaned bytes could NOT be swept" rather than printing
+  "Reclaimed bytes for -1 deleted file(s)". Scope was the owner's call - the
+  caller can now tell the two apart; whether to surface it to staff stays OI-3.
+- THE HARNESS FIX STILL EARNS ITS PLACE. The orphan checks are lifted out of
+  later() - whose IIFE bodies run immediately, during run() - into orphanChecks(),
+  sequenced after Promise.all(PENDING) and gated on the app's boot chain having
+  drained. It waits on a real signal, dsTransport being set by initSync(), not on
+  a timeout: a bigger setTimeout is the same bug with a longer fuse. Keys are now
+  unique per run, so no foreign sweep can satisfy or defeat the assertion and a
+  failing run cannot leave residue that changes what the next one starts from.
+  Clean-up runs on both paths now, pass and fail.
+- VERIFICATION - 20 CONSECUTIVE RUNS AT 554/554, ZERO FAILURES, served over HTTP:
+      10 runs  under sustained CPU load (19 workers)
+       6 runs  from a deleted ds-inspections, still under load
+       4 runs  further
+  Assertion count is 554 rather than 550 because the register guard added three
+  and the boot-settled check one. For comparison, the SAME machine under the SAME
+  load failed 5 of 8 before the change.
+- The temporary auto-loop and probe harness used to produce those numbers was
+  removed before commit; the committed tests.html contains none of it.
+- WHAT IS NOT CLAIMED: the browser-level cause of the empty listing. It
+  reproduces only under heavy load and DISAPPEARS WHEN INSTRUMENTED - adding one
+  extra connection before the read was enough to mask it. Recorded as OI-9,
+  because sweepOrphanBytes() is guarded now but every other dbAll() caller still
+  trusts it.
+
 PROCESS - 22 August 2026 - one register for open items, wired so it cannot rot
 - docs/OPEN-ITEMS.md is now THE list. Eight open items with stable IDs, each with
   an exit criterion, plus nine closed ones kept so they are not reopened. Cite the
