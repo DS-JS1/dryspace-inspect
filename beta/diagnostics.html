@@ -699,12 +699,58 @@ function readStoredState(){
 /* Counted at the moment of the tap, never from an earlier reading. A stale
    measurement is exactly how a destructive control ends up destroying
    something. */
-function countAllStores(){
+function countAllStores(onProgress){
   return new Promise(function(res, rej){
     var open = indexedDB.open('ds-inspections');
-    var bail = setTimeout(function(){ rej(new Error('the database did not open within 8 seconds')); }, 8000);
-    open.onerror = function(){ clearTimeout(bail); rej(open.error || new Error('could not open')); };
+    var settled = false;
+    var t0 = Date.now();
+
+    /* 45 seconds, not 8. The first attempt on the real device gave up after
+       eight and reported a failure that was really impatience: this is the
+       phone whose IndexedDB may be holding 140 MB, and opening a file that big
+       is not instant. A diagnostic that times out before the thing it measures
+       has finished is measuring itself. */
+    var tick = setInterval(function(){
+      if(settled) return;
+      var s = Math.round((Date.now() - t0) / 1000);
+      if(onProgress) onProgress('still opening… ' + s + 's');
+    }, 3000);
+
+    function finish(fn, arg){
+      if(settled) return;
+      settled = true;
+      clearInterval(tick);
+      clearTimeout(bail);
+      fn(arg);
+    }
+
+    var bail = setTimeout(function(){
+      finish(rej, new Error('the database did not open within 45 seconds. On this ' +
+        'device that is itself a finding - an empty database should open at once. ' +
+        'Nothing has been deleted. See the fallback below.'));
+    }, 45000);
+
+    /* WebKit fires this when another connection is holding an upgrade open, and
+       without a handler the request simply never settles - which is exactly how
+       the 8-second version looked like a dead database rather than a busy one. */
+    open.onblocked = function(){
+      finish(rej, new Error('BLOCKED - something else holds the database open. ' +
+        'Close every other tab showing this app, then reload this page. ' +
+        'Nothing has been deleted.'));
+    };
+
+    /* Only reachable if the database is absent, in which case there is nothing
+       to reclaim and nothing to delete. Worth saying rather than silently
+       creating an empty one and deleting it again. */
+    open.onupgradeneeded = function(){
+      if(onProgress) onProgress('the database did not exist - creating it to read it');
+    };
+
+    open.onerror = function(){ finish(rej, open.error || new Error('could not open')); };
     open.onsuccess = function(){
+      if(settled){ try { open.result.close(); } catch(e){} return; }
+      settled = true;
+      clearInterval(tick);
       clearTimeout(bail);
       var db = open.result;
       var names = Array.prototype.slice.call(db.objectStoreNames);
@@ -745,8 +791,11 @@ function dropDatabase(){
   function done(){ el('btn-dropdb').disabled = false; }
 
   var beforeUsage = null;
+  var progress = line('dropdb', 'Opening the database', 'a moment…');
 
-  countAllStores().then(function(counts){
+  countAllStores(function(msg){ progress.children[1].textContent = msg; })
+    .then(function(counts){
+    progress.children[1].textContent = 'opened';
     var names = Object.keys(counts);
     var occupied = names.filter(function(n){ return counts[n] > 0; });
 
@@ -799,22 +848,30 @@ function dropDatabase(){
     return new Promise(function(res, rej){
       var rq = indexedDB.deleteDatabase('ds-inspections');
       var settled = false;
+      /* 45 seconds, and the message names the real culprit. WebKit does not
+         reliably fire onblocked for a delete, so a held connection shows up as
+         nothing happening at all - which is why the first attempt reported a
+         timeout with no idea what was holding it. */
       var bail = setTimeout(function(){
         if(settled) return;
         settled = true;
         rej(new Error('the delete neither finished nor reported being blocked ' +
-                      'within 15 seconds. Close every other tab showing this app ' +
-                      'and try again.'));
-      }, 15000);
+                      'within 45 seconds. Something still holds the database open ' +
+                      'and WebKit is not saying so. The usual cause is THE APP ITSELF ' +
+                      'open in another Safari tab - close that tab, not just this ' +
+                      'page, then reload and try again.'));
+      }, 45000);
       rq.onsuccess = function(){ if(!settled){ settled = true; clearTimeout(bail); res(true); } };
       rq.onerror   = function(){ if(!settled){ settled = true; clearTimeout(bail); rej(rq.error || new Error('delete failed')); } };
+      /* onblocked is NOT fatal, and treating it as fatal was a fault of its own:
+         it means "somebody is still holding on", not "this will never happen".
+         Once the holders close - which the app now does, because openDB() finally
+         has an onversionchange handler - the delete proceeds and onsuccess fires.
+         Aborting here would kill a delete that was about to work. So say it and
+         keep waiting; only the deadline gives up. */
       rq.onblocked = function(){
         if(settled) return;
-        settled = true;
-        clearTimeout(bail);
-        rej(new Error('BLOCKED — something else still holds the database open. ' +
-                      'Close every other tab or window showing this app, then reload ' +
-                      'this page and try again.'));
+        line('dropdb', 'Waiting', 'something still holds the database open — giving it time', 'warn');
       };
     });
   }).then(function(){
@@ -857,7 +914,18 @@ function dropDatabase(){
   }).catch(function(e){
     if(!(e && e.handled)){
       line('dropdb', 'FAILED', (e && e.message) || String(e), 'bad');
-      line('dropdb', 'Nothing is lost', 'the stores were empty before this started');
+      line('dropdb', 'Nothing has been deleted',
+           'this refuses to act on a device it cannot read, which is the point of it');
+      /* The route that does not need this page to work at all. It is a bigger
+         hammer - it takes the sign-in and the offline caches with it - but it
+         answers the same question, and on an empty device it costs nothing but
+         signing in again. */
+      line('dropdb', 'Fallback, outside this page',
+           'Settings \u2192 Safari \u2192 Advanced \u2192 Website Data, swipe github.io, Delete. ' +
+           'Then reopen the app and read the figure again. That reclaims the same ' +
+           'space without needing this button, and it settles the same question. ' +
+           'It signs you out and clears the offline copies of BOTH apps, so do it ' +
+           'only on a device with no inspections on it - which this one is.', 'warn');
     }
   }).then(done);
 }
