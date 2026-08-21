@@ -1349,9 +1349,52 @@ function run(W){
     ok(/held by Mike/.test(held.who), 'and names them: ' + held.who);
     ok(held.cls !== waiting.cls, 'the two states are coloured differently');
 
+    /* This asserted "held on a device" until a device showed why that is wrong:
+       a folder exists as soon as the first photo uploads, so an unmarked one has
+       usually never been handed over at all. Covered properly below. */
     var unknown = W.batonState({file: null, folder: {}});
-    ok(/held on a device/.test(unknown.who),
-       'and an unmarked folder says what is known rather than inventing a name');
+    eq(unknown.label, 'NOT HANDED OVER',
+       'an unmarked folder is not reported as somebody else’s');
+  });
+
+  /* v1.4.0 patch - an empty current/ was read as "somebody has it". A folder
+     exists as soon as the first PHOTO uploads, so an inspection never handed
+     over has an empty current/ too, and reporting that as held sent people
+     looking for a colleague who was never involved. */
+  test('never handed over is not the same as held', function(){
+    if(typeof W.batonState !== 'function') return;
+    var never = W.batonState({file: null, folder: {fields: {}}});
+    eq(never.label, 'NOT HANDED OVER',
+       'a folder with photos but no record is not somebody else’s problem');
+    ok(/never been sent/.test(never.who), 'and says what is actually true: ' + never.who);
+
+    var held = W.batonState({file: null, folder: {fields: {BatonHolder: 'Mike'}}});
+    eq(held.label, 'IN PROGRESS', 'a holder on record means somebody has it');
+    ok(held.cls !== never.cls, 'and the two are coloured differently');
+  });
+
+  /* v1.4.0 patch - reviewing a record must not make this device its holder. */
+  test('viewing a record cannot write it to this device', function(){
+    ok(typeof W.viewInspectionReadOnly === 'function', 'viewInspectionReadOnly() defined');
+    ok(typeof W.closeReadOnly === 'function', 'and it can be closed');
+    ok(typeof W.viewOnly === 'boolean', 'the view-only flag exists');
+
+    /* The one place everything funnels through. If saveNow can be reached in
+       view mode, the fork the baton rule exists to prevent is one autosave
+       away. */
+    var realCur = W.cur, realView = W.viewOnly;
+    W.cur = {id: '__must-not-save__', data: {}};
+    W.viewOnly = true;
+    return W.saveNow().then(function(){
+      return W.dbGet('inspections', '__must-not-save__');
+    }).then(function(found){
+      W.cur = realCur; W.viewOnly = realView;
+      ok(!found, 'nothing was written',
+         'a viewed record was saved onto this device, which forks the inspection');
+    }, function(e){
+      W.cur = realCur; W.viewOnly = realView;
+      ok(false, 'saveNow threw in view mode', String(e && e.message || e));
+    });
   });
 
   test('the per-file status panel exists and starts empty', function(){

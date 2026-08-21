@@ -80,9 +80,17 @@ input[type=text],input[type=date],select,textarea{font-size:16px !important;padd
 .pick-row-s{font-size:11px;color:#6b7280;word-break:break-all;line-height:1.35;margin-top:2px}
 .pick-row-m{font-size:11px;color:#4b5563;margin-top:3px}
 .pick-row-w{font-size:11px;margin-top:4px;font-weight:600}
-.bs{font-size:9px;font-weight:700;letter-spacing:.05em;padding:2px 6px;border-radius:4px;margin-left:6px;vertical-align:middle}
+.bs{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.05em;padding:2px 7px;border-radius:4px;margin:0 0 5px}
 .bs-waiting{background:#15803d;color:#fff}
 .bs-held{background:#b45309;color:#fff}
+.bs-none{background:#6b7280;color:#fff}
+.view-banner{background:#1f2937;color:#fff;padding:10px 14px;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.vb-t{font-weight:700;font-size:13px;letter-spacing:.03em;flex:1 1 100%}
+.vb-s{font-size:11px;color:#cbd5e1;flex:1 1 auto}
+.vb-close{background:#fff;color:#1f2937;border-color:#fff;min-height:34px;padding:6px 14px}
+
+.pick-row-w.bs-none{background:none;color:#6b7280}
+
 .pick-row-w.bs-waiting{background:none;color:#15803d}
 .pick-row-w.bs-held{background:none;color:#b45309}
 
@@ -2255,8 +2263,20 @@ function queueSave(){
   clearTimeout(saveTimer);
   saveTimer = setTimeout(saveNow, 400);
 }
+/* v1.4.0 patch — viewing somebody else's record must not write it here.
+
+   Reviewing an inspection is a real job: technical, sales and admin all need to
+   read one without becoming its holder. But the form is built around cur and an
+   autosave, so opening a record for reading would have written it onto this
+   device and made a second copy of something already held elsewhere - the exact
+   fork the baton rule exists to prevent.
+
+   One flag, checked at the single place everything funnels through. Nothing
+   else has to know. */
+var viewOnly = false;
+
 function saveNow(){
-  if(!cur) return Promise.resolve();
+  if(!cur || viewOnly) return Promise.resolve();
   clearTimeout(saveTimer);
   savePending = false;
   cur.data = collectData();
@@ -3552,14 +3572,17 @@ function pickFromList(opts){
         var row = document.createElement('button');
         row.type = 'button';
         row.className = 'pick-row';
-        var t = document.createElement('div'); t.className = 'pick-row-t';
-        t.textContent = it.title || '';
+        /* The badge leads. Trailing it made the row's shape depend on how long
+           the client's name happened to be, so the eye had to hunt for the one
+           thing being scanned for. */
         if(it.badge){
-          var bd = document.createElement('span');
+          var bd = document.createElement('div');
           bd.className = 'bs ' + it.badge.cls;
           bd.textContent = it.badge.label;
-          t.appendChild(bd);
+          row.appendChild(bd);
         }
+        var t = document.createElement('div'); t.className = 'pick-row-t';
+        t.textContent = it.title || '';
         row.appendChild(t);
         if(it.sub){
           var sb = document.createElement('div'); sb.className = 'pick-row-s';
@@ -3612,8 +3635,19 @@ function batonState(entry){
     return {key: 'waiting', label: 'WAITING', cls: 'bs-waiting',
             who: f.BatonHolder ? 'last held by ' + f.BatonHolder : ''};
   }
+  /* An empty current/ was read as "somebody has it". It is not the same thing.
+     A folder exists as soon as the first PHOTO uploads, so an inspection that
+     has never been handed over has an empty current/ too - and reporting that
+     as held sends people looking for a colleague who was never involved.
+
+     The holder column tells them apart: it is written at both ends of a
+     handover, so its absence means no handover has ever happened here. */
+  if(!f.BatonHolder){
+    return {key: 'none', label: 'NOT HANDED OVER', cls: 'bs-none',
+            who: 'photos uploaded, but the record has never been sent'};
+  }
   return {key: 'held', label: 'IN PROGRESS', cls: 'bs-held',
-          who: f.BatonHolder ? 'held by ' + f.BatonHolder : 'held on a device'};
+          who: 'held by ' + f.BatonHolder};
 }
 
 function browseAllInspections(){
@@ -3668,9 +3702,30 @@ function browseAllInspections(){
     })
     .then(function(chosen){
       if(!chosen) return;
-      if(chosen.file) return takeOverChosen(chosen.folder.name, chosen.file);
-      if(chosen.folder.webUrl){ window.open(chosen.folder.webUrl, '_blank', 'noopener'); return; }
-      alert('That inspection is held on a device and has no link to open.');
+      var b = batonState(chosen);
+      return showDialog({
+        title: chosen.folder.name,
+        note: b.who || '',
+        lines: [{k: 'Baton', v: b.label}],
+        choices: (chosen.file
+                    ? [{title: 'Take it over',
+                        sub: 'Bring it onto this device. You become the holder.',
+                        value: 'take'}]
+                    : []).concat([
+          {title: 'View it', sub: chosen.file
+              ? 'Read the version waiting, without taking it.'
+              : 'Read the last version that was handed over. Nothing is changed.',
+           value: 'view'},
+          {title: 'Open the folder in SharePoint',
+           sub: 'The photos, current/ and archive/.', value: 'folder'}
+        ])
+      }).then(function(what){
+        if(what === 'take') return takeOverChosen(chosen.folder.name, chosen.file);
+        if(what === 'view') return viewInspectionReadOnly(chosen.folder.name);
+        if(what === 'folder' && chosen.folder.webUrl){
+          window.open(chosen.folder.webUrl, '_blank', 'noopener');
+        }
+      });
     })
     .catch(function(e){
       setSync('Could not read the library: ' + ((e && e.message) || e), 'bad');
@@ -3719,6 +3774,100 @@ function importFromSharePoint(){
     .catch(function(e){
       setSync('Could not import: ' + ((e && e.message) || e), 'bad');
     });
+}
+
+/* Read a record without taking it. Downloads the draft that is in current/, or
+   the most recent one filed in archive/ when somebody holds it, and renders it
+   into the form with everything disabled.
+
+   The archive fallback is the point: an inspection somebody is working on has an
+   empty current/, and "you cannot look at it because a colleague has it" is not
+   an answer anybody would accept. The archived copy is what they last sent, which
+   is exactly the thing a reviewer wants to read. */
+function viewInspectionReadOnly(folderName){
+  setSync('Looking for the latest version…', 'busy');
+  return dsTransport.list(folderName + '/current')
+    .then(function(files){
+      var f = files.filter(function(x){ return !x.isFolder; })[0];
+      if(f) return {file: f, where: 'current'};
+      return dsTransport.list(folderName + '/archive').then(function(old){
+        var newest = old.filter(function(x){ return !x.isFolder; })
+                        .sort(function(a, b){
+                          return Date.parse(b.modifiedAt || 0) - Date.parse(a.modifiedAt || 0);
+                        })[0];
+        if(!newest) throw new Error('No version of this inspection has been handed over yet.');
+        return {file: newest, where: 'archive'};
+      });
+    })
+    .then(function(found){
+      setSync('Opening ' + found.file.name + '…', 'busy');
+      return dsTransport.download(found.file.itemId).then(function(blob){
+        return blob.text ? blob.text() : new Response(blob).text();
+      }).then(function(text){
+        var payload = JSON.parse(text);
+        if(!payload.inspection) throw new Error('That file is not an inspection record.');
+        showRecordReadOnly(payload, folderName, found);
+      });
+    })
+    .catch(function(e){
+      setSync('Could not open it: ' + ((e && e.message) || e), 'bad');
+    });
+}
+
+function showRecordReadOnly(payload, folderName, found){
+  setSync('');
+  viewOnly = true;
+  cur = ensureSchema(payload.inspection);
+  loading = true;
+  clearForm();
+  applyData(cur.data || {});
+  loading = false;
+  renderAllMedia();
+  updateFormTitle(); renderStageBar(); renderFormMeta();
+  refreshMediaState().then(refreshCompletion);
+
+  /* Disabled, not merely styled. A field that looks read-only and accepts a
+     keystroke is worse than one that plainly cannot be typed in. */
+  document.querySelectorAll('#form-root input, #form-root select, #form-root textarea')
+    .forEach(function(el){ el.disabled = true; });
+
+  var bar = document.getElementById('view-banner');
+  if(!bar){
+    bar = document.createElement('div');
+    bar.id = 'view-banner';
+    bar.className = 'view-banner';
+    var host = document.getElementById('screen-form');
+    host.insertBefore(bar, host.firstChild);
+  }
+  bar.style.display = '';
+  bar.innerHTML = '';
+  var t = document.createElement('div');
+  t.className = 'vb-t';
+  t.textContent = 'VIEW ONLY — nothing you change here is saved';
+  var sub = document.createElement('div');
+  sub.className = 'vb-s';
+  sub.textContent = (found.where === 'archive'
+      ? 'The last version handed over, from archive/. Somebody holds this inspection now.'
+      : 'The version waiting in current/, ready to be picked up.') +
+    '  ·  ' + found.file.name;
+  var out = document.createElement('button');
+  out.type = 'button'; out.className = 'btn vb-close';
+  out.textContent = 'Close';
+  out.onclick = closeReadOnly;
+  bar.appendChild(t); bar.appendChild(sub); bar.appendChild(out);
+  show('form');
+}
+
+function closeReadOnly(){
+  viewOnly = false;
+  cur = null;
+  var bar = document.getElementById('view-banner');
+  if(bar) bar.style.display = 'none';
+  document.querySelectorAll('#form-root input, #form-root select, #form-root textarea')
+    .forEach(function(el){ el.disabled = false; });
+  clearForm();
+  show('home');
+  renderHome();
 }
 
 /* Bringing one inspection down. Shared by the take-over list and by browsing

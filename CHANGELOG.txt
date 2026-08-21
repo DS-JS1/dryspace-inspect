@@ -635,7 +635,18 @@ into "Waiting", which proved the uploading state had never been written.
 - One vocabulary for baton state across the browse list, the take-over list
   and SharePoint, so a colour learnt in one place means the same everywhere:
   green WAITING, amber IN PROGRESS, with "held by <name>" beneath.
-- 527 assertions. CACHE_VERSION -> ds-inspect-v1.4.0-21.
+- An empty current/ was reported as "held on a device". It is not the same
+  thing: a folder exists as soon as the first PHOTO uploads, so an inspection
+  never handed over has an empty current/ too, and calling that held sent
+  people looking for a colleague who was never involved. Three states now -
+  WAITING, IN PROGRESS with a name, NOT HANDED OVER.
+- The state badge leads each row instead of trailing the title, so the row's
+  shape no longer depends on how long the client's name happens to be.
+- READ-ONLY VIEW (D56). An inspection can be read without being taken: the
+  version in current/, or the last one filed in archive/ when somebody holds
+  it. Every field disabled, a banner saying so, and saveNow() refuses -
+  reviewing a record must not fork it onto the reviewer's device.
+- 535 assertions. CACHE_VERSION -> ds-inspect-v1.4.0-22.
 
 The architectural change: the record now travels the same road as the photos,
 and in-progress work is backed up without anyone having to remember to do it.
