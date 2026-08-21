@@ -224,6 +224,22 @@ input[type=text]{font:inherit;font-size:13px;padding:9px 10px;border-radius:9px;
   <button id="btn-dropdb" class="danger">Delete the database</button>
   <div id="dropdb"></div>
 
+  <p class="note" style="border:2px solid #b3261e;border-radius:8px;padding:10px;margin-top:18px">
+    <strong>Databases this build does not use.</strong> The button above touches only
+    the one <em>this</em> build opens. Until 22 August 2026 the live app and the beta
+    shared a single database, so a device that opened the beta was left holding one
+    the live app could no longer open — and it fails silently, drawing its shell with
+    no list and no storage line, which reads as a working app. Separating them fixed
+    it going forward and did nothing for a handset already in that state, because the
+    leftover became a database nothing on this page pointed at.
+    <br><br>
+    This lists every database on the origin and offers to delete the ones that belong
+    to another build. <strong>Same guard</strong>: it counts every store first and
+    refuses anything that is not already empty.
+  </p>
+  <button id="btn-scandbs">Find other databases</button>
+  <div id="otherdbs"></div>
+
   <h2>Request trace</h2>
   <p class="note">Every Graph request this page made, in order, with timings.</p>
   <button id="btn-copy">Copy everything</button>
@@ -709,9 +725,9 @@ function readStoredState(){
 /* Counted at the moment of the tap, never from an earlier reading. A stale
    measurement is exactly how a destructive control ends up destroying
    something. */
-function countAllStores(onProgress){
+function countAllStores(name, onProgress){
   return new Promise(function(res, rej){
-    var open = indexedDB.open(dbName());
+    var open = indexedDB.open(name);
     var settled = false;
     var t0 = Date.now();
 
@@ -803,35 +819,10 @@ function dropDatabase(){
   var beforeUsage = null;
   var progress = line('dropdb', 'Opening the database', 'a moment…');
 
-  countAllStores(function(msg){ progress.children[1].textContent = msg; })
-    .then(function(counts){
+  guardEmpty(dbName(), 'dropdb', function(msg){
+    progress.children[1].textContent = msg;
+  }).then(function(){
     progress.children[1].textContent = 'opened';
-    var names = Object.keys(counts);
-    var occupied = names.filter(function(n){ return counts[n] > 0; });
-
-    names.forEach(function(n){
-      line('dropdb', 'store: ' + n,
-           (counts[n] < 0 ? 'could not be counted' : counts[n] + ' rows'),
-           counts[n] > 0 ? 'bad' : 'ok');
-    });
-
-    if(occupied.length){
-      line('dropdb', 'REFUSED',
-           'this device is not empty — ' +
-           occupied.map(function(n){ return counts[n] + ' in ' + n; }).join(', ') +
-           '. Nothing has been deleted. Send the inspections first, then come back.',
-           'bad');
-      throw {handled: true};
-    }
-    if(names.some(function(n){ return counts[n] < 0; })){
-      line('dropdb', 'REFUSED',
-           'a store could not be counted, so emptiness cannot be established. ' +
-           'Nothing has been deleted.', 'bad');
-      throw {handled: true};
-    }
-
-    line('dropdb', 'Every store is empty', 'safe to delete', 'ok');
-
     return (navigator.storage && navigator.storage.estimate)
       ? navigator.storage.estimate() : Promise.resolve(null);
   }).then(function(est){
@@ -839,7 +830,7 @@ function dropDatabase(){
     if(beforeUsage !== null) line('dropdb', 'Storage before', mb(beforeUsage));
 
     var ok = window.confirm(
-      'Delete the inspection database on this device?\n\n' +
+      'Delete ' + dbName() + ' on this device?\n\n' +
       'Every store is empty, so no inspection, photo or byte record will be ' +
       'lost. Nothing in SharePoint is touched.\n\n' +
       'This closes the app running on this page. Reload afterwards.');
@@ -850,44 +841,15 @@ function dropDatabase(){
 
     closeTheApp();
     line('dropdb', 'App frame closed', 'its database connection is released');
-
-    /* A beat for the frame's teardown to actually land before asking for the
-       delete, so the common case does not go down the blocked path. */
+    /* A beat for the frame's teardown to land before asking for the delete, so
+       the common case does not go down the blocked path. */
     return new Promise(function(r){ setTimeout(r, 400); });
   }).then(function(){
-    return new Promise(function(res, rej){
-      var rq = indexedDB.deleteDatabase(dbName());
-      var settled = false;
-      /* 45 seconds, and the message names the real culprit. WebKit does not
-         reliably fire onblocked for a delete, so a held connection shows up as
-         nothing happening at all - which is why the first attempt reported a
-         timeout with no idea what was holding it. */
-      var bail = setTimeout(function(){
-        if(settled) return;
-        settled = true;
-        rej(new Error('the delete neither finished nor reported being blocked ' +
-                      'within 45 seconds. Something still holds the database open ' +
-                      'and WebKit is not saying so. The usual cause is THE APP ITSELF ' +
-                      'open in another Safari tab - close that tab, not just this ' +
-                      'page, then reload and try again.'));
-      }, 45000);
-      rq.onsuccess = function(){ if(!settled){ settled = true; clearTimeout(bail); res(true); } };
-      rq.onerror   = function(){ if(!settled){ settled = true; clearTimeout(bail); rej(rq.error || new Error('delete failed')); } };
-      /* onblocked is NOT fatal, and treating it as fatal was a fault of its own:
-         it means "somebody is still holding on", not "this will never happen".
-         Once the holders close - which the app now does, because openDB() finally
-         has an onversionchange handler - the delete proceeds and onsuccess fires.
-         Aborting here would kill a delete that was about to work. So say it and
-         keep waiting; only the deadline gives up. */
-      rq.onblocked = function(){
-        if(settled) return;
-        line('dropdb', 'Waiting', 'something still holds the database open — giving it time', 'warn');
-      };
-    });
+    return deleteDatabaseNamed(dbName(), 'dropdb');
   }).then(function(){
-    line('dropdb', 'Database deleted', 'ds-inspections is gone', 'ok');
-    /* The figure updates lazily, so give it a moment and say so rather than
-       reporting the first number that comes back as though it were final. */
+    line('dropdb', 'Database deleted', dbName() + ' is gone', 'ok');
+    /* The figure updates lazily, so give it a moment rather than reporting the
+       first number that comes back as though it were final. */
     return new Promise(function(r){ setTimeout(r, 1500); });
   }).then(function(){
     return (navigator.storage && navigator.storage.estimate)
@@ -904,53 +866,194 @@ function dropDatabase(){
 
     /* There was nothing here to reclaim, so this run cannot say where the space
        had been. Reporting "the file was NOT where the space was" from an already
-       empty device is a verdict drawn from no evidence - which is exactly what
-       happened on 22 August at 1:24am, on a device something had already freed
-       between one run and the next. */
+       empty device is a verdict drawn from no evidence — which is exactly what
+       happened on 22 August at 1:24am. */
     if(beforeUsage < 20 * 1048576){
       line('dropdb', 'RESULT',
            'INCONCLUSIVE. Only ' + mb(beforeUsage) + ' was in use before this ran, ' +
            'so there was nothing to reclaim and this run proves nothing about where ' +
-           'the space had been. Something freed it earlier. If a previous delete ' +
-           'reported a timeout, it may well have completed afterwards once the tab ' +
-           'holding the database closed - a delete that times out here is abandoned ' +
-           'by this page, not cancelled in the browser.', 'warn');
+           'the space had been. If a previous delete reported a timeout, it may well ' +
+           'have completed afterwards once the tab holding the database closed — a ' +
+           'delete that times out here is abandoned by this page, not cancelled in ' +
+           'the browser.', 'warn');
     } else if(freed > 20 * 1048576){
       line('dropdb', 'RESULT',
            'the space came back, so it was the database file holding it — records ' +
-           'were deleted, the file that held them was not. That is the answer to ' +
-           'fault 2, and deleting the database is the only thing that reclaims it.',
-           'ok');
+           'were deleted, the file that held them was not.', 'ok');
     } else {
       line('dropdb', 'RESULT',
            'the figure barely moved, so the database file was NOT where the space ' +
-           'was. The leading explanation is wrong and fault 2 is still open — do ' +
-           'not act on it. Check iOS Settings, Safari, Advanced, Website Data ' +
-           'before concluding anything, because this figure updates lazily.',
-           'bad');
+           'was. Check iOS Settings, Safari, Advanced, Website Data before ' +
+           'concluding anything, because this figure updates lazily.', 'bad');
     }
-    line('dropdb', 'Confirm it independently',
-         'Settings → Safari → Advanced → Website Data → github.io. That is measured ' +
-         'outside this page and it is the reading to trust.');
     line('dropdb', 'Now reload this page',
          'the app frame was closed, so the other sections need a fresh load', 'warn');
   }).catch(function(e){
-    if(!(e && e.handled)){
-      line('dropdb', 'FAILED', (e && e.message) || String(e), 'bad');
-      line('dropdb', 'Nothing has been deleted',
-           'this refuses to act on a device it cannot read, which is the point of it');
-      /* The route that does not need this page to work at all. It is a bigger
-         hammer - it takes the sign-in and the offline caches with it - but it
-         answers the same question, and on an empty device it costs nothing but
-         signing in again. */
-      line('dropdb', 'Fallback, outside this page',
-           'Settings \u2192 Safari \u2192 Advanced \u2192 Website Data, swipe github.io, Delete. ' +
-           'Then reopen the app and read the figure again. That reclaims the same ' +
-           'space without needing this button, and it settles the same question. ' +
-           'It signs you out and clears the offline copies of BOTH apps, so do it ' +
-           'only on a device with no inspections on it - which this one is.', 'warn');
-    }
+    reportDropFailure(e, 'dropdb');
   }).then(done);
+}
+
+/* Counts every store and REFUSES if any of them holds anything. Shared by the
+   button above and the legacy list below, because a destructive control that
+   trusts a reading taken earlier is how the wrong device gets wiped — and
+   because two copies of this guard is one copy too many. */
+function guardEmpty(name, host, onProgress){
+  return countAllStores(name, onProgress).then(function(counts){
+    var names = Object.keys(counts);
+    var occupied = names.filter(function(n){ return counts[n] > 0; });
+
+    names.forEach(function(n){
+      line(host, 'store: ' + n,
+           (counts[n] < 0 ? 'could not be counted' : counts[n] + ' rows'),
+           counts[n] > 0 ? 'bad' : 'ok');
+    });
+
+    if(occupied.length){
+      line(host, 'REFUSED',
+           'this database is not empty — ' +
+           occupied.map(function(n){ return counts[n] + ' in ' + n; }).join(', ') +
+           '. Nothing has been deleted.', 'bad');
+      throw {handled: true};
+    }
+    if(names.some(function(n){ return counts[n] < 0; })){
+      line(host, 'REFUSED',
+           'a store could not be counted, so emptiness cannot be established. ' +
+           'Nothing has been deleted.', 'bad');
+      throw {handled: true};
+    }
+    if(!names.length){
+      line(host, 'No object stores', 'nothing in it to lose', 'ok');
+    } else {
+      line(host, 'Every store is empty', 'safe to delete', 'ok');
+    }
+    return counts;
+  });
+}
+
+/* The delete request itself. Everything hard-won about it lives here once:
+   WebKit does not reliably fire onblocked for a delete, so a held connection
+   looks like nothing happening at all; onblocked when it DOES fire is not
+   fatal, because the delete proceeds the moment the holders let go; and the
+   deadline is the only thing entitled to give up. */
+function deleteDatabaseNamed(name, host){
+  return new Promise(function(res, rej){
+    var rq = indexedDB.deleteDatabase(name);
+    var settled = false;
+    var bail = setTimeout(function(){
+      if(settled) return;
+      settled = true;
+      rej(new Error('the delete of ' + name + ' neither finished nor reported being ' +
+                    'blocked within 45 seconds. Something still holds it open and ' +
+                    'WebKit is not saying so. The usual cause is an app open in ' +
+                    'another Safari tab — close that tab, not just this page, then ' +
+                    'reload and try again.'));
+    }, 45000);
+    rq.onsuccess = function(){ if(!settled){ settled = true; clearTimeout(bail); res(true); } };
+    rq.onerror   = function(){ if(!settled){ settled = true; clearTimeout(bail); rej(rq.error || new Error('delete failed')); } };
+    rq.onblocked = function(){
+      if(settled) return;
+      line(host, 'Waiting', 'something still holds ' + name + ' open — giving it time', 'warn');
+    };
+  });
+}
+
+function reportDropFailure(e, host){
+  if(e && e.handled) return;
+  line(host, 'FAILED', (e && e.message) || String(e), 'bad');
+  line(host, 'Nothing has been deleted',
+       'this refuses to act on a database it cannot read, which is the point of it');
+  /* The route that needs no part of this page. A bigger hammer — it takes the
+     sign-in and both apps' offline copies — but it costs nothing on a device
+     with no inspections on it. */
+  line(host, 'Fallback, outside this page',
+       'Settings → Safari → Advanced → Website Data → SHOW ALL SITES → ' +
+       'ds-js1.github.io → swipe → Delete. Show All Sites is the step that gets ' +
+       'missed: without it the entry you want may not be listed at all.', 'warn');
+}
+
+/* ---------- 8c · databases this build does not use ----------
+
+   The button above deletes only the database THIS build opens. Until 22 August
+   2026 the live app and the beta shared one, and a device that opened the beta
+   was left holding a database the live app could no longer open — it fails
+   silently, drawing its shell with no list and no storage line, which reads as
+   a working app.
+
+   Separating them fixed it going forward and did nothing for a handset already
+   in that state: the leftover became a database nothing on this page pointed
+   at, and therefore nothing on this page could clear. This is that gap closed. */
+function scanOtherDatabases(){
+  clear('otherdbs');
+  el('btn-scandbs').disabled = true;
+  function done(){ el('btn-scandbs').disabled = false; }
+
+  if(typeof indexedDB.databases !== 'function'){
+    line('otherdbs', 'Cannot list databases',
+         'this browser will not enumerate them. Use the Settings fallback: ' +
+         'Settings → Safari → Advanced → Website Data → Show All Sites.', 'warn');
+    return done();
+  }
+
+  indexedDB.databases().then(function(list){
+    list = (list || []).filter(function(d){ return d && d.name; });
+    line('otherdbs', 'Databases on this origin', String(list.length));
+
+    var others = list.filter(function(d){ return d.name !== dbName(); });
+    list.forEach(function(d){
+      var mine = d.name === dbName();
+      line('otherdbs', d.name,
+           'version ' + (d.version === undefined ? '?' : d.version) +
+           (mine ? '   — used by THIS build, use the button above' : ''),
+           mine ? 'ok' : 'warn');
+    });
+
+    if(!others.length){
+      line('otherdbs', 'Nothing to clean up',
+           'no database here belongs to another build', 'ok');
+      return;
+    }
+
+    others.forEach(function(d){
+      var row = document.createElement('div');
+      row.className = 'row';
+      var btn = document.createElement('button');
+      btn.className = 'danger';
+      btn.textContent = 'Delete ' + d.name;
+      btn.onclick = function(){ btn.disabled = true; dropOther(d.name); };
+      var k = document.createElement('span');
+      k.className = 'k';
+      k.textContent = 'Left over from another build';
+      row.appendChild(k);
+      row.appendChild(btn);
+      el('otherdbs').appendChild(row);
+    });
+  }, function(e){
+    line('otherdbs', 'Could not list databases', (e && e.message) || String(e), 'bad');
+  }).then(done);
+}
+
+function dropOther(name){
+  line('otherdbs', '', '');
+  line('otherdbs', 'Checking ' + name, 'counting its stores…');
+
+  guardEmpty(name, 'otherdbs').then(function(){
+    var ok = window.confirm(
+      'Delete ' + name + '?\n\n' +
+      'It belongs to another build, and every store in it is empty. Nothing in ' +
+      'SharePoint is touched, and the database this page uses is not affected.');
+    if(!ok){
+      line('otherdbs', 'Cancelled', 'nothing was deleted', 'ok');
+      throw {handled: true};
+    }
+    return deleteDatabaseNamed(name, 'otherdbs');
+  }).then(function(){
+    line('otherdbs', 'Deleted', name + ' is gone', 'ok');
+    line('otherdbs', 'Now check the other app',
+         'open it and confirm it draws its list and its storage line. That is what ' +
+         'proves the leftover was what had been stopping it.', 'warn');
+  }).catch(function(e){
+    reportDropFailure(e, 'otherdbs');
+  });
 }
 
 /* ---------- 7 · the library columns ----------
@@ -1623,7 +1726,7 @@ function measureStorage(){
 function copyAll(){
   var text = ['Dryspace upload diagnostics', new Date().toISOString(),
               navigator.userAgent, ''].join('\n');
-  ['env', 'blobs', 'token', 'drive', 'upload', 'state', 'cols', 'storage', 'dropdb'].forEach(function(id){
+  ['env', 'blobs', 'token', 'drive', 'upload', 'state', 'cols', 'storage', 'dropdb', 'otherdbs'].forEach(function(id){
     var t = el(id).innerText.trim();
     if(t) text += '\n== ' + id + ' ==\n' + t + '\n';
   });
@@ -1736,6 +1839,7 @@ function copyAll(){
   el('btn-cols').onclick = compareColumnQueries;
   el('btn-storage').onclick = measureStorage;
   el('btn-dropdb').onclick = dropDatabase;
+  el('btn-scandbs').onclick = scanOtherDatabases;
   el('btn-copy').onclick = copyAll;
 })();
 </script>

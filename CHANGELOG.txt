@@ -1,6 +1,32 @@
 Dryspace Site Inspection App — Changelog
 ========================================
 
+DIAGNOSTICS 8c - 22 August 2026 - clearing a database no build points at any more
+- Test-only. diagnostics.html. No app file, no CACHE_VERSION change.
+- Separating the beta's database closed the trap going forward and did NOTHING for
+  a handset already in the broken state - and it made that handset harder to fix,
+  because the leftover ds-inspections became a database nothing on the page
+  pointed at. The delete button now targets ds-inspections-beta, so the thing
+  actually blocking the live app was out of its reach. That gap is this entry.
+- Section 8c lists every database on the origin, marks the one this build uses,
+  and offers to delete the others. Same guard as the main button: it counts every
+  store at the moment of the tap and refuses anything not already empty.
+- REFACTORED RATHER THAN COPIED. guardEmpty(), deleteDatabaseNamed() and
+  reportDropFailure() are now shared by both controls. Everything hard-won about
+  the delete lives in one place - WebKit not reliably firing onblocked, onblocked
+  not being fatal, the 45-second deadline being the only thing entitled to give
+  up. A second copy of that would have drifted, and the copy that drifts is the
+  one that deletes something.
+- Verified end to end against a seeded stand-in database: it was listed as
+  belonging to another build; with a record in it the delete was REFUSED, the
+  confirm was never reached and the record survived; emptied, it deleted cleanly.
+  The original button was re-checked after the refactor and still works.
+- Also corrected the Settings fallback text everywhere it appears. It said "swipe
+  github.io", and the step that actually gets missed is SHOW ALL SITES - without
+  it the entry may not be listed at all, which is how a delete that looked done
+  had not happened. The tester hit exactly that.
+- Tests 557 of 557.
+
 THE BETA GETS ITS OWN DATABASE - 22 August 2026 - OI-11 closed, OI-10 re-graded
 - PATCH tier. index.html, diagnostics.html, tests.html, sw.js. CACHE_VERSION
   -29 -> -30. APP_VER stays 1.4.0, still unreleased.
