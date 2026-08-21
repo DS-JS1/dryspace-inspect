@@ -487,6 +487,70 @@ runs at every start-up, and per-file status now shows what the queue is doing.
 v1.4 ships, this investigation does not apply. Start fresh from
 `diagnostics.html`, which now answers all four questions in about a minute.
 
+### The documentation caught up with the app — 21 August 2026
+
+The guides were deliberately left alone while the app changed daily. This is the
+pass that brings them back to the truth, against build `v1.4.0-25`. Documentation
+tier only: no app file was touched, `APP_VER` stays 1.4.0, `CACHE_VERSION` does
+not move, and the suite stayed at 550 assertions with zero failures either side.
+
+**`03_Handover and Version Control Protocol` — rewritten.** The document staff
+actually follow, so it was done first and read in full before anything was
+changed.
+
+**The one real defect it was carrying.** The app tells a person *"Handover
+Protocol §8"* in two places — when `current/` holds two files, and when a
+handover uploads but cannot archive. §8 was **SharePoint settings to turn on**,
+and the procedure they needed was §9. D36 and D37 both say §8 as well, so the
+app and the decision log agreed with each other and the document disagreed with
+both. Somebody hitting that error mid-handover, on a phone, would have opened
+the guide and found library configuration.
+
+Fixed in the document rather than in the app: *If something has already gone
+wrong* is now §8, permanently, and says so in a note at the top so a future
+renumber does not quietly break it again. Changing five error strings in
+`index.html` would have made a documentation pass into a code change, and the
+section reference is the arbitrary half of the pair.
+
+The general shape is worth keeping: **a cross-reference from code into a document
+pins that document's numbering.** Two of them existed and nothing recorded that
+they did.
+
+**What else was wrong, in the order it would have cost somebody something:**
+
+- *Hand over through SharePoint* was described as being **at the foot of the
+  form**. Batch 4 moved the whole action row to the top, under the stage
+  selector. The guide sent people scrolling past eleven sections looking for a
+  button that had moved.
+- `wip/` was missing from the folder diagram entirely, so the automatic backup —
+  the thing that makes a forced handover possible at all — was invisible in the
+  document that describes the folders.
+- The library was described as carrying **six** columns. It carries eight.
+- Nothing recorded the `BatonStatus` **column formatting JSON**. It existed only
+  as an instruction to paste something, in an unrun test. It is now in §10, with
+  the same hex values the app uses.
+
+**Two honest limits written down for the first time**, both found by reading the
+code against the document rather than by testing:
+
+- **`Recovered` is a SharePoint-only word.** D55 says one colour vocabulary is
+  shared by SharePoint and both in-app lists, and that is true of the three
+  states the app shows. A forced handover writes a **fourth** value that the app
+  has no badge for: such a folder reads in the app as IN PROGRESS, held by the
+  administrator. Not a fault — somebody does hold it — but the two vocabularies
+  differ in exactly one place and now it is said so.
+- **The app never reads `BatonStatus` back.** WAITING / IN PROGRESS / NOT HANDED
+  OVER are derived from whether a file sits in `current/` and whether
+  `BatonHolder` carries a name. `BatonStatus` exists to be sorted, filtered and
+  coloured in the library. Editing it by hand changes the library and nothing
+  else, and the next handover overwrites it.
+
+New §5, *Seeing where every inspection is*, carries browse, the three states,
+read-only review and asking for the baton. Forced handover went into §8 beside
+the other things you do when something has gone wrong, rather than into the
+feature tour, because that is when somebody reaches for it. Administrators are
+described in §7 next to signing in, since the gate is the Microsoft account.
+
 ---
 
 ## 3. Reversed decisions — do not revert to these
@@ -511,6 +575,10 @@ Each of these was once true. Reverting reintroduces a known problem.
   is "no"; the *application* variant requires it. What actually forces admin
   approval in this tenant is the user-consent policy for apps without a verified
   publisher. Worth knowing if consent behaviour ever looks inconsistent.
+- **The Handover Protocol's own section numbers were out of step with the app.**
+  `index.html` sends a person to §8 twice, and §8 was the SharePoint settings
+  section. Corrected 21 Aug 2026 by renumbering the document, not the app. The
+  numbering of that document is now load-bearing and the document says so.
 
 ---
 
@@ -588,5 +656,5 @@ this repository and so do not show in `git status`.
 | **Does iOS preserve EXIF GPS through the Safari file picker?** | No | Decides whether the Google Photos Maps plan is achievable. Needs a real device test. |
 | Should the app be **publicly reachable**? | No | Currently public on GitHub Pages. Cloudflare Access with one-time PIN would make it staff-only, free, and matches the mental model. Decide before wider rollout. |
 | **Google Photos as secondary backup** | No | Scheduled server-side sync reading from SharePoint. No first-party Power Automate connector exists, so it needs a custom connector or script. |
-| **Analytics across records** | No | Cross-job querying needs a structured database downstream. The apps produce the data; they do not provide the querying. A SharePoint List, one item per inspection, is the agreed destination — see the Handover Protocol §10. |
+| **Analytics across records** | No | Cross-job querying needs a structured database downstream. The apps produce the data; they do not provide the querying. A SharePoint List, one item per inspection, is the agreed destination — see the Handover Protocol §11. |
 | ~~Who holds Global Administrator~~ | **Resolved 17 Aug 2026** | Now held internally. Worth reviewing periodically — a tenant whose only administrator is unreachable is a business risk well beyond this project. |

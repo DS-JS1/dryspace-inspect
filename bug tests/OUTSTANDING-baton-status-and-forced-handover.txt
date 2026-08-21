@@ -33,7 +33,9 @@ BEFORE YOU START
    The app writes to those names. A mismatch fails silently, by design —
    a column problem must never block a handover.
 
-3. Paste the column formatting into BatonStatus:
+3. Paste the column formatting into BatonStatus. The JSON is recorded in
+   "03_Handover and Version Control Protocol.md", section 10, item 7 -
+   copy it from there rather than retyping it:
    Column header > Column settings > Format this column > Advanced mode
    (the link sits at the BOTTOM of that pane, above Save/Cancel).
    Replace everything already in the box.

@@ -959,3 +959,59 @@ bug that is already fixed and tested.
 
 Also confirmed empirically: an ordinary Safari tab is refused durable storage,
 which is what the Setup Guide Part C has always said. The app does request it.
+
+The documentation pass - 21 August 2026
+Documentation only. No app file changed, so APP_VER stays 1.4.0 and
+CACHE_VERSION stays at ds-inspect-v1.4.0-25. Tests run over HTTP before and
+after: 550 assertions, zero failures, both times.
+
+03_Handover and Version Control Protocol - rewritten against build v1.4.0-25
+- SECTION NUMBERS WERE OUT OF STEP WITH THE APP, which is the one thing in here
+  that could have cost a site visit. index.html tells a person "Handover
+  Protocol section 8" in two places - when current/ holds two files, and when a
+  handover uploads but cannot then archive. Section 8 was "SharePoint settings
+  to turn on"; the procedure they needed was 9. D36 and D37 say 8 as well, so
+  the app and the decision log agreed and only the document was wrong.
+  Renumbered so "If something has already gone wrong" is section 8, with a note
+  at the top of it saying the numbering is load-bearing. Fixed in the document
+  rather than in five error strings, which would have turned a documentation
+  pass into a code change.
+- "Hand over through SharePoint" was described as being at the FOOT of the form.
+  Batch 4 moved the whole action row to the top, under the stage selector. The
+  guide was sending people scrolling past eleven sections after a button that
+  had moved.
+- wip/ was missing from the folder diagram entirely, so the automatic backup -
+  the thing that makes a forced handover possible at all - did not appear in the
+  document that describes the folders. Added, with its naming, its four-minute
+  interval, one file per device, and why it is not current/.
+- The library was described as carrying six columns. It carries eight.
+  BatonStatus and BatonHolder are now listed with the rest, with a column saying
+  when each is written.
+- The BatonStatus COLUMN FORMATTING JSON is now recorded, in section 10. It
+  existed only as "paste the column formatting" in a test that has never been
+  run. Same hex values as the app - green #15803d Waiting, amber #b45309 In
+  progress, grey #6b7280 nothing yet - plus purple #7e22ce for Recovered,
+  without which a forced handover shows grey and reads as a failure.
+- New section 5, "Seeing where every inspection is": browse all inspections, the
+  three baton states, read-only review, and asking for the baton. Forced
+  handover went into section 8 with the other things you do when something has
+  gone wrong, not into the feature tour, because that is when somebody reaches
+  for it.
+- Two limits written down for the first time, both found by reading the code
+  against the document. Recovered is a SharePoint-only word: the app has three
+  badges, and a folder marked Recovered reads in the app as IN PROGRESS held by
+  the administrator. And the app never reads BatonStatus back at all - it works
+  the three states out from whether a file sits in current/ and whether
+  BatonHolder carries a name, so editing the column by hand changes the library
+  and nothing else.
+- Also brought current: the filing-critical gate and what each of the five
+  fields decides; the HANDED OVER badge and what opening one asks; the D53
+  warning about photos uploaded after a handover; thumbnails and tap-to-fetch on
+  takeover; the filterable picker and the stage on each row; the form's Upload
+  button and its progress text; the "3 files - all uploaded" card wording; that
+  a record with nothing filled in files as Unfiled; and the open Contribute -
+  No Delete question about the archive move.
+
+Still to do in this pass: 01_Setup and User Guide, 02_Iteration Guide,
+04_Project Context Brief (in _Shared), the Training pack as a set, and the
+Guides/ PDFs last, once the markdown has settled.

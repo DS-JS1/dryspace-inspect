@@ -122,6 +122,13 @@ needs a full pass. What has changed since the guides were last true:
 | `Guides/` PDFs | Regenerate LAST, once the markdown has settled |
 | SharePoint | `BatonStatus` and `BatonHolder` columns, and the column formatting JSON, are configuration the guides should record |
 
+**Progress, 21 August 2026.** `03_Handover and Version Control Protocol` is
+**done** — rewritten against build `v1.4.0-25`, with its section numbers corrected
+(the app sends people to §8, which was the wrong section; see the decision log §2,
+21 Aug). `CHANGELOG.txt` and `docs/DECISION-LOG.md` carry the detail. Still to do:
+`01_Setup and User Guide`, `02_Iteration Guide`, `04_Project Context Brief`, the
+`Training/` set, then the `Guides/` PDFs last.
+
 `CHANGELOG.txt` and `docs/DECISION-LOG.md` **are current.** Keep them that way as
 you go rather than reconstructing them afterwards.
 
