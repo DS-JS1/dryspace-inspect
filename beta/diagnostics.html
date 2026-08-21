@@ -30,15 +30,21 @@ pre{font-size:11px;background:#8881;padding:10px;border-radius:8px;overflow:auto
 iframe{display:none}
 label.file{display:inline-block}
 input[type=file]{font:inherit;font-size:13px;margin:6px 0}
+input[type=text]{font:inherit;font-size:13px;padding:9px 10px;border-radius:9px;
+     border:1px solid #8886;background:#fff;color:inherit;width:100%;max-width:430px;margin:6px 0}
+@media (prefers-color-scheme:dark){input[type=text]{background:#1e1e1e}}
 </style>
 </head>
 <body>
 
 <h1>Upload diagnostics</h1>
 <p class="lede">
-  Run this <strong>on the device that fails</strong>. It answers the four
-  hypotheses in <code>docs/v1.4-plan.md</code> §3 in order, and tells you which
-  one is actually true.
+  Run this <strong>on the device that fails</strong>. Sections 1–6 answer the
+  four hypotheses in <code>docs/v1.4-plan.md</code> §3 in order and tell you which
+  one is actually true. Sections 7 and 8 answer the two faults the baton test
+  found on 21 August 2026 — the library columns the app cannot read, and the
+  storage that is not being reclaimed. Nothing on this page writes to the app,
+  the database, or the record.
 </p>
 
 <p class="note" style="border:2px solid #b3261e;border-radius:8px;padding:10px">
@@ -59,6 +65,12 @@ input[type=file]{font:inherit;font-size:13px;margin:6px 0}
   have finished, open the app normally once and let it load; it re-registers
   itself. Do not leave a field device in this state, because until you do, the
   app will not work without signal.
+  <br><br>
+  <strong>This page can be served stale to itself.</strong> The service worker
+  caches whatever it is asked for, including this file, and it ignores the query
+  string — so <code>?v=2</code> will not force a fresh copy. If the sections below
+  stop at 6, you are reading an old copy: the load you just did unregistered the
+  worker, so simply open this page once more and section 7 will appear.
 </p>
 
 <div id="boot" class="note" style="white-space:pre-line">Loading the app…</div>
@@ -130,6 +142,61 @@ input[type=file]{font:inherit;font-size:13px;margin:6px 0}
   </p>
   <button id="btn-state">Read the stored state</button>
   <div id="state"></div>
+
+  <h2>7 &middot; Can the app read the library columns?</h2>
+  <p class="note">
+    The baton lives in two library columns — <code>BatonStatus</code> and
+    <code>BatonHolder</code>. On 21 August 2026 the library showed both set on a
+    folder while the app, reading that same folder at that same moment, saw
+    neither. One of them is wrong and this decides which.
+    <br><br>
+    Three readings are taken of the <em>same</em> library root. The first runs the
+    app's own listing code, so it cannot drift from what the app really does. The
+    second and third issue the current query and the documented one directly, and
+    print the raw response, because a query string can be read all day without
+    revealing what Graph actually sends back.
+    <br><br>
+    Only <strong>top-level</strong> folders carry the baton, so the library root is
+    what gets listed — the same listing the take-over picker uses. Name a folder
+    below and its raw response is printed in full; leave it empty and the first
+    folder found is used. <strong>Name one you know has a holder set</strong>, or a
+    blank column proves nothing.
+    <br><br>
+    Read-only. It lists and it prints. It writes nothing.
+  </p>
+  <input type="text" id="colfolder" placeholder="folder to print in full, e.g. INS - 2201 - Frinight TestClient">
+  <br>
+  <button id="btn-cols" class="primary">Compare the queries</button>
+  <div id="cols"></div>
+  <pre id="colsraw">Nothing yet.</pre>
+
+  <h2>8 &middot; Where has the storage gone?</h2>
+  <p class="note">
+    A device reporting 140 MB in use with no inspections on it is either holding
+    something it should have released, or the figure does not mean what it looks
+    like it means. This measures every store directly instead of guessing.
+    <br><br>
+    <strong>Read the caveats before drawing a conclusion.</strong> The headline
+    figure covers the <em>whole origin</em>, which hosts the live app at the root
+    and the beta together, so some of it may not belong to the build under test —
+    the cache rows below name which build each cache came from. A browser is also
+    entitled to hold on to deleted data for a while before reclaiming it, and
+    cross-origin cached files are padded in the quota accounting and measure as
+    zero here. An unattributed remainder is a lead, not a verdict.
+    <br><br>
+    <strong>The cache figures are captured before this page boots the app</strong>,
+    because booting it carries <code>?nosw=1</code>, and that deletes every cache on
+    the origin — the offline copies of both the live app and the beta. That is the
+    existing behaviour of the flag, not something this section does, but it means
+    the caches can only be counted once per visit and they are counted for you on
+    the way in. If a reading looks wrong, reload the page and take it again rather
+    than tapping twice.
+    <br><br>
+    Read-only apart from that: this section deletes nothing, sweeps nothing and
+    tidies nothing.
+  </p>
+  <button id="btn-storage" class="primary">Measure everything</button>
+  <div id="storage"></div>
 
   <h2>Request trace</h2>
   <p class="note">Every Graph request this page made, in order, with timings.</p>
@@ -589,14 +656,678 @@ function readStoredState(){
   };
 }
 
+/* ---------- 7 · the library columns ----------
+   Fault 1 of docs/HANDOFF-baton-columns-not-read-and-storage.md. The library
+   showed BatonStatus and BatonHolder set; the app reading the same folder saw
+   neither, so "Force the handover" — gated on the held state, which needs
+   BatonHolder — could never be offered to anybody.
+
+   The handoff says PROVE IT BEFORE FIXING IT. This is the proof. */
+
+/* The query the app ships with, repeated here so its RAW response can be seen:
+   list() parses the response and throws the rest away.
+
+   A second copy of anything drifts, so this one is checked rather than trusted.
+   Reading 1 below runs the real list(); reading 2 runs this literal. If the two
+   disagree about how many folders came back carrying columns, then THIS STRING
+   IS OUT OF STEP with ds-sharepoint.js, and the page says so instead of quietly
+   reporting on a query the app no longer makes. */
+var Q_SHIPPED  = '?select=id,name,size,eTag,lastModifiedDateTime,folder,file,webUrl' +
+                 '&expand=listItem($select=fields)&$top=200';
+
+/* The documented form. $expand on the nested navigation property, not $select —
+   selecting a navigation property names it, it does not populate it. Whether
+   that difference is the fault is the whole question, and this page answers it
+   rather than assuming it. */
+var Q_PROPOSED = '?$select=id,name,size,eTag,lastModifiedDateTime,folder,file,webUrl' +
+                 '&$expand=listItem($expand=fields)&$top=200';
+
+var BATON_COLS = ['BatonStatus', 'BatonHolder', 'Stage'];
+
+/* A raw Graph GET that keeps the body whether or not the call succeeded. The
+   error body is frequently the only thing that says WHY. */
+function graphGet(url){
+  return auth.getToken().then(function(tok){
+    return tracingFetch(url, {headers: {Authorization: 'Bearer ' + tok}});
+  }).then(function(res){
+    return res.text().then(function(body){
+      var data = null;
+      try { data = JSON.parse(body); } catch(e){}
+      if(!res.ok){
+        var err = new Error('Graph ' + res.status + ' — ' +
+                  ((data && data.error && data.error.message) || body.slice(0, 240)));
+        err.status = res.status;
+        err.body = body;
+        throw err;
+      }
+      return data;
+    });
+  });
+}
+
+/* Folders only. Files do not carry the baton, and counting them would dilute
+   the one number this section exists to produce. */
+function rawFolders(raw){
+  return ((raw && raw.value) || []).filter(function(it){ return !!it.folder; });
+}
+
+function withFieldsCount(folders){
+  return folders.filter(function(it){
+    return !!(it.listItem && it.listItem.fields);
+  }).length;
+}
+
+/* The folder whose raw response gets printed: the one that was asked for, or an
+   exact-then-partial name match, or failing that the first folder there is. */
+function pickFocus(folders, want){
+  if(!folders.length) return null;
+  if(want){
+    var w = want.toLowerCase();
+    var exact = folders.filter(function(it){ return String(it.name).toLowerCase() === w; })[0];
+    if(exact) return exact;
+    var part = folders.filter(function(it){ return String(it.name).toLowerCase().indexOf(w) !== -1; })[0];
+    if(part) return part;
+  }
+  return folders[0];
+}
+
+function colsOf(fields){
+  var f = fields || {};
+  return BATON_COLS.map(function(k){
+    var v = f[k];
+    return k + '=' + (v === undefined ? '(absent)' : (String(v) === '' ? '(empty)' : v));
+  }).join('  ');
+}
+
+var COLS_LIST_CAP = 12;
+
+function compareColumnQueries(){
+  clear('cols');
+  el('colsraw').textContent = '';
+  if(!auth.isSignedIn()){
+    line('cols', 'Cannot run', 'not signed in — sign in on the main app first, then come back', 'bad');
+    return;
+  }
+  el('btn-cols').disabled = true;
+
+  var want = (el('colfolder').value || '').trim();
+  var t = makeTransport();
+  var r = {};                       /* what each reading found */
+  var dump = [];                    /* raw JSON, printed at the end */
+
+  t.resolveDrive().then(function(id){
+    /* The library ROOT. Not a path — the take-over picker lists the root, and
+       the top-level folder is the only one that carries the baton. Same URL
+       shape ds-sharepoint.js uses for the pathless case. */
+    r.base = 'https://graph.microsoft.com/v1.0/drives/' + id + '/root/children';
+
+    /* ---- reading 1: the app exactly as it ships. Cannot drift. ---- */
+    return t.list('');
+  }).then(function(rows){
+    var folders = rows.filter(function(x){ return x.isFolder; });
+    var withF   = folders.filter(function(x){ return !!x.fields; });
+    r.appFolders = folders.length;
+    r.appWith    = withF.length;
+    line('cols', '1 · The app as it ships — folders in the library root', String(folders.length));
+    line('cols', '1 · …of those, arriving with their columns',
+         withF.length + ' of ' + folders.length,
+         withF.length ? 'ok' : 'bad');
+
+    /* ---- reading 2: the same query again, raw ---- */
+    return graphGet(r.base + Q_SHIPPED);
+  }).then(function(raw){
+    var folders = rawFolders(raw);
+    r.shipFolders = folders.length;
+    r.shipWith    = withFieldsCount(folders);
+    r.shipFocus   = pickFocus(folders, want);
+    line('cols', '2 · The current query, raw — folders returned', String(folders.length));
+    line('cols', '2 · …with a populated listItem.fields',
+         r.shipWith + ' of ' + folders.length,
+         r.shipWith ? 'ok' : 'bad');
+    if(raw && raw['@odata.nextLink']){
+      line('cols', '2 · More pages exist', 'only the first page was read — enough to decide this', 'warn');
+    }
+    dump.push('== 2 · CURRENT QUERY ==\n' + r.base + Q_SHIPPED + '\n\n' +
+              (r.shipFocus ? JSON.stringify(r.shipFocus, null, 2) : '(no folders returned)'));
+
+    /* ---- reading 3: the documented form ---- */
+    return graphGet(r.base + Q_PROPOSED);
+  }).then(function(raw){
+    var folders = rawFolders(raw);
+    r.fixFolders = folders.length;
+    r.fixWith    = withFieldsCount(folders);
+    r.fixFocus   = pickFocus(folders, want);
+    line('cols', '3 · The documented query, raw — folders returned', String(folders.length));
+    line('cols', '3 · …with a populated listItem.fields',
+         r.fixWith + ' of ' + folders.length,
+         r.fixWith ? 'ok' : 'bad');
+    dump.push('== 3 · PROPOSED QUERY ==\n' + r.base + Q_PROPOSED + '\n\n' +
+              (r.fixFocus ? JSON.stringify(r.fixFocus, null, 2) : '(no folders returned)'));
+
+    /* The columns themselves, for as many folders as fit on a phone. This is
+       what somebody standing in front of the library can check by eye. */
+    line('cols', '', '');
+    folders.slice(0, COLS_LIST_CAP).forEach(function(it){
+      var f = it.listItem && it.listItem.fields;
+      line('cols', it.name, f ? colsOf(f) : 'no fields object at all', f ? '' : 'bad');
+    });
+    if(folders.length > COLS_LIST_CAP){
+      line('cols', '…and ' + (folders.length - COLS_LIST_CAP) + ' more', 'not listed, to keep this readable');
+    }
+
+    /* ---- the drift check ---- */
+    line('cols', '', '');
+    if(r.shipWith !== r.appWith || r.shipFolders !== r.appFolders){
+      line('cols', 'WARNING — readings 1 and 2 disagree',
+           'the query literal on this page is out of step with ds-sharepoint.js. ' +
+           'Reading 1 is the app; trust it, and update Q_SHIPPED here.', 'bad');
+    }
+
+    /* ---- the verdict ---- */
+    var blind = (r.appFolders > 0 && r.appWith === 0);
+    var verdict, cls;
+    if(!r.appFolders){
+      verdict = 'the library root has no folders, so there was nothing to read. ' +
+                'Nothing is proved either way — run this where inspections exist.';
+      cls = 'warn';
+    } else if(blind && r.fixWith > 0){
+      verdict = 'FAULT 1 CONFIRMED. The app receives no columns; the documented ' +
+                'query receives them from the same folders at the same moment. ' +
+                'The query string is the fault and the change is the fix.';
+      cls = 'bad';
+    } else if(blind && r.fixWith === 0){
+      verdict = 'the app is blind to the columns — but so is the documented query, ' +
+                'so the query string is NOT the whole story. Check the columns ' +
+                'exist on the library and that this account can see them. ' +
+                'Do not change the query on this evidence.';
+      cls = 'warn';
+    } else if(r.appWith < r.appFolders){
+      verdict = 'the app reads columns from ' + r.appWith + ' of ' + r.appFolders +
+                ' folders. Partial, not blind — so the query works, and the folders ' +
+                'without columns were never tagged. That is a different fault.';
+      cls = 'warn';
+    } else {
+      verdict = 'the app reads the columns from every folder. Fault 1 is NOT ' +
+                'reproducing here — do not change the query. Check this is the ' +
+                'device, the account and the library that failed.';
+      cls = 'ok';
+    }
+    line('cols', 'VERDICT', verdict, cls);
+
+    if(want && r.fixFocus && String(r.fixFocus.name).toLowerCase().indexOf(want.toLowerCase()) === -1){
+      line('cols', 'Note', '"' + want + '" was not found — printed "' + r.fixFocus.name + '" instead', 'warn');
+    }
+    el('colsraw').textContent = dump.join('\n\n');
+  }).catch(function(e){
+    line('cols', 'FAILED', (e && e.message) || String(e), 'bad');
+    if(e && e.status === 403){
+      line('cols', 'Diagnosis', 'signed in, but not permitted to read this library', 'bad');
+    } else if(e && e.status === 400){
+      line('cols', 'Diagnosis',
+           'Graph rejected the query outright. That is itself an answer — read the body below.', 'bad');
+    }
+    if(e && e.body) el('colsraw').textContent = e.body;
+  }).then(function(){
+    el('btn-cols').disabled = false;
+  });
+}
+
+/* ---------- 8 · where the storage has gone ----------
+   Fault 2 of docs/HANDOFF-baton-columns-not-read-and-storage.md. A device
+   reporting 140.5 MB in use while showing "No inspections yet".
+
+   Before this existed the page read only the media store, so it could report
+   which photos were stranded but had nothing whatever to say about where the
+   space went. Attribution first: blaming the sweep before knowing whether the
+   bytes are even in this app's database is how a session gets spent on the
+   wrong layer. Read-only throughout — this page does not sweep, tidy or delete. */
+
+function mb(n){
+  if(n === null || n === undefined || isNaN(n)) return '?';
+  return (n / 1048576).toFixed(1) + ' MB';
+}
+
+/* An approximate size for anything IndexedDB will hand back. Exact where it
+   matters — an ArrayBuffer IS the photograph and its byteLength is the truth.
+   Everything else is small enough that an estimate cannot mislead. */
+function approxBytes(v, depth){
+  depth = depth || 0;
+  if(v === null || v === undefined) return 0;
+  if(depth > 8) return 0;                       /* cycles, and silly nesting */
+  var t = typeof v;
+  if(t === 'string')  return v.length * 2;
+  if(t === 'number')  return 8;
+  if(t === 'boolean') return 4;
+  if(v instanceof ArrayBuffer) return v.byteLength;
+  if(ArrayBuffer.isView(v)) return v.byteLength;
+  if(typeof Blob !== 'undefined' && v instanceof Blob) return v.size;
+  if(v instanceof Date) return 8;
+  if(Array.isArray(v)){
+    var n = 0;
+    for(var i = 0; i < v.length; i++) n += approxBytes(v[i], depth + 1);
+    return n;
+  }
+  if(t === 'object'){
+    var s = 0;
+    for(var k in v){
+      if(Object.prototype.hasOwnProperty.call(v, k)) s += k.length * 2 + approxBytes(v[k], depth + 1);
+    }
+    return s;
+  }
+  return 0;
+}
+
+/* A cursor, not getAll(). The bytes store holds whole photographs and videos,
+   and getAll() would pull every one of them into memory at once on the device
+   least able to afford it. Running the phone out of memory inside the page that
+   exists to diagnose running the phone out of space would be a poor joke —
+   and the app's own sweepOrphanBytes() does exactly that at index.html:4573,
+   which is worth a look once this has produced its numbers. */
+function walkStore(db, name, onRow){
+  return new Promise(function(res, rej){
+    var rq;
+    try { rq = db.transaction(name).objectStore(name).openCursor(); }
+    catch(e){ return rej(e); }
+    rq.onerror = function(){ rej(rq.error || new Error('cursor failed')); };
+    rq.onsuccess = function(){
+      var c = rq.result;
+      if(!c) return res();
+      try { onRow(c.value, c.key); } catch(e){}
+      c.continue();
+    };
+  });
+}
+
+var CACHE_SCAN_CAP = 400;
+var ORPHAN_LIST_CAP = 12;
+
+/* Taken BEFORE the app boots, and this is not a nicety.
+
+   Loading the app in the frame carries ?nosw=1, and index.html:4984 answers that
+   flag by unregistering every service worker AND DELETING EVERY CACHE on the
+   origin. So by the time anybody taps "Measure everything", the caches this
+   section exists to attribute have already been destroyed by the act of opening
+   the page, and the storage figure has moved because deleting them freed space.
+
+   The first version of this section measured after boot and confidently reported
+   nought caches on a device that had two. Section 6 learned the same lesson about
+   the media store one fault earlier; this is that lesson applied to the caches. */
+var CACHE_SNAPSHOT = null;      /* [{name, entries, bytes|null}] */
+var ESTIMATE_SNAPSHOT = null;   /* {usage, quota, details} */
+
+/* Names and counts first, sizes second. If the deadline bites we still want the
+   names, because "is there a cache here belonging to another build" is the
+   question that matters most and it is answered by the name alone. */
+function collectCaches(deadline){
+  if(!(window.caches && caches.keys)) return Promise.resolve(null);
+  var stop = false;
+  setTimeout(function(){ stop = true; }, deadline || 6000);
+
+  return caches.keys().then(function(keys){
+    keys = keys || [];
+    return keys.reduce(function(chain, name){
+      return chain.then(function(acc){
+        return caches.open(name).then(function(c){
+          return c.keys().then(function(reqs){
+            reqs = reqs || [];
+            var row = {name: name, entries: reqs.length, bytes: stop ? null : 0};
+            if(stop) { acc.push(row); return acc; }
+            var take = reqs.slice(0, CACHE_SCAN_CAP);
+            row.capped = reqs.length > CACHE_SCAN_CAP;
+            return take.reduce(function(inner, rq){
+              return inner.then(function(){
+                if(stop){ row.bytes = null; return null; }
+                return c.match(rq).then(function(resp){
+                  if(!resp) return null;
+                  var len = resp.headers.get('content-length');
+                  if(len && !isNaN(+len)){ row.bytes += +len; return null; }
+                  return resp.blob().then(function(b){ row.bytes += b.size; }, function(){});
+                }, function(){});
+              });
+            }, Promise.resolve()).then(function(){ acc.push(row); return acc; });
+          });
+        }, function(){
+          acc.push({name: name, entries: null, bytes: null});
+          return acc;
+        });
+      });
+    }, Promise.resolve([]));
+  }, function(){ return null; });
+}
+
+/* Both snapshots, with their own deadline, so a slow or broken cache store can
+   never stop the page loading. Everything here is read-only. */
+function snapshotOrigin(next){
+  var moved = false;
+  function go(){ if(!moved){ moved = true; next(); } }
+  var bail = setTimeout(go, 7000);
+
+  var est = (navigator.storage && navigator.storage.estimate)
+    ? navigator.storage.estimate().then(function(e){
+        ESTIMATE_SNAPSHOT = {usage: e.usage || 0, quota: e.quota || 0,
+                             details: e.usageDetails || null};
+      }, function(){})
+    : Promise.resolve();
+
+  est.then(function(){ return collectCaches(5000); })
+     .then(function(rows){ CACHE_SNAPSHOT = rows; })
+     .catch(function(){})
+     .then(function(){ clearTimeout(bail); go(); });
+}
+
+function measureStorage(){
+  clear('storage');
+  el('btn-storage').disabled = true;
+
+  var total = {usage: 0, quota: 0, idb: 0, cache: 0, local: 0, detailed: false};
+
+  /* ---- what the browser says, for the whole origin ---- */
+  function stepEstimate(){
+    if(!(navigator.storage && navigator.storage.estimate)){
+      line('storage', 'Browser storage estimate', 'not available here', 'warn');
+      return Promise.resolve();
+    }
+    /* The snapshot, not a fresh reading. A fresh one is taken after this page
+       has already deleted the caches, and would understate the figure that is
+       actually under investigation. */
+    var snap = ESTIMATE_SNAPSHOT;
+    return navigator.storage.estimate().then(function(live){
+      var e = snap || live;
+      total.usage = e.usage || 0;
+      total.quota = e.quota || 0;
+      var pct = e.quota ? Math.round((e.usage / e.quota) * 100) : 0;
+      line('storage', 'WHOLE ORIGIN — in use AS FOUND, before this page booted',
+           mb(e.usage) + ' of ' + mb(e.quota) + ' (' + pct + '%)', pct > 85 ? 'warn' : '');
+      if(snap){
+        line('storage', '  · and now, after this page cleared the caches',
+             mb(live.usage) + '   (the drop is this page\u2019s own doing, not a leak)');
+      } else {
+        line('storage', '  · snapshot unavailable',
+             'this is a reading taken AFTER the caches were cleared, so it understates ' +
+             'what was there. Reopen the page and let it settle before tapping.', 'warn');
+      }
+      line('storage', 'Origin measured', location.origin);
+      var d = e.details || e.usageDetails;
+      if(d && Object.keys(d).length){
+        total.detailed = true;
+        total.saysCache = d.caches || 0;
+        total.saysIdb   = d.indexedDB || 0;
+        Object.keys(d).forEach(function(k){ line('storage', '  · ' + k, mb(d[k])); });
+      } else {
+        line('storage', '  · the browser offers no breakdown by kind',
+             'so the rows below measure it directly', 'warn');
+      }
+    }, function(){
+      line('storage', 'Browser storage estimate', 'failed', 'warn');
+    });
+  }
+
+  /* Every database on the origin, not just this app's. The live v1.3 app and
+     the beta share this origin, and a database belonging to the other one is a
+     perfectly good explanation for space this app cannot account for. */
+  function stepDatabases(){
+    if(typeof indexedDB.databases !== 'function'){
+      line('storage', 'Databases on this origin', 'this browser will not list them', 'warn');
+      return Promise.resolve();
+    }
+    return indexedDB.databases().then(function(list){
+      list = list || [];
+      line('storage', 'Databases on this origin', String(list.length));
+      list.forEach(function(d){
+        line('storage', '  · ' + (d.name || '(unnamed)'), 'version ' + (d.version === undefined ? '?' : d.version),
+             d.name === 'ds-inspections' ? '' : 'warn');
+      });
+    }, function(){
+      line('storage', 'Databases on this origin', 'could not be listed', 'warn');
+      return null;
+    });
+  }
+
+  /* ---- every store in this app's database, counted and weighed ---- */
+  function stepStores(){
+    return new Promise(function(res){
+      var open = indexedDB.open('ds-inspections');
+      var bail = setTimeout(function(){
+        line('storage', 'ds-inspections', 'did not open within 8 seconds — another tab may hold it', 'bad');
+        res();
+      }, 8000);
+      open.onerror = function(){
+        clearTimeout(bail);
+        line('storage', 'Could not open ds-inspections', String(open.error || 'unknown'), 'bad');
+        res();
+      };
+      open.onsuccess = function(){
+        clearTimeout(bail);
+        var db = open.result;
+        var names = Array.prototype.slice.call(db.objectStoreNames);
+        var inspIds = {}, media = {}, byteRows = [];
+        var chain = Promise.resolve();
+
+        line('storage', '', '');
+        line('storage', 'DATABASE ds-inspections — version ' + db.version,
+             names.length + ' stores');
+
+        names.forEach(function(n){
+          chain = chain.then(function(){
+            var rows = 0, bytes = 0, orig = 0, rep = 0;
+            return walkStore(db, n, function(v){
+              rows++;
+              bytes += approxBytes(v);
+              if(n === 'bytes'){
+                byteRows.push(v && v.mid);
+                orig += approxBytes(v && v.original);
+                rep  += approxBytes(v && v.report);
+              } else if(n === 'media'){
+                if(v && v.mid) media[v.mid] = {iid: (v.iid || null), name: (v.name || v.mid)};
+              } else if(n === 'inspections'){
+                if(v && v.id) inspIds[v.id] = true;
+              }
+            }).then(function(){
+              total.idb += bytes;
+              line('storage', 'store: ' + n, rows + ' rows · ' + mb(bytes));
+              if(n === 'bytes' && rows){
+                line('storage', '  · originals', mb(orig));
+                line('storage', '  · reports', mb(rep));
+              }
+            }, function(e){
+              line('storage', 'store: ' + n, 'could not be read — ' + ((e && e.message) || e), 'bad');
+            });
+          });
+        });
+
+        chain.then(function(){
+          /* The lead from the handoff: six media records on a device carrying a
+             single two-photo inspection. A media record whose inspection is gone
+             is nobody's job to clear — sweepOrphanBytes() reclaims bytes whose
+             MEDIA record has gone, which is the next link down the chain. */
+          var inspCount   = Object.keys(inspIds).length;
+          var mids        = Object.keys(media);
+          var orphanMedia = mids.filter(function(m){
+            var iid = media[m].iid;
+            return !iid || !inspIds[iid];
+          });
+          var orphanBytes = byteRows.filter(function(m){ return !m || !media[m]; });
+
+          line('storage', '', '');
+          line('storage', 'Inspections on this device', String(inspCount));
+          line('storage', 'Media records', String(mids.length));
+          line('storage', 'Media records whose inspection is gone',
+               String(orphanMedia.length) +
+               (orphanMedia.length ? '   nothing reclaims these' : ''),
+               orphanMedia.length ? 'bad' : 'ok');
+          line('storage', 'Byte records whose media record is gone',
+               String(orphanBytes.length) +
+               (orphanBytes.length ? '   sweepOrphanBytes() should reclaim these' : ''),
+               orphanBytes.length ? 'warn' : 'ok');
+
+          orphanMedia.slice(0, ORPHAN_LIST_CAP).forEach(function(m){
+            line('storage', '  orphan media: ' + media[m].name,
+                 'iid=' + (media[m].iid || '(none)'), 'bad');
+          });
+          if(orphanMedia.length > ORPHAN_LIST_CAP){
+            line('storage', '  …and ' + (orphanMedia.length - ORPHAN_LIST_CAP) + ' more', '');
+          }
+          res();
+        });
+      };
+    });
+  }
+
+  /* ---- the caches, and which build each one belongs to ---- */
+  function stepCaches(){
+    if(!(window.caches && caches.keys)){
+      line('storage', 'Caches', 'not available here', 'warn');
+      return Promise.resolve();
+    }
+    var current = null;
+    /* Read the live CACHE_VERSION out of sw.js rather than repeating it here.
+       A second copy of a version string is a second thing to forget to bump,
+       and this page must never be the reason a stale build looks current. */
+    return window.fetch('sw.js?diag=' + Date.now(), {cache: 'no-store'})
+      .then(function(r){ return r.ok ? r.text() : ''; }, function(){ return ''; })
+      .then(function(src){
+        var m = src.match(/CACHE_VERSION\s*=\s*'([^']+)'/);
+        current = m ? m[1] : null;
+        line('storage', '', '');
+        line('storage', 'Current CACHE_VERSION, read from sw.js',
+             current || 'could not be read', current ? '' : 'warn');
+        return caches.keys();
+      })
+      .then(function(){
+        var rows = CACHE_SNAPSHOT;
+        if(!rows){
+          line('storage', 'Caches AS FOUND', 'could not be captured before boot', 'bad');
+          return null;
+        }
+        line('storage', 'Caches AS FOUND, before this page cleared them', String(rows.length));
+        rows.forEach(function(r){
+          var stale = !!(current && r.name !== current);
+          total.cache += (r.bytes || 0);
+          line('storage', 'cache: ' + r.name,
+               (r.entries === null ? '?' : r.entries) + ' entries · ' +
+               (r.bytes === null ? 'size not measured in time' : mb(r.bytes)) +
+               (r.capped ? '   (first ' + CACHE_SCAN_CAP + ' measured)' : '') +
+               (stale ? '   NOT THE CURRENT BUILD' : ''),
+               stale ? 'warn' : 'ok');
+        });
+        if(!rows.length){
+          line('storage', '  · nothing was cached',
+               'no offline copy of either app was on this device when the page opened');
+        }
+        /* Proof the wipe happened, so nobody reads the empty cache store later
+           and concludes the device never had one. */
+        return caches.keys().then(function(now){
+          line('storage', '  · caches remaining now', String((now || []).length) +
+               ' — this page deleted them via ?nosw=1, which is expected');
+        }, function(){ return null; });
+      })
+      .then(function(){
+        line('storage', '  · note',
+             'cross-origin cached files measure as zero here and are padded in the ' +
+             'browser’s own accounting, so a cache can cost more than it reports');
+      }, function(e){
+        line('storage', 'Caches', 'could not be read — ' + ((e && e.message) || e), 'bad');
+      });
+  }
+
+  function stepLocal(){
+    try {
+      var n = 0, count = 0;
+      for(var i = 0; i < localStorage.length; i++){
+        var k = localStorage.key(i);
+        n += (k.length + (localStorage.getItem(k) || '').length) * 2;
+        count++;
+      }
+      total.local = n;
+      line('storage', 'localStorage', count + ' keys · ' + mb(n));
+    } catch(e){
+      line('storage', 'localStorage', 'could not be read', 'warn');
+    }
+    return Promise.resolve();
+  }
+
+  /* ---- what is left over, which is the whole point ---- */
+  function stepResidual(){
+    var measured = total.idb + total.cache + total.local;
+    line('storage', '', '');
+    line('storage', 'Measured: database + caches + localStorage', mb(measured));
+    if(total.detailed){
+      /* Where the browser will break its own figure down, set the two side by
+         side per kind. A matching total can still be two errors cancelling
+         each other out, and this page gets one run on the device that failed. */
+      line('storage', '  · caches — browser says / measured here',
+           mb(total.saysCache) + ' / ' + mb(total.cache));
+      line('storage', '  · database — browser says / measured here',
+           mb(total.saysIdb) + ' / ' + mb(total.idb));
+      line('storage', '  · why they differ',
+           'the browser counts what a store costs on disk, including padding for ' +
+           'cross-origin files and space it has not reclaimed yet. These rows count ' +
+           'what is actually in it. It can land either side: LARGER when space is ' +
+           'held but not in use, SMALLER when the figure has not caught up with a ' +
+           'recent write. Neither is a fault on its own — the gap is what to explain.');
+    }
+    if(!total.usage){
+      line('storage', 'Nothing to compare it against', 'the browser gave no figure', 'warn');
+      return;
+    }
+    var left = total.usage - measured;
+    var MARGIN = 20 * 1048576;
+    var verdict, cls;
+    if(left > MARGIN){
+      verdict = 'something is holding space these rows do not account for. Take it ' +
+                'in this order, and stop at the first one that explains it: a cache ' +
+                'belonging to another build (see the cache rows — this origin serves ' +
+                'the live app and the beta together), a database this page did not ' +
+                'open (see the database list), or a figure that is simply stale — ' +
+                'the browser is entitled to keep reporting space it has already ' +
+                'freed. Measure again in a minute and then again after reopening ' +
+                'the browser: a figure that falls on its own was never a leak. ' +
+                'Do not change app code until one of these is shown to be it.';
+      cls = 'bad';
+    } else if(left < -MARGIN){
+      verdict = 'more was measured than the browser admits to using, so its figure ' +
+                'is behind what is really stored — it updates lazily, and it has ' +
+                'just been caught doing so. Trust the store rows above, not the ' +
+                'headline. Worth holding on to: the same laziness in the other ' +
+                'direction reports space that has already been freed, which is one ' +
+                'of the things that could make an empty device look full.';
+      cls = 'warn';
+    } else {
+      verdict = 'the rows above account for what the browser reports, so the space ' +
+                'is where these numbers say it is';
+      cls = 'ok';
+    }
+    line('storage', 'Unattributed — reported minus measured', mb(left),
+         cls === 'ok' ? 'ok' : cls);
+    line('storage', 'What that means', verdict, cls);
+  }
+
+  stepEstimate()
+    .then(stepDatabases)
+    .then(stepStores)
+    .then(stepCaches)
+    .then(stepLocal)
+    .then(stepResidual)
+    .catch(function(e){
+      line('storage', 'FAILED', (e && e.message) || String(e), 'bad');
+    })
+    .then(function(){
+      el('btn-storage').disabled = false;
+    });
+}
+
 /* ---------- copy everything ---------- */
 function copyAll(){
   var text = ['Dryspace upload diagnostics', new Date().toISOString(),
               navigator.userAgent, ''].join('\n');
-  ['env', 'blobs', 'token', 'drive', 'upload'].forEach(function(id){
+  ['env', 'blobs', 'token', 'drive', 'upload', 'state', 'cols', 'storage'].forEach(function(id){
     var t = el(id).innerText.trim();
     if(t) text += '\n== ' + id + ' ==\n' + t + '\n';
   });
+  /* The raw Graph responses go in whole. They are the evidence section 7
+     exists to produce, and a summary of evidence is not evidence. */
+  var raw = el('colsraw').textContent.trim();
+  if(raw && raw !== 'Nothing yet.') text += '\n== raw graph responses ==\n' + raw + '\n';
   text += '\n== request trace ==\n' + el('trace').textContent;
   if(navigator.clipboard && navigator.clipboard.writeText){
     navigator.clipboard.writeText(text).then(function(){
@@ -684,8 +1415,13 @@ function copyAll(){
      runs its start-up recovery, which moves anything left in 'uploading' back
      to 'queued' — so the very state this page exists to capture is gone by
      the time anybody taps the button. It happened on the first real use. */
+  /* Both snapshots before the frame is given a src. Loading the app deletes
+     every cache on the origin and moves the storage figure, so anything not
+     captured here is captured too late to mean anything. */
   snapshotStoredState(function(){
-    f.src = 'index.html?nosw=1&diag=' + Date.now();
+    snapshotOrigin(function(){
+      f.src = 'index.html?nosw=1&diag=' + Date.now();
+    });
   });
 
   el('btn-blobs').onclick = checkBlobs;
@@ -694,6 +1430,8 @@ function copyAll(){
   el('btn-drive').onclick = checkDrive;
   el('btn-upload').onclick = runUpload;
   el('btn-state').onclick = readStoredState;
+  el('btn-cols').onclick = compareColumnQueries;
+  el('btn-storage').onclick = measureStorage;
   el('btn-copy').onclick = copyAll;
 })();
 </script>
