@@ -892,7 +892,20 @@ function dropDatabase(){
     line('dropdb', 'Storage after', mb(after));
     line('dropdb', 'Reclaimed', mb(freed), freed > 20 * 1048576 ? 'ok' : 'warn');
 
-    if(freed > 20 * 1048576){
+    /* There was nothing here to reclaim, so this run cannot say where the space
+       had been. Reporting "the file was NOT where the space was" from an already
+       empty device is a verdict drawn from no evidence - which is exactly what
+       happened on 22 August at 1:24am, on a device something had already freed
+       between one run and the next. */
+    if(beforeUsage < 20 * 1048576){
+      line('dropdb', 'RESULT',
+           'INCONCLUSIVE. Only ' + mb(beforeUsage) + ' was in use before this ran, ' +
+           'so there was nothing to reclaim and this run proves nothing about where ' +
+           'the space had been. Something freed it earlier. If a previous delete ' +
+           'reported a timeout, it may well have completed afterwards once the tab ' +
+           'holding the database closed - a delete that times out here is abandoned ' +
+           'by this page, not cancelled in the browser.', 'warn');
+    } else if(freed > 20 * 1048576){
       line('dropdb', 'RESULT',
            'the space came back, so it was the database file holding it — records ' +
            'were deleted, the file that held them was not. That is the answer to ' +
