@@ -274,3 +274,37 @@ TEST-SCRIPT FAULT, fixed for next time: Step 4 says you "should see" Force the
 handover. That is only true when current/ is empty. Do not hand the inspection
 over again between Step 3 and Step 5 - it refills current/ and puts you back
 to "Take it over".
+
+
+===========================================================================
+RUN 1, PART 2 — the confirming check was done. Finding 1 was WRONG, and the
+real fault is worse.
+===========================================================================
+
+Check A was run: the file was moved out of current/ into archive/ by hand.
+
+RESULT: the app now offered "Ask for the baton", "View it" and "Open the folder
+in SharePoint" - but still NOT "Force the handover". The badge read:
+
+        Baton: NOT HANDED OVER
+        "photos uploaded, but the record has never been sent"
+
+while the library, at the same moment, showed that same folder as
+BatonStatus = Waiting (green), BatonHolder = Jamie Stone.
+
+So emptying current/ DID change the state - the file half of the logic works,
+and the earlier theory that nothing ever empties current/ was wrong. The real
+fault is that the app is not receiving the library columns at all:
+BatonHolder reads as empty, so batonState() can never return 'held', so
+"Force the handover" can never be offered to anyone.
+
+Suspected cause is one line - ds-sharepoint.js:350 uses
+expand=listItem($select=fields), which selects the fields property without
+expanding it. Full brief, including what must be proven before it is changed:
+docs/HANDOFF-baton-columns-not-read-and-storage.md
+
+STORAGE, continued: with ALL inspections deleted from the device and the home
+screen reading "No inspections yet", the footer still reported 140.5 MB. The
+fault this was supposed to have fixed reported 139.9 MB. Confirmed as a real
+anomaly; still not diagnosed, and note the figure is whole-origin so it covers
+the live v1.3 app as well as the beta.
