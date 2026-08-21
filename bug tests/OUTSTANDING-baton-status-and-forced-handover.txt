@@ -308,3 +308,65 @@ screen reading "No inspections yet", the footer still reported 140.5 MB. The
 fault this was supposed to have fixed reported 139.9 MB. Confirmed as a real
 anomaly; still not diagnosed, and note the figure is whole-origin so it covers
 the live v1.3 app as well as the beta.
+
+
+================================================================================
+RUN 2 - 22 August 2026, real iPhone (iOS 18.7, Safari 26.6), real SharePoint
+================================================================================
+
+FAULT 1 IS CONFIRMED AND FIXED. The suspicion from run 1 was proved before
+anything was changed, using diagnostics.html section 7, which takes three
+readings of the same library root in the same moment.
+
+    Reading 1  the app's own list()          0 of 3 folders carried columns
+    Reading 2  the old query, raw            0 of 3
+    Reading 3  $expand=listItem($expand=fields)   3 of 3
+
+The raw responses are the argument. Under the old form listItem came back as
+{"@odata.etag": ...} and nothing else. Under the documented form the same
+folder carried its fields, and Graph's own context URL acknowledged the
+expansion as listItem(fields()). The folder read:
+
+    INS - 22xx - Frinight TestClient
+    BatonStatus = Waiting   BatonHolder = Jamie Stone   Stage = S01-OFFICE
+
+Set the whole time, and invisible to the app.
+
+Fixed in ds-sharepoint.js, one line, shipped exactly as tested. Section 7 now
+keeps the old form as a CONTROL that must keep returning nothing, so the same
+fault cannot come back unnoticed.
+
+STEP 5 IS STILL NOT RUN. "Force the handover" is gated on the 'held' state,
+which needs BatonHolder, which is why it could never be offered. The transport
+is fixed and proved; the BUTTON has still never been seen. That needs a second
+person - every run so far has had one person as both administrator and holder,
+which is not what the feature is for.
+
+STORAGE IS RESOLVED. Not an app fault, and not a misread figure either.
+
+  - 137.5 MB reported on a device with no inspections; iOS Settings > Safari >
+    Advanced > Website Data independently showed github.io at 145 MB, so the
+    space was real.
+  - Everything enumerable was measured and empty: three stores with nought
+    rows, exactly one database on the origin, one cache at 0.2 MB belonging to
+    the current build, localStorage negligible.
+  - Cause: WebKit keeps IndexedDB in a file that does not shrink when records
+    are deleted. Deleting the DATABASE removes the file.
+  - Proved: the delete appeared to time out at 1:10am and the space came back
+    anyway - 139.0 MB before, 0.9 MB by 1:24am, tester still signed in and
+    having deleted nothing through Settings. A deleteDatabase that times out is
+    abandoned by the calling page, NOT cancelled by the browser; it completed
+    once the tab holding the database closed.
+  - Device now reports 1.6 MB.
+
+A SECOND APP FAULT WAS FOUND ON THE WAY. openDB() handled onblocked but never
+set onversionchange, so a tab with the app open never released the database and
+any delete or upgrade from another context hung silently. DB_VERSION is 2 - the
+next schema change would have deadlocked for anyone with two tabs open. Fixed.
+
+AND THE FOOTER WAS FIXED. "Device storage used by this app" was reporting the
+whole origin. It now reports what the app actually holds, which is the line
+staff read and were right to be alarmed by.
+
+Full brief for the next session:
+docs/HANDOFF-22-august-baton-and-storage.md

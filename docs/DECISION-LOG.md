@@ -807,6 +807,95 @@ Full brief, including five hypotheses already disproved and the verification bar
 
 ---
 
+---
+
+## 4d. The storage figure in the footer was never the app's to report
+
+**22 August 2026.** The footer read *"Device storage used by this app:
+`navigator.storage.estimate().usage`"*. That figure is the **whole origin** — on
+`ds-js1.github.io` that is the live v1.3 app alongside the beta, plus anything
+WebKit has not reclaimed. A device with no inspections on it reported 137.5 MB,
+and iOS Settings agreed the space was genuinely held.
+
+**Decided: report what the app holds, and keep the origin figure for pressure.**
+Two numbers answer two different questions and only one of them belongs in that
+sentence:
+
+- *"How much of this phone is my work app using?"* — answered from the app's own
+  records, summed from `origSize` on the media rows. This is what staff read.
+- *"Will the next photograph save?"* — answered by origin usage against origin
+  quota, which is what the browser will actually enforce. `pressure()` still gets
+  that figure and is unchanged.
+
+**Why it matters beyond tidiness.** Staff seeing a work app apparently consuming
+140 MB of their phone were reading the line correctly — the number was real and
+the attribution was false. That erodes trust in an app people are asked to carry
+to site, and it does it silently.
+
+**Rejected: dropping the line.** It is the only place the app says anything about
+what it is holding, and "uploaded photos can be freed" is a genuinely useful
+prompt. The line was not the problem; the number in it was.
+
+---
+
+## 4e. `openDB()` must yield the database, not only complain about being blocked
+
+**22 August 2026.** `openDB()` handled `onblocked` and never set
+`onversionchange`. Those are two halves of one protocol: `onblocked` is *"somebody
+else is holding the database"*; `onversionchange` is how a context **stops being
+that somebody**. Only the complaining half existed.
+
+**Consequence, found by the diagnostics page and not by anything else:** a tab with
+the app open never released the database, so a delete or an upgrade from any other
+context waited indefinitely. WebKit does not reliably fire `onblocked` for a
+delete, so the caller saw no success, no error and no explanation.
+
+**This is not a diagnostics problem.** `DB_VERSION` is 2. The next schema change
+to 3 would have deadlocked for any user with the app open in two tabs, and
+presented as a silent hang on start-up — the failure mode this project has spent
+two releases learning to fear.
+
+**Decided: close and drop the handle on `versionchange`**, so the next `openDB()`
+reopens on demand. It fires only when another context deliberately asks for an
+upgrade or a delete, which in practice means `diagnostics.html`. The cost is a
+reopen; the alternative is a hang with no message.
+
+---
+
+## 4f. WebKit holds the space after the records are gone
+
+**22 August 2026, settled on a real iPhone.** A device with every store empty
+reported ~140 MB. Ruled out **by measurement, not by argument**: IndexedDB held
+three stores with nought rows, exactly one database existed on the origin, one
+cache held 0.2 MB and belonged to the current build, and localStorage was
+negligible. iOS *Settings → Safari → Advanced → Website Data* independently
+reported `github.io` at 145 MB, which killed the "the figure is fiction"
+hypothesis — the space was real.
+
+**What it was:** WebKit keeps IndexedDB in a file that does not shrink when
+records are deleted. Emptying a store frees pages inside the file; the file stays
+the size it grew to. Deleting the **database** removes the file.
+
+**How it was proved:** the delete ran, appeared to time out, and the space came
+back anyway — 139.0 MB before, 0.9 MB at the next run fourteen minutes later, with
+the tester still signed in and having deleted nothing through Settings. A
+`deleteDatabase` that times out is abandoned by the calling page, **not cancelled
+by the browser**: it stayed queued and completed once the tab holding the database
+closed. Nothing else on that device could have freed the space.
+
+**Decided: no app-side reclaim, and no automatic database deletion.** Deleting the
+database is a sound reclaim on an *empty* device and an unacceptable risk on any
+other, and the trigger for "empty" would have to be exactly right every time
+forever. The non-negotiable is that a local original is never deleted until it is
+verified in SharePoint; a mechanism that removes the whole store is one bug away
+from breaking it. The reclaim stays a deliberate act in `diagnostics.html`, behind
+a guard that counts the stores at the moment of the tap.
+
+**What ships instead is honesty** — 4d above. Staff no longer see the browser's
+unreclaimed space attributed to the app.
+
+---
+
 ## 5. Open questions
 
 | Question | Blocking | Notes |
