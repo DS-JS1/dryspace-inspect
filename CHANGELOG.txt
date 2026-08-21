@@ -1,6 +1,58 @@
 Dryspace Site Inspection App — Changelog
 ========================================
 
+DIAGNOSTICS - 22 August 2026 - a guarded delete-database button, and Website Data
+- Website Data on the tester's iPhone reads github.io = 145 MB against the page's
+  137.5 MB for the origin. Two measurements, one of them from outside the page's
+  own APIs, and they agree. THE SPACE IS REAL. The "stale figure" hypothesis that
+  was leading after the first run is dead, and it was killed by asking iOS rather
+  than by arguing. Caveat recorded: iOS groups by registrable domain, so that
+  145 MB is all of *.github.io, not ds-js1 alone.
+- What is left, after IndexedDB, Cache Storage and localStorage were all measured
+  and found empty: WebKit keeps IndexedDB in a file that does not shrink when
+  records are deleted. Emptying a store frees pages inside the file; the file
+  stays the size it grew to. Deleting the DATABASE removes the file instead.
+- Section 8 now has a delete-database button to settle it. If the figure falls,
+  that was the mechanism and this is the only thing that reclaims it. If it does
+  not fall, the explanation is wrong and the panel says so in those words rather
+  than congratulating itself.
+- IT REFUSES UNLESS THE DEVICE IS ALREADY EMPTY, and it counts all three stores
+  itself at the moment of the tap rather than trusting the reading from the panel
+  above. A destructive control acting on a measurement taken minutes earlier is
+  how the wrong device gets wiped. Refusal names what it found and deletes
+  nothing. Verified against a seeded record: refused, never reached the confirm,
+  record still there afterwards.
+- It closes the app frame before deleting. The app caches its connection in a
+  module-local _db and exposes no way to close it, so destroying the frame is the
+  only way to release it; without that, deleteDatabase() fires onblocked and
+  waits for ever. onblocked and a 15-second deadline are both handled and both
+  say what to do, because a delete that neither finishes nor reports is the
+  failure this whole page exists to prevent.
+- Three IndexedDB connections this page opens were never closed - in
+  collectStoredState(), the store walk, and readStoredState(). Harmless while
+  nothing deleted the database, and fatal to the delete the moment something did.
+  All three now close.
+- Verified end to end: stores grown with 40 MB then emptied, page reloaded, delete
+  run. Frame torn down, database gone, before and after both reported. On Chrome
+  the space had already been reclaimed by clear(), so it correctly reported that
+  the file was not where the space was - which is the answer for Chrome and is
+  itself consistent with WebKit being the outlier here.
+- Console errors were checked rather than assumed: a VersionError and a service
+  worker 404 appear at the moment the database is deleted from under the booting
+  app, surface no failure to the user, and do not recur on a normal load. That
+  state is only reachable through this button, whose flow removes the frame first.
+- Tests 550 of 550.
+- SEPARATELY, AND NOT YET DONE - index.html:2710 renders "Device storage used by
+  this app: <navigator.storage.estimate().usage>". That figure is the WHOLE
+  ORIGIN, which on this origin includes the live v1.3 app and anything WebKit has
+  not reclaimed. The label says "by this app" and the number does not measure
+  that. It is why staff see a work app apparently eating their phone. The wording
+  is wrong independently of where the 140 MB turns out to be, so it is worth
+  fixing either way - but the shape of the fix depends on the delete-database
+  result, so it waits for that. Note also that pressure() and pressureMessage()
+  are fed the same inflated figure, so a device could be warned about storage
+  pressure that is not there.
+
 FAULT 1 FIXED - 22 August 2026 - the app can read the library columns again
 - PATCH tier. Bug fix, no new capability, no schema change. Folder stays v1.4.
   ds-sharepoint.js and sw.js. APP_VER stays 1.4.0 because v1.4.0 has never been

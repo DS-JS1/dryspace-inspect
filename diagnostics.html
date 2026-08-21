@@ -22,6 +22,7 @@ p.lede{margin:0 0 14px;font-size:13px;opacity:.75}
 button{font:inherit;padding:10px 15px;border-radius:9px;border:1px solid #8886;background:#f4f4f5;
        color:inherit;margin:4px 6px 4px 0;cursor:pointer}
 button.primary{background:#0b57d0;border-color:#0b57d0;color:#fff}
+button.danger{background:#b3261e;border-color:#b3261e;color:#fff}
 button:disabled{opacity:.5}
 @media (prefers-color-scheme:dark){button{background:#2a2a2a}}
 .note{font-size:12px;opacity:.75;margin:8px 0 0}
@@ -200,6 +201,28 @@ input[type=text]{font:inherit;font-size:13px;padding:9px 10px;border-radius:9px;
   </p>
   <button id="btn-storage" class="primary">Measure everything</button>
   <div id="storage"></div>
+
+  <p class="note" style="border:2px solid #b3261e;border-radius:8px;padding:10px;margin-top:18px">
+    <strong>Delete the database — empty devices only.</strong>
+    On 22 August 2026 this device reported ~140 MB held while every store was
+    empty, and iOS Settings agreed, so the space is real rather than a misread
+    figure. The leading explanation is that WebKit keeps IndexedDB in a file that
+    does not shrink when records are deleted — the container stays big after the
+    contents go. Deleting the whole DATABASE removes the file rather than emptying
+    it, so if that is the explanation, this reclaims the space and the figure
+    falls. If it does not fall, the explanation is wrong and the space is
+    somewhere else.
+    <br><br>
+    <strong>This destroys every inspection, photo and byte record on the device.</strong>
+    It therefore refuses to run unless all three stores are already empty, and it
+    counts them itself at the moment you tap rather than trusting a reading from
+    earlier. It also closes the app running in the frame above, so reload this
+    page afterwards to use the other sections.
+    <br><br>
+    Nothing in SharePoint is touched.
+  </p>
+  <button id="btn-dropdb" class="danger">Delete the database</button>
+  <div id="dropdb"></div>
 
   <h2>Request trace</h2>
   <p class="note">Every Graph request this page made, in order, with timings.</p>
@@ -554,8 +577,8 @@ function collectStoredState(cb){
     var db = open.result;
     if(!db.objectStoreNames.contains('media')) return cb([], null);
     var rq = db.transaction('media').objectStore('media').getAll();
-    rq.onerror = function(){ cb(null, String(rq.error || 'unknown')); };
-    rq.onsuccess = function(){ cb(rq.result || [], null); };
+    rq.onerror = function(){ try { db.close(); } catch(e){} cb(null, String(rq.error || 'unknown')); };
+    rq.onsuccess = function(){ try { db.close(); } catch(e){} cb(rq.result || [], null); };
   };
 }
 
@@ -654,9 +677,189 @@ function readStoredState(){
              (r.remote && r.remote.itemId ? '  uploaded' : '') +
              (r.upErr ? '  err=' + r.upErr : ''));
       });
+      try { db.close(); } catch(e){}
       done();
     };
   };
+}
+
+/* ---------- 8b · delete the database ----------
+   The decisive test for fault 2, and possibly its only cure.
+
+   iOS Settings and the page agree that ~140 MB is held on a device whose every
+   store is empty, so the space is real. The leading explanation is that WebKit
+   keeps IndexedDB in a file that does not shrink when records are deleted:
+   emptying the stores frees pages inside the file and leaves the file the size
+   it grew to. Deleting the DATABASE removes the file instead of emptying it.
+
+   If the figure falls, that is the explanation and this is the reclaim. If it
+   does not, the explanation is wrong and the space is somewhere else. Either
+   answer is worth having; a button that only confirms is not a test. */
+
+/* Counted at the moment of the tap, never from an earlier reading. A stale
+   measurement is exactly how a destructive control ends up destroying
+   something. */
+function countAllStores(){
+  return new Promise(function(res, rej){
+    var open = indexedDB.open('ds-inspections');
+    var bail = setTimeout(function(){ rej(new Error('the database did not open within 8 seconds')); }, 8000);
+    open.onerror = function(){ clearTimeout(bail); rej(open.error || new Error('could not open')); };
+    open.onsuccess = function(){
+      clearTimeout(bail);
+      var db = open.result;
+      var names = Array.prototype.slice.call(db.objectStoreNames);
+      if(!names.length){ try { db.close(); } catch(e){} return res({}); }
+      var counts = {};
+      names.reduce(function(chain, n){
+        return chain.then(function(){
+          return new Promise(function(ok){
+            var rq = db.transaction(n).objectStore(n).count();
+            rq.onsuccess = function(){ counts[n] = rq.result; ok(); };
+            rq.onerror   = function(){ counts[n] = -1; ok(); };
+          });
+        });
+      }, Promise.resolve()).then(function(){
+        try { db.close(); } catch(e){}
+        res(counts);
+      });
+    };
+  });
+}
+
+/* The app caches its connection in a module-local `_db` and exposes no way to
+   close it, so the only reliable way to release it is to destroy the context
+   holding it. Removing the frame does that. Without this, deleteDatabase()
+   fires onblocked and waits for ever. */
+function closeTheApp(){
+  var f = el('app');
+  if(f){
+    try { f.src = 'about:blank'; } catch(e){}
+    try { f.parentNode && f.parentNode.removeChild(f); } catch(e){}
+  }
+  W = null;
+}
+
+function dropDatabase(){
+  clear('dropdb');
+  el('btn-dropdb').disabled = true;
+  function done(){ el('btn-dropdb').disabled = false; }
+
+  var beforeUsage = null;
+
+  countAllStores().then(function(counts){
+    var names = Object.keys(counts);
+    var occupied = names.filter(function(n){ return counts[n] > 0; });
+
+    names.forEach(function(n){
+      line('dropdb', 'store: ' + n,
+           (counts[n] < 0 ? 'could not be counted' : counts[n] + ' rows'),
+           counts[n] > 0 ? 'bad' : 'ok');
+    });
+
+    if(occupied.length){
+      line('dropdb', 'REFUSED',
+           'this device is not empty — ' +
+           occupied.map(function(n){ return counts[n] + ' in ' + n; }).join(', ') +
+           '. Nothing has been deleted. Send the inspections first, then come back.',
+           'bad');
+      throw {handled: true};
+    }
+    if(names.some(function(n){ return counts[n] < 0; })){
+      line('dropdb', 'REFUSED',
+           'a store could not be counted, so emptiness cannot be established. ' +
+           'Nothing has been deleted.', 'bad');
+      throw {handled: true};
+    }
+
+    line('dropdb', 'Every store is empty', 'safe to delete', 'ok');
+
+    return (navigator.storage && navigator.storage.estimate)
+      ? navigator.storage.estimate() : Promise.resolve(null);
+  }).then(function(est){
+    beforeUsage = est ? (est.usage || 0) : null;
+    if(beforeUsage !== null) line('dropdb', 'Storage before', mb(beforeUsage));
+
+    var ok = window.confirm(
+      'Delete the inspection database on this device?\n\n' +
+      'Every store is empty, so no inspection, photo or byte record will be ' +
+      'lost. Nothing in SharePoint is touched.\n\n' +
+      'This closes the app running on this page. Reload afterwards.');
+    if(!ok){
+      line('dropdb', 'Cancelled', 'nothing was deleted', 'ok');
+      throw {handled: true};
+    }
+
+    closeTheApp();
+    line('dropdb', 'App frame closed', 'its database connection is released');
+
+    /* A beat for the frame's teardown to actually land before asking for the
+       delete, so the common case does not go down the blocked path. */
+    return new Promise(function(r){ setTimeout(r, 400); });
+  }).then(function(){
+    return new Promise(function(res, rej){
+      var rq = indexedDB.deleteDatabase('ds-inspections');
+      var settled = false;
+      var bail = setTimeout(function(){
+        if(settled) return;
+        settled = true;
+        rej(new Error('the delete neither finished nor reported being blocked ' +
+                      'within 15 seconds. Close every other tab showing this app ' +
+                      'and try again.'));
+      }, 15000);
+      rq.onsuccess = function(){ if(!settled){ settled = true; clearTimeout(bail); res(true); } };
+      rq.onerror   = function(){ if(!settled){ settled = true; clearTimeout(bail); rej(rq.error || new Error('delete failed')); } };
+      rq.onblocked = function(){
+        if(settled) return;
+        settled = true;
+        clearTimeout(bail);
+        rej(new Error('BLOCKED — something else still holds the database open. ' +
+                      'Close every other tab or window showing this app, then reload ' +
+                      'this page and try again.'));
+      };
+    });
+  }).then(function(){
+    line('dropdb', 'Database deleted', 'ds-inspections is gone', 'ok');
+    /* The figure updates lazily, so give it a moment and say so rather than
+       reporting the first number that comes back as though it were final. */
+    return new Promise(function(r){ setTimeout(r, 1500); });
+  }).then(function(){
+    return (navigator.storage && navigator.storage.estimate)
+      ? navigator.storage.estimate() : Promise.resolve(null);
+  }).then(function(est){
+    if(!est || beforeUsage === null){
+      line('dropdb', 'No figure to compare', 'measure by hand instead', 'warn');
+      return;
+    }
+    var after = est.usage || 0;
+    var freed = beforeUsage - after;
+    line('dropdb', 'Storage after', mb(after));
+    line('dropdb', 'Reclaimed', mb(freed), freed > 20 * 1048576 ? 'ok' : 'warn');
+
+    if(freed > 20 * 1048576){
+      line('dropdb', 'RESULT',
+           'the space came back, so it was the database file holding it — records ' +
+           'were deleted, the file that held them was not. That is the answer to ' +
+           'fault 2, and deleting the database is the only thing that reclaims it.',
+           'ok');
+    } else {
+      line('dropdb', 'RESULT',
+           'the figure barely moved, so the database file was NOT where the space ' +
+           'was. The leading explanation is wrong and fault 2 is still open — do ' +
+           'not act on it. Check iOS Settings, Safari, Advanced, Website Data ' +
+           'before concluding anything, because this figure updates lazily.',
+           'bad');
+    }
+    line('dropdb', 'Confirm it independently',
+         'Settings → Safari → Advanced → Website Data → github.io. That is measured ' +
+         'outside this page and it is the reading to trust.');
+    line('dropdb', 'Now reload this page',
+         'the app frame was closed, so the other sections need a fresh load', 'warn');
+  }).catch(function(e){
+    if(!(e && e.handled)){
+      line('dropdb', 'FAILED', (e && e.message) || String(e), 'bad');
+      line('dropdb', 'Nothing is lost', 'the stores were empty before this started');
+    }
+  }).then(done);
 }
 
 /* ---------- 7 · the library columns ----------
@@ -1144,6 +1347,7 @@ function measureStorage(){
         });
 
         chain.then(function(){
+          try { db.close(); } catch(e){}
           /* The lead from the handoff: six media records on a device carrying a
              single two-photo inspection. A media record whose inspection is gone
              is nobody's job to clear — sweepOrphanBytes() reclaims bytes whose
@@ -1328,7 +1532,7 @@ function measureStorage(){
 function copyAll(){
   var text = ['Dryspace upload diagnostics', new Date().toISOString(),
               navigator.userAgent, ''].join('\n');
-  ['env', 'blobs', 'token', 'drive', 'upload', 'state', 'cols', 'storage'].forEach(function(id){
+  ['env', 'blobs', 'token', 'drive', 'upload', 'state', 'cols', 'storage', 'dropdb'].forEach(function(id){
     var t = el(id).innerText.trim();
     if(t) text += '\n== ' + id + ' ==\n' + t + '\n';
   });
@@ -1440,6 +1644,7 @@ function copyAll(){
   el('btn-state').onclick = readStoredState;
   el('btn-cols').onclick = compareColumnQueries;
   el('btn-storage').onclick = measureStorage;
+  el('btn-dropdb').onclick = dropDatabase;
   el('btn-copy').onclick = copyAll;
 })();
 </script>
