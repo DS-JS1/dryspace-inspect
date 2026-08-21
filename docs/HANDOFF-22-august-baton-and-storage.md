@@ -43,18 +43,20 @@ needs `current/` empty **and** `BatonHolder` set.
 administrator and holder, which is not what the feature is for, and is part of
 why this went unnoticed for a release cycle.
 
-### The orphan-bytes race is still open
+### ~~The orphan-bytes race~~ — CLOSED 22 August 2026, and it was not a race
 
-`docs/HANDOFF-orphan-bytes-race.md`, and decision log §4c gates the release on it.
-Observed this session: **550/550 twice, 549/550 once.** The failure was the known
-assertion, *"the orphan is reclaimed"*.
+`docs/HANDOFF-orphan-bytes-race.md` is now **history**. The assertion was right
+every time. Under load, `dbAll()` returned `[]` from a store holding two records
+while `dbGet` found every one of them and a fresh connection counted them by key.
+`sweepOrphanBytes()` reads `dbAll('bytes')`, so it saw nothing to sweep.
 
-Ruled out as caused by this session's `onversionchange` change, on two grounds:
-`tests.html` never calls `indexedDB.open` or `deleteDatabase` itself — it drives
-everything through the app's helpers — so no context ever requests an upgrade or
-a delete and `versionchange` cannot fire during a run; and the rate matches the
-5-in-8 already recorded. **Do not re-derive the five disproved hypotheses in §3
-of that handoff.**
+**The important part was never the test.** The sweep decided deletions by
+comparing two such listings — one bad listing marks every byte record on the
+device as an orphan. It now confirms each candidate with a point `dbGet` first.
+Decision log §4g; the unexplained listing itself is **OI-9**.
+
+20 consecutive runs at 554/554 after the change — 16 under CPU load, 6 from a
+cleared database.
 
 ### The swallowed `setFields()` failures — still a decision, still not taken
 
