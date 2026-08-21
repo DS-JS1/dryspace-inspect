@@ -1,6 +1,43 @@
 Dryspace Site Inspection App — Changelog
 ========================================
 
+DIAGNOSTICS - 22 August 2026 - the cache figures were being measured too late
+- Section 8 was capturing the caches AFTER the page had already destroyed them,
+  and would have wasted the one device run it exists to serve. Fixed before the
+  run, not after.
+- diagnostics.html boots the app in a frame with ?nosw=1. index.html:4984 answers
+  that flag by unregistering every service worker AND DELETING EVERY CACHE on the
+  origin - both apps' offline copies. That happens on page LOAD, before anybody
+  taps anything. So section 8 was counting caches that had been deleted seconds
+  earlier by its own boot, and reading a storage figure that had moved because
+  deleting them freed space. The very thing the section was written to attribute
+  - which build each cache belongs to, on an origin serving v1.3 and the beta
+  together - was the thing guaranteed to be gone before it looked.
+- The caches and the storage estimate are now snapshotted BEFORE the frame is
+  given a src, and the panel reports the snapshot with the live figure beside it.
+  This is section 6's lesson applied one fault later: it already snapshots the
+  media store before boot, because the app's start-up recovery moves the very
+  state that panel exists to capture. Same shape of mistake, same fix.
+- Names and counts are collected first and sizes second, so if the deadline bites
+  the names still arrive - "is there a cache here belonging to another build" is
+  the question that matters most and the name alone answers it.
+- The panel now also prints how many caches remain after the wipe, so that a
+  later reader finding an empty cache store cannot conclude the device never had
+  one. And the section's note says plainly that opening the page costs the device
+  its offline copies, since that is the one effect measuring again cannot undo.
+- Verified by seeding a stand-in v1.3 cache and a current one before loading the
+  page: both were captured, and the v1.3 one was flagged NOT THE CURRENT BUILD.
+  Before the fix that row did not appear at all.
+- measureCache() was deleted rather than left in place. It is superseded by
+  collectCaches(), and a second, subtly wrong way of doing the same job sitting
+  next to the right one is how the wrong one gets called again.
+- Tests 550 of 550, zero failures. No app file touched; APP_VER and CACHE_VERSION
+  still 1.4.0 and ds-inspect-v1.4.0-25.
+- NOTE FOR THE DEVICE RUN: the new sections are not on the phone yet. /beta/ is
+  served from main, so the beta copy has to be refreshed there before any of this
+  can be run - the same "Refresh /beta/" step as the last six commits on main.
+  That does not release v1.4: the root still serves v1.3.0 and staff are unaffected.
+
 DIAGNOSTICS - 21 August 2026 - test-only, no app file changed
 - Added sections 7 and 8 to diagnostics.html, for the two faults run 1 of the
   baton test found on a real iPhone against real SharePoint. Brief:

@@ -184,7 +184,16 @@ input[type=text]{font:inherit;font-size:13px;padding:9px 10px;border-radius:9px;
     cross-origin cached files are padded in the quota accounting and measure as
     zero here. An unattributed remainder is a lead, not a verdict.
     <br><br>
-    Read-only. Nothing is deleted, swept, or tidied.
+    <strong>The cache figures are captured before this page boots the app</strong>,
+    because booting it carries <code>?nosw=1</code>, and that deletes every cache on
+    the origin — the offline copies of both the live app and the beta. That is the
+    existing behaviour of the flag, not something this section does, but it means
+    the caches can only be counted once per visit and they are counted for you on
+    the way in. If a reading looks wrong, reload the page and take it again rather
+    than tapping twice.
+    <br><br>
+    Read-only apart from that: this section deletes nothing, sweeps nothing and
+    tidies nothing.
   </p>
   <button id="btn-storage" class="primary">Measure everything</button>
   <div id="storage"></div>
@@ -932,6 +941,80 @@ function walkStore(db, name, onRow){
 var CACHE_SCAN_CAP = 400;
 var ORPHAN_LIST_CAP = 12;
 
+/* Taken BEFORE the app boots, and this is not a nicety.
+
+   Loading the app in the frame carries ?nosw=1, and index.html:4984 answers that
+   flag by unregistering every service worker AND DELETING EVERY CACHE on the
+   origin. So by the time anybody taps "Measure everything", the caches this
+   section exists to attribute have already been destroyed by the act of opening
+   the page, and the storage figure has moved because deleting them freed space.
+
+   The first version of this section measured after boot and confidently reported
+   nought caches on a device that had two. Section 6 learned the same lesson about
+   the media store one fault earlier; this is that lesson applied to the caches. */
+var CACHE_SNAPSHOT = null;      /* [{name, entries, bytes|null}] */
+var ESTIMATE_SNAPSHOT = null;   /* {usage, quota, details} */
+
+/* Names and counts first, sizes second. If the deadline bites we still want the
+   names, because "is there a cache here belonging to another build" is the
+   question that matters most and it is answered by the name alone. */
+function collectCaches(deadline){
+  if(!(window.caches && caches.keys)) return Promise.resolve(null);
+  var stop = false;
+  setTimeout(function(){ stop = true; }, deadline || 6000);
+
+  return caches.keys().then(function(keys){
+    keys = keys || [];
+    return keys.reduce(function(chain, name){
+      return chain.then(function(acc){
+        return caches.open(name).then(function(c){
+          return c.keys().then(function(reqs){
+            reqs = reqs || [];
+            var row = {name: name, entries: reqs.length, bytes: stop ? null : 0};
+            if(stop) { acc.push(row); return acc; }
+            var take = reqs.slice(0, CACHE_SCAN_CAP);
+            row.capped = reqs.length > CACHE_SCAN_CAP;
+            return take.reduce(function(inner, rq){
+              return inner.then(function(){
+                if(stop){ row.bytes = null; return null; }
+                return c.match(rq).then(function(resp){
+                  if(!resp) return null;
+                  var len = resp.headers.get('content-length');
+                  if(len && !isNaN(+len)){ row.bytes += +len; return null; }
+                  return resp.blob().then(function(b){ row.bytes += b.size; }, function(){});
+                }, function(){});
+              });
+            }, Promise.resolve()).then(function(){ acc.push(row); return acc; });
+          });
+        }, function(){
+          acc.push({name: name, entries: null, bytes: null});
+          return acc;
+        });
+      });
+    }, Promise.resolve([]));
+  }, function(){ return null; });
+}
+
+/* Both snapshots, with their own deadline, so a slow or broken cache store can
+   never stop the page loading. Everything here is read-only. */
+function snapshotOrigin(next){
+  var moved = false;
+  function go(){ if(!moved){ moved = true; next(); } }
+  var bail = setTimeout(go, 7000);
+
+  var est = (navigator.storage && navigator.storage.estimate)
+    ? navigator.storage.estimate().then(function(e){
+        ESTIMATE_SNAPSHOT = {usage: e.usage || 0, quota: e.quota || 0,
+                             details: e.usageDetails || null};
+      }, function(){})
+    : Promise.resolve();
+
+  est.then(function(){ return collectCaches(5000); })
+     .then(function(rows){ CACHE_SNAPSHOT = rows; })
+     .catch(function(){})
+     .then(function(){ clearTimeout(bail); go(); });
+}
+
 function measureStorage(){
   clear('storage');
   el('btn-storage').disabled = true;
@@ -944,14 +1027,27 @@ function measureStorage(){
       line('storage', 'Browser storage estimate', 'not available here', 'warn');
       return Promise.resolve();
     }
-    return navigator.storage.estimate().then(function(e){
+    /* The snapshot, not a fresh reading. A fresh one is taken after this page
+       has already deleted the caches, and would understate the figure that is
+       actually under investigation. */
+    var snap = ESTIMATE_SNAPSHOT;
+    return navigator.storage.estimate().then(function(live){
+      var e = snap || live;
       total.usage = e.usage || 0;
       total.quota = e.quota || 0;
       var pct = e.quota ? Math.round((e.usage / e.quota) * 100) : 0;
-      line('storage', 'WHOLE ORIGIN — reported in use',
+      line('storage', 'WHOLE ORIGIN — in use AS FOUND, before this page booted',
            mb(e.usage) + ' of ' + mb(e.quota) + ' (' + pct + '%)', pct > 85 ? 'warn' : '');
+      if(snap){
+        line('storage', '  · and now, after this page cleared the caches',
+             mb(live.usage) + '   (the drop is this page\u2019s own doing, not a leak)');
+      } else {
+        line('storage', '  · snapshot unavailable',
+             'this is a reading taken AFTER the caches were cleared, so it understates ' +
+             'what was there. Reopen the page and let it settle before tapping.', 'warn');
+      }
       line('storage', 'Origin measured', location.origin);
-      var d = e.usageDetails;
+      var d = e.details || e.usageDetails;
       if(d && Object.keys(d).length){
         total.detailed = true;
         total.saysCache = d.caches || 0;
@@ -1097,12 +1193,33 @@ function measureStorage(){
              current || 'could not be read', current ? '' : 'warn');
         return caches.keys();
       })
-      .then(function(keys){
-        keys = keys || [];
-        line('storage', 'Caches on this origin', String(keys.length));
-        return keys.reduce(function(chain, k){
-          return chain.then(function(){ return measureCache(k, current); });
-        }, Promise.resolve());
+      .then(function(){
+        var rows = CACHE_SNAPSHOT;
+        if(!rows){
+          line('storage', 'Caches AS FOUND', 'could not be captured before boot', 'bad');
+          return null;
+        }
+        line('storage', 'Caches AS FOUND, before this page cleared them', String(rows.length));
+        rows.forEach(function(r){
+          var stale = !!(current && r.name !== current);
+          total.cache += (r.bytes || 0);
+          line('storage', 'cache: ' + r.name,
+               (r.entries === null ? '?' : r.entries) + ' entries · ' +
+               (r.bytes === null ? 'size not measured in time' : mb(r.bytes)) +
+               (r.capped ? '   (first ' + CACHE_SCAN_CAP + ' measured)' : '') +
+               (stale ? '   NOT THE CURRENT BUILD' : ''),
+               stale ? 'warn' : 'ok');
+        });
+        if(!rows.length){
+          line('storage', '  · nothing was cached',
+               'no offline copy of either app was on this device when the page opened');
+        }
+        /* Proof the wipe happened, so nobody reads the empty cache store later
+           and concludes the device never had one. */
+        return caches.keys().then(function(now){
+          line('storage', '  · caches remaining now', String((now || []).length) +
+               ' — this page deleted them via ?nosw=1, which is expected');
+        }, function(){ return null; });
       })
       .then(function(){
         line('storage', '  · note',
@@ -1111,39 +1228,6 @@ function measureStorage(){
       }, function(e){
         line('storage', 'Caches', 'could not be read — ' + ((e && e.message) || e), 'bad');
       });
-  }
-
-  function measureCache(name, current){
-    return caches.open(name).then(function(c){
-      return c.keys().then(function(reqs){
-        reqs = reqs || [];
-        var capped = reqs.length > CACHE_SCAN_CAP;
-        var take = capped ? reqs.slice(0, CACHE_SCAN_CAP) : reqs;
-        var bytes = 0;
-        /* Sequential on purpose. Reading four hundred cached responses at once
-           is how a diagnostic page becomes the thing that fells the device. */
-        return take.reduce(function(chain, rq){
-          return chain.then(function(){
-            return c.match(rq).then(function(resp){
-              if(!resp) return null;
-              var len = resp.headers.get('content-length');
-              if(len && !isNaN(+len)){ bytes += +len; return null; }
-              return resp.blob().then(function(b){ bytes += b.size; }, function(){});
-            }, function(){});
-          });
-        }, Promise.resolve()).then(function(){
-          total.cache += bytes;
-          var stale = !!(current && name !== current);
-          line('storage', 'cache: ' + name,
-               reqs.length + ' entries · ' + mb(bytes) +
-               (capped ? '   (first ' + CACHE_SCAN_CAP + ' measured)' : '') +
-               (stale ? '   NOT THE CURRENT BUILD' : ''),
-               stale ? 'warn' : 'ok');
-        });
-      });
-    }, function(){
-      line('storage', 'cache: ' + name, 'could not be opened', 'bad');
-    });
   }
 
   function stepLocal(){
@@ -1331,8 +1415,13 @@ function copyAll(){
      runs its start-up recovery, which moves anything left in 'uploading' back
      to 'queued' — so the very state this page exists to capture is gone by
      the time anybody taps the button. It happened on the first real use. */
+  /* Both snapshots before the frame is given a src. Loading the app deletes
+     every cache on the origin and moves the storage figure, so anything not
+     captured here is captured too late to mean anything. */
   snapshotStoredState(function(){
-    f.src = 'index.html?nosw=1&diag=' + Date.now();
+    snapshotOrigin(function(){
+      f.src = 'index.html?nosw=1&diag=' + Date.now();
+    });
   });
 
   el('btn-blobs').onclick = checkBlobs;
