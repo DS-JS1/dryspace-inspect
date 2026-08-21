@@ -2732,10 +2732,33 @@ function renderHome(){
       if(!el || !e.quota) return;
       var reclaimable = media.filter(function(m){ return DSMedia.isPurgeable(m); })
                              .reduce(function(a, m){ return a + (m.origSize || 0); }, 0);
+      /* What this app is actually holding, from its own records.
+
+         This line used to report navigator.storage.estimate().usage as "used by
+         this app". That figure is the WHOLE ORIGIN - it includes the live app
+         alongside the beta, and anything the browser has not reclaimed yet. On
+         22 August 2026 a device with no inspections on it reported 137.5 MB,
+         and iOS Settings agreed the space was genuinely held; none of it was
+         this app's data, because every store was empty. Staff read that line as
+         a work app eating their phone, and on that evidence they were right to.
+
+         Summed from origSize on the media records, which are already loaded
+         here - not from the bytes store, which would mean reading every
+         photograph back to weigh it. */
+      var held = media.reduce(function(a, m){ return a + (m.origSize || 0); }, 0);
+      /* Pressure still comes from the origin figure, deliberately. "Will the
+         next photo save" depends on what the browser has left for this origin,
+         not on what this app believes it is holding. */
       var p = DSMedia.pressure(e.usage || 0, e.quota);
       var msg = DSMedia.pressureMessage(p, reclaimable, fmtKB);
-      el.textContent = 'Device storage used by this app: ' + fmtKB(e.usage || 0) +
-                       ' of ' + fmtKB(e.quota) + ' available' + (msg ? ' — ' + msg : '');
+      /* fmtKB never returns nought - a stored file is never 0 KB - so an empty
+         device would read "1 KB" and invite the same question this line was
+         rewritten to answer. Say plainly that there is nothing here. */
+      el.textContent = (media.length
+            ? 'Photos held on this device: ' + fmtKB(held) + ' across ' +
+              media.length + (media.length === 1 ? ' file' : ' files')
+            : 'No photos stored on this device') +
+                       (msg ? ' — ' + msg : '');
       el.className = 'storage-note' + (p.level === 'urgent' || p.level === 'warn' ? ' sn-warn' : '');
     }).catch(function(){});
   }

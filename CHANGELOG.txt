@@ -1,6 +1,43 @@
 Dryspace Site Inspection App — Changelog
 ========================================
 
+STAFF-FACING FIX - 22 August 2026 - the footer told staff a number that was not theirs
+- PATCH tier. index.html and sw.js. CACHE_VERSION -27 -> -28. APP_VER stays
+  1.4.0, still unreleased. No staff document quotes the old wording - checked
+  across Guides/, Training/ and 01_Setup and User Guide - so nothing else moves.
+- The line read "Device storage used by this app: <estimate().usage>". That
+  figure is the WHOLE ORIGIN: the live app beside the beta, plus anything the
+  browser has not reclaimed. On 22 August a device with no inspections on it
+  read 137.5 MB, and iOS Settings agreed the space was genuinely held - but none
+  of it was this app's data, because every store was empty. Staff reading that
+  as a work app eating their phone were reading it correctly. The number was
+  real; the attribution was false.
+- Now reports what the app actually holds, summed from origSize on the media
+  records already loaded there - not from the bytes store, which would mean
+  reading every photograph back to weigh it. An empty device says "No photos
+  stored on this device" rather than "1 KB", because fmtKB never returns nought
+  and "1 KB" invites the same question the rewrite was meant to end.
+- pressure() still gets the ORIGIN figure, deliberately and unchanged. "Will the
+  next photo save" depends on what the browser has left for the origin, not on
+  what this app believes it is holding. The warning was never the wrong number -
+  only the line that claimed the number as ours.
+- Verified in all three states: empty, one file, several files, with the singular
+  and plural right.
+- ALSO, in diagnostics: the delete button's verdict could not tell "the file was
+  not where the space was" from "the space had already gone". At 1:24am it ran on
+  a device whose storage-before was 0.9 MB and announced the leading explanation
+  was WRONG - a verdict drawn from an empty device. It now reports INCONCLUSIVE
+  when there was nothing to reclaim, and says what that probably means: a delete
+  that times out on this page is abandoned by the page, not cancelled by the
+  browser, so it can complete later once the tab holding the database closes.
+- TEST STATUS: 550 of 550 on two consecutive runs, and 549 on one, the failure
+  being the known orphan-bytes race in docs/HANDOFF-orphan-bytes-race.md. Ruled
+  out as being caused by this session's onversionchange change on two grounds:
+  tests.html never calls indexedDB.open or deleteDatabase itself - it drives
+  everything through the app's helpers - so no context ever requests an upgrade
+  or a delete and versionchange cannot fire during a run; and the failure rate
+  matches the 5-in-8 already recorded. The race remains open and unfixed.
+
 FAULT FOUND IN THE APP - 22 August 2026 - openDB() never let go of the database
 - PATCH tier. index.html and sw.js. CACHE_VERSION -26 -> -27. APP_VER stays
   1.4.0, still unreleased.
