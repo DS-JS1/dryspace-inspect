@@ -670,7 +670,9 @@ into "Waiting", which proved the uploading state had never been written.
   the library is marked Recovered carrying both names.
 - The list is EMPTY by default, so nobody is an administrator until an
   address is added and the feature cannot appear by accident.
-- 550 assertions. CACHE_VERSION -> ds-inspect-v1.4.0-24.
+- The administrator list carries one address: jamie@dryspace.com.au. Forced
+  handover is live for that account and invisible to every other.
+- 550 assertions. CACHE_VERSION -> ds-inspect-v1.4.0-25.
 
 The architectural change: the record now travels the same road as the photos,
 and in-progress work is backed up without anyone having to remember to do it.
