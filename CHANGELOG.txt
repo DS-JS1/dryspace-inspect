@@ -2,6 +2,13 @@ Dryspace Site Inspection App — Changelog
 ========================================
 
 DOCUMENTATION PASS - 21 August 2026 (continued)
+- The release is now gated on the orphan-bytes assertion rather than shipped
+  past it - owner's decision, 21 August 2026, decision log 4c. The alternative
+  offered was releasing at 549/550 with the failure documented as known. It was
+  declined because the assertion has cried wolf twice, and a suite whose normal
+  reading is "1 of 550 failed" waves the next genuine byte-sweep regression
+  through. Brief for the fix, with five disproved hypotheses and the
+  verification bar: docs/HANDOFF-orphan-bytes-race.md.
 - TEST STATUS AT THE CLOSE OF BATCH D: 549 of 550. The orphan-bytes assertion
   "the orphan is reclaimed" failed on 5 of 8 runs, including four consecutively
   and once from a cleared store, so the 21 August rewrite reduced this fault but

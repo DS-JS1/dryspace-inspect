@@ -771,6 +771,42 @@ it. Read the sentence, not the digit.
 
 ---
 
+## 4c. The release is gated on the orphan-bytes assertion, not shipped around it
+
+**Decided 21 August 2026, at the close of Batch D**, by the owner, having been
+offered the alternative of releasing at 549/550 with the failure documented as
+known.
+
+The assertion *"the orphan is reclaimed"* fails intermittently — 5 of 8 runs in
+Batch D, including four consecutively and once from a cleared store. **The app is
+not at fault**, and that was established by evidence rather than argument:
+`sweepOrphanBytes()` called by hand on a failing page reclaims the exact record
+the assertion says it missed. The fault is in the harness around the assertion,
+which lets the test race the app's own start-up sweep.
+
+**Why it is not simply documented and shipped past.** It would be the cheaper
+call, and it is the wrong one. This assertion has now cried wolf twice. The cost
+is not the red line in the report — it is that *"1 of 550 failed"* becomes the
+suite's normal reading, and the next genuine regression in the byte-sweep code is
+waved through as the known one. A test that is expected to fail has stopped being
+a test. Byte-sweep code is exactly where that matters: it deletes photo data.
+
+**The counter-argument, recorded so it is not re-litigated from scratch:** the
+failure is test-side, the app is proven correct by hand, and the outstanding
+SharePoint baton test is a far larger unknown standing between v1.4 and a
+release. That is all true, and the decision still stands — the two are not
+competing, and the test fix is small.
+
+**Superseding this needs new information**, not a re-weighing: either the race is
+shown to be unfixable without changing app code, or 20 consecutive clean runs
+under load are produced without any change at all, which would mean the diagnosis
+is wrong.
+
+Full brief, including five hypotheses already disproved and the verification bar:
+`docs/HANDOFF-orphan-bytes-race.md`.
+
+---
+
 ## 5. Open questions
 
 | Question | Blocking | Notes |
