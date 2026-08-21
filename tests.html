@@ -1474,6 +1474,37 @@ function run(W){
        'and tells them exactly what to do, so nothing has to be asked back');
   });
 
+  /* v1.4.0 patch - forced handover, for a device that is lost or broken or
+     belongs to somebody who has left. */
+  test('only a listed administrator can force a handover', function(){
+    ok(typeof W.isAdmin === 'function', 'isAdmin() defined');
+    ok(typeof W.forceHandover === 'function', 'forceHandover() defined');
+    if(typeof W.isAdmin !== 'function') return;
+
+    var realList = W.SP_CONFIG.admins, realAuth = W.dsAuth;
+
+    /* Empty by default, so the feature cannot appear by accident. */
+    W.SP_CONFIG.admins = [];
+    W.dsAuth = {isSignedIn: function(){ return true; },
+                account: function(){ return {username: 'jamie@dryspace.com.au'}; }};
+    ok(W.isAdmin() === false, 'nobody is an administrator until the list says so');
+
+    W.SP_CONFIG.admins = ['Jamie@Dryspace.com.au'];
+    ok(W.isAdmin() === true, 'a listed address matches regardless of case');
+
+    W.dsAuth = {isSignedIn: function(){ return true; },
+                account: function(){ return {username: 'someone@else.com'}; }};
+    ok(W.isAdmin() === false, 'and nobody else does');
+
+    /* The MICROSOFT account is checked, not the name typed into the app, so
+       typing "Jamie Stone" into a phone confers nothing. */
+    W.dsAuth = {isSignedIn: function(){ return false; },
+                account: function(){ return {username: 'jamie@dryspace.com.au'}; }};
+    ok(W.isAdmin() === false, 'and not while signed out');
+
+    W.SP_CONFIG.admins = realList; W.dsAuth = realAuth;
+  });
+
   test('the per-file status panel exists and starts empty', function(){
     var box = D.getElementById('sy-detail');
     ok(!!box, 'sy-detail panel present in the sync bar');

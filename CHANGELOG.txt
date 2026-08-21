@@ -660,7 +660,17 @@ into "Waiting", which proved the uploading state had never been written.
   rejection to every other test that read storage in that window. The
   failures looked like bugs in the code under test. Stubs are now restored
   in the same tick as the call they cover.
-- 544 assertions. CACHE_VERSION -> ds-inspect-v1.4.0-23.
+- FORCED HANDOVER (D59), for a lost or broken device or somebody who has left.
+  Most of it already worked: recovering a working copy files back to the same
+  pinned folder, so no duplicate folder appears, and it clears the baton so
+  the original device meets the fork warning if it ever resurfaces. What was
+  missing is that anyone could do it and nobody else could see it had
+  happened. Now restricted to an address listed in SP_CONFIG.admins, matched
+  against the MICROSOFT account rather than the name typed into the app, and
+  the library is marked Recovered carrying both names.
+- The list is EMPTY by default, so nobody is an administrator until an
+  address is added and the feature cannot appear by accident.
+- 550 assertions. CACHE_VERSION -> ds-inspect-v1.4.0-24.
 
 The architectural change: the record now travels the same road as the photos,
 and in-progress work is backed up without anyone having to remember to do it.
