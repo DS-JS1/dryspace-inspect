@@ -83,7 +83,7 @@ arrived complete before it counts it as done. Nothing leaves your device until
 then.
 
 **Handover** — for when a job passes to someone else. Less urgent on day one, but
-the five steps on that card are what stop two people editing two copies of the
+the four steps on that card are what stop two people editing two copies of the
 same job and the client being quoted from the wrong one.
 
 If you would rather work through it than read cards, there is a short walkthrough

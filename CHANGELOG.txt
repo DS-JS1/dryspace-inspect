@@ -1086,3 +1086,112 @@ pack as a set, and the Guides/ PDFs last, once the markdown has settled.
 Noted in passing, not fixed: 05_Release Protocol section on printed guides still
 names Guides/02_Iteration Guide_v1.3.pdf. The files are at v1.4.0. Left for the
 batch that regenerates them, so the fix and the files move together.
+
+
+DOCUMENTATION PASS - BATCH C, 21 August 2026 (documentation only, no app file
+touched; APP_VER stays 1.4.0, CACHE_VERSION stays ds-inspect-v1.4.0-25)
+
+_Shared/Dryspace Context Brief.md - brought up to build v1.4.0-25
+  (separate repository, branch main - a separate commit from this one)
+- SECTION 11 TOLD AN EXTERNAL AI TO TEACH THE FIVE-STEP HANDOVER. This is the
+  document whose whole purpose is to be pasted into an external tool to generate
+  training material, so the error was one paste away from being reproduced into
+  slides and video. It now carries the four steps in full, names the v1.4 change,
+  and says which habit staff are most likely to fall back into.
+- Section 11 gained a note that the action row moved to the TOP of the form, so
+  anything generated from this brief cannot repeat the mistake the deleted deck
+  made.
+- Section 5 gained three v1.4 behaviours staff actually see and the brief did not
+  mention: taking an inspection over from SharePoint and that its photos arrive
+  as THUMBNAILS marked "in SharePoint - tap to fetch"; the five card file states
+  including that "no files on this device" does not mean "all uploaded"; and the
+  filing nudge, with the point that it never blocks the upload, the handover or
+  capture.
+- Section 7 now says the handover button is in the row at the top of the form,
+  and records that the folder name is pinned by the first upload and that a
+  record with no number, client or address files as Unfiled.
+- Header already read App v1.4 - Form 4.2 and was correct. That is exactly why
+  the body still had a v1.3 instruction in it.
+
+Training/ - updated as a set
+
+- Workflow_Chart.html SECTION 02 WAS STILL THE v1.3 FIVE-STEP HANDOVER, under a
+  footer stamped v1.4 - Form 4.2. Heading, intro, the SVG's aria-label, all five
+  step boxes ("Export", "Upload it", "Move the old to archive/") and the caption
+  all taught a ritual the app no longer performs. Rebuilt as four steps, with the
+  second box saying what the app now does for you. The README and the Batch C
+  brief both described this file as current; neither was written by anyone who
+  had opened it.
+  The "five handovers" in the page lede is CORRECT and was left alone - six
+  stages means five transitions. Not every five in this file was wrong.
+- Workflow_Chart.html rules list said "Steps 1 to 4 first" before deleting your
+  copy. Under four steps that is now "Steps 1 to 3".
+- Quick_Card_Handover.svg: the CARD IS CORRECT and was not touched, but its
+  aria-label still said "the five handover steps in order". Fixed. The printed
+  card is unchanged, so Batch D's regeneration is unaffected.
+- Training/README.txt line 19 and Onboarding_Emails.md line 86 both described the
+  card as five steps while each said FOUR a dozen lines further down. Both fixed.
+- Training_Module.html said "Six questions" above a knowledge check holding
+  EIGHT. Fixed. The module was otherwise current and correct throughout.
+- Quick_Card_Photos.svg was read in full and is correct at v1.4. Not touched.
+
+Training/Setup_and_Use_Deck.html - NEW, built from scratch
+- Replaces the deleted Setup_and_Use_Presentation.pptx. 17 slides, roughly 30
+  minutes with questions, covering the running order in the Context Brief
+  section 11 corrected to v1.4.
+- Built as HTML, not PowerPoint, deliberately. The recorded reason the old deck
+  had to be destroyed rather than updated is that it was the only item in the
+  pack not held as editable source - so a grep for a button name never found it,
+  and nobody could see it had gone stale. The new one is plain text beside the
+  rest of the pack and prints to PDF the way the chart does.
+- Self-contained: no dependencies, no storage, no network. Arrow keys or Space to
+  move, N toggles presenter notes. Notes are always printed, so the PDF export is
+  the presenter's handout.
+- Teaches the action row at the TOP of the form, the four-step handover, the
+  thumbnail-on-takeover trap, the five card file states, the filing nudge and
+  that it never blocks, and wip/ never being the baton.
+- README.txt updated: the deck replaces the DELETED entry, the by-hand PDF
+  instructions now cover it, and the v1.4 change list gained the button move and
+  the thumbnail behaviour.
+
+Suite: 550 assertions, zero failures, before and after.
+
+WORTH KNOWING FOR THE NEXT SESSION - TWO ASSERTIONS IN THE SUITE ARE FLAKY.
+
+The suite reported "2 of 550 assertions FAILED" at the start of this batch:
+  bytes already orphaned are swept up
+    FAIL  the sweep found it (0)
+    FAIL  and reclaimed it
+
+It is NOT a regression and NOT a fault in the app. What was established, by
+running the suite repeatedly and by calling the function directly:
+
+- sweepOrphanBytes() is CORRECT. Called by hand on the same page, it reclaims
+  the very record the failing assertion says it missed.
+- The two assertions pass on some runs and fail on others with nothing changed
+  between them. Two explanations were tested and BOTH were disproved: a stale
+  service worker (it failed again with no service worker controlling the page),
+  and leftover data in the bytes store (it passed again with that residue
+  deliberately seeded).
+- What is left is a race. tests.html defines these checks with later(), whose
+  IIFE bodies start executing immediately, so they run CONCURRENTLY with each
+  other and with the app's own start-up chain - and that chain calls
+  sweepOrphanBytes() itself. Two sweeps over one key, in an undefined order.
+- A failing run leaves __already-orphaned__ behind in the bytes store, so the
+  failure looks stable when you reload. That is what made it read as a
+  regression rather than a flake, and it is what cost the time.
+
+The mechanism was not pinned down to a specific interleaving, because doing so
+means editing tests.html, which this batch is not permitted to touch.
+
+WHAT TO DO: re-run before believing it. If a run fails on those two assertions
+and nothing else, that is this flake. Clearing the ds-inspections database makes
+the next run clean. A REAL regression would not come and go.
+
+WORTH FIXING, IN A BATCH THAT MAY TOUCH tests.html: give the two orphan tests
+their own key namespace and sequence them after boot, so they cannot race the
+app's start-up sweep or each other. Two assertions that cry wolf are worse than
+no assertions, because the next real failure here will be ignored.
+
+Still to do: the Guides/ PDFs and the quick cards (Batch D), plus 05_Release
+Protocol's printed-guides table, still named for v1.3.

@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Site Inspection App — Setup and Use</title>
+<style>
+  :root{
+    --ground:#F5F8FA; --surface:#FFFFFF; --ink:#14202B; --ink-2:#54626F; --ink-3:#8593A0;
+    --rule:#DDE5EC; --navy:#123A5F; --navy-fill:#E8F1FA;
+    --amber:#9A6410; --amber-fill:#FDF6E3; --amber-line:#D3AE62;
+    --green:#1E6B34; --green-fill:#E0F2E4; --green-line:#8CC79F;
+    --red:#A12622; --red-fill:#FBEBEA; --red-line:#E0B4B2;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,'SF Mono',Consolas,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --ground:#0E1720; --surface:#17222D; --ink:#E8EEF3; --ink-2:#A7B6C2; --ink-3:#7B8B98;
+      --rule:#2A3945; --navy:#7FB2DC; --navy-fill:#16283A;
+      --amber:#E0A64A; --amber-fill:#2C2416; --amber-line:#6B5423;
+      --green:#77CE95; --green-fill:#12291B; --green-line:#2F5C3D;
+      --red:#E88A85; --red-fill:#2B1615; --red-line:#5F2E2B;
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#0E1720; --surface:#17222D; --ink:#E8EEF3; --ink-2:#A7B6C2; --ink-3:#7B8B98;
+    --rule:#2A3945; --navy:#7FB2DC; --navy-fill:#16283A;
+    --amber:#E0A64A; --amber-fill:#2C2416; --amber-line:#6B5423;
+    --green:#77CE95; --green-fill:#12291B; --green-line:#2F5C3D;
+    --red:#E88A85; --red-fill:#2B1615; --red-line:#5F2E2B;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--ground);color:var(--ink);font-family:var(--sans);line-height:1.55}
+
+  /* One slide fills the screen. The deck is centred rather than stretched so
+     text never gets enormous on a wide monitor.
+
+     min-height, not height, and the slide is centred with `margin:auto` rather
+     than align-items. A flex item centred by align-items overflows EQUALLY in
+     both directions, so on a short screen the top of a long slide goes above
+     the scroll origin and cannot be reached. Auto margins centre it without
+     that. A 720p meeting-room screen with presenter notes showing is exactly
+     the case that finds this. */
+  .deck{min-height:100vh;display:flex;align-items:flex-start;justify-content:center;
+        padding:24px 24px 72px}
+  .slide{display:none;width:100%;max-width:1080px;background:var(--surface);
+         border:1px solid var(--rule);border-radius:16px;padding:44px 52px;
+         box-shadow:0 1px 3px rgba(18,58,95,.06)}
+  .slide.on{display:block;margin-top:auto;margin-bottom:auto}
+
+  .eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.14em;
+           text-transform:uppercase;color:var(--navy);margin-bottom:14px}
+  h1{margin:0 0 10px;font-size:clamp(30px,4.4vw,46px);line-height:1.1;
+     font-weight:650;letter-spacing:-.025em}
+  h2{margin:0 0 6px;font-size:clamp(22px,3vw,32px);line-height:1.15;
+     font-weight:650;letter-spacing:-.02em}
+  .lede{margin:0 0 18px;color:var(--ink-2);font-size:clamp(15px,1.7vw,19px)}
+  p{font-size:clamp(14.5px,1.5vw,17px);margin:10px 0}
+  strong{font-weight:650}
+  code{font-family:var(--mono);font-size:.88em;background:var(--navy-fill);
+       color:var(--navy);padding:1px 6px;border-radius:4px}
+
+  ul,ol{margin:12px 0;padding-left:22px;font-size:clamp(14.5px,1.5vw,17px)}
+  li{margin:7px 0}
+  li>span{display:block;color:var(--ink-2);font-size:.92em;margin-top:1px}
+
+  /* Numbered steps, used for the handover and the photo path. */
+  ol.steps{list-style:none;padding-left:0;counter-reset:s;display:flex;
+           flex-direction:column;gap:10px;margin:16px 0}
+  ol.steps li{counter-increment:s;display:flex;gap:14px;align-items:flex-start;margin:0}
+  ol.steps li::before{content:counter(s);flex:0 0 auto;width:28px;height:28px;
+       border-radius:50%;background:var(--navy);color:#fff;font-family:var(--mono);
+       font-size:13px;font-weight:700;display:flex;align-items:center;
+       justify-content:center;margin-top:1px}
+  ol.steps li.last::before{background:var(--amber)}
+
+  .callout{border-left:3px solid var(--navy);background:var(--navy-fill);
+           padding:13px 16px;border-radius:0 9px 9px 0;margin:16px 0;
+           font-size:clamp(14px,1.45vw,16.5px)}
+  .callout.warn{border-left-color:var(--amber);background:var(--amber-fill)}
+  .callout.good{border-left-color:var(--green);background:var(--green-fill)}
+  .callout.stop{border-left-color:var(--red);background:var(--red-fill)}
+  .callout b{display:block;margin-bottom:3px}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));
+        gap:12px;margin:16px 0}
+  .card{border:1px solid var(--rule);border-radius:10px;padding:14px 16px;
+        background:var(--ground)}
+  .card b{display:block;font-size:15px;margin-bottom:3px}
+  .card span{color:var(--ink-2);font-size:13.5px}
+
+  table{border-collapse:collapse;width:100%;margin:16px 0;
+        font-size:clamp(13.5px,1.4vw,16px)}
+  th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--rule);
+        vertical-align:top}
+  th{font-size:12px;font-family:var(--mono);letter-spacing:.08em;
+     text-transform:uppercase;color:var(--navy);border-bottom:1.5px solid var(--navy)}
+
+  .tree{font-family:var(--mono);font-size:clamp(12.5px,1.3vw,15px);
+        background:var(--ground);border:1px solid var(--rule);border-radius:10px;
+        padding:16px 18px;margin:16px 0;white-space:pre;overflow-x:auto}
+  .tree b{color:var(--green)}
+
+  /* Presenter notes. Hidden on screen until toggled; always printed, so the
+     PDF doubles as the handout the presenter runs the session from. */
+  .notes{display:none;margin-top:22px;padding-top:16px;border-top:1px dashed var(--rule);
+         font-size:14px;color:var(--ink-2)}
+  .notes b{color:var(--ink);display:block;margin-bottom:3px;font-size:12px;
+           font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase}
+  body.notes-on .notes{display:block}
+
+  .bar{position:fixed;left:0;right:0;bottom:0;display:flex;align-items:center;
+       justify-content:space-between;gap:14px;padding:9px 18px;
+       background:var(--surface);border-top:1px solid var(--rule);
+       font-size:13px;color:var(--ink-3)}
+  .bar .btns{display:flex;gap:8px}
+  .btn{font:inherit;font-size:13px;padding:5px 12px;border-radius:7px;
+       border:1px solid var(--rule);background:var(--ground);color:var(--ink);
+       cursor:pointer}
+  .btn:hover{border-color:var(--navy);color:var(--navy)}
+  .count{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+  /* Print: every slide on its own landscape page, notes included. This is what
+     Batch D exports as the PDF handout. */
+  @media print{
+    @page{size:A4 landscape;margin:12mm}
+    body{background:#fff}
+    .deck{display:block;height:auto;padding:0}
+    .slide{display:block!important;break-after:page;border:none;box-shadow:none;
+           max-width:none;padding:0 0 10mm;margin:0}
+    .slide:last-of-type{break-after:auto}
+    .notes{display:block!important}
+    .bar{display:none}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<div class="deck" id="deck">
+
+<section class="slide on">
+  <div class="eyebrow">Dryspace Solutions &middot; Training</div>
+  <h1>The Site Inspection App</h1>
+  <p class="lede">Setting it up, and using it on a job. About 30 minutes with questions.</p>
+  <p>The paper site inspection form is now an app. Same sections, same questions &mdash; on the iPad, with the photos attached where they belong, and the record passing between the office, the field and the technical team without anybody emailing a file.</p>
+  <div class="callout">
+    <b>Two things this session has to land.</b>
+    Passing a job on without losing it, and getting your photos off the device. Everything else can be looked up.
+  </div>
+  <p style="color:var(--ink-3);font-size:14px">App v1.4 &middot; Form 4.2 &middot; Companion to <code>01_Setup and User Guide</code> and <code>03_Handover and Version Control Protocol</code></p>
+  <div class="notes">
+    <b>Presenter</b>
+    Arrow keys or Space to move. <b>N</b> shows these notes on screen. Print to PDF, A4 landscape, background graphics ON &mdash; without it the coloured panels print as empty boxes.
+    Do not explain waterproofing to waterproofers. Explain the tool, nothing else.
+  </div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow">01</div>
+  <h2>Why this exists</h2>
+  <p class="lede">One good inspection is the whole quote.</p>
+  <p>Everything Dryspace quotes comes from the inspection. The proposal reads it, the quote reads the proposal, the contract reads the quote. A gap at inspection becomes a gap in the quote &mdash; and usually a phone call to you, days later, asking what you saw.</p>
+  <div class="grid">
+    <div class="card"><b>Basements have no signal</b><span>Anything needing a live connection fails at the moment it is needed.</span></div>
+    <div class="card"><b>It feeds the systems downstream</b><span>What you capture becomes the proposal, the quote, the contract.</span></div>
+    <div class="card"><b>Five people touch one job</b><span>Office, field, technical, sales, admin &mdash; it has to pass between them intact.</span></div>
+  </div>
+  <div class="callout">
+    <b>The app is a capture tool, not a decision-maker.</b>
+    It records what you judge. It does not diagnose, and it does not replace the site visit.
+  </div>
+  <div class="notes">
+    <b>Presenter</b>
+    Keep this slide short &mdash; a minute at most. The audience already knows why inspections matter; what is new is that the record now travels on its own.
+  </div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow">02</div>
+  <h2>Installing it &mdash; about two minutes</h2>
+  <ol class="steps">
+    <li><div><strong>Open the link in Safari.</strong><span>It has to be Safari, not Chrome: <code>https://ds-js1.github.io/dryspace-inspect/</code></span></div></li>
+    <li><div><strong>Tap Share, then Add to Home Screen, then Add.</strong><span>Share is the square with the arrow coming out of it.</span></div></li>
+    <li><div><strong>Open it once from the new icon, while you still have signal.</strong><span>That first open is what stores the app on the device.</span></div></li>
+  </ol>
+  <div class="callout warn">
+    <b>From then on, use the icon &mdash; never a browser tab.</b>
+    The installed version gets protected storage. A browser tab can be cleared out from under you.
+  </div>
+  <div class="notes">
+    <b>Presenter</b>
+    Do this live on one person's iPad rather than describing it. Two minutes, and it removes the excuse.
+    If somebody is on a Windows PC in the office, the same link installs from Edge or Chrome via the install icon in the address bar.
+  </div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow">03</div>
+  <h2>It works with no signal at all</h2>
+  <p class="lede">This is the reassurance that matters most. Say it plainly and show it.</p>
+  <ul>
+    <li><strong>Everything is stored on the device.</strong><span>There is no server quietly keeping everyone in step, and nothing to wait for.</span></li>
+    <li><strong>It saves within half a second</strong> &mdash; every keystroke, tick and photo.<span>A <em>Saved [time]</em> indicator sits along the top of the form and confirms it.</span></li>
+    <li><strong>Losing signal, locking the screen or a flat battery loses nothing.</strong></li>
+  </ul>
+  <div class="callout good">
+    <b>Capture is never blocked.</b>
+    No warning the app can show will stop you taking a photo or answering a question. Running out of space is recoverable; a missed defect is not.
+  </div>
+  <div class="notes">
+    <b>Presenter</b>
+    Demonstration worth doing: put the iPad in aeroplane mode, type into a field, and point at <em>Saved</em> changing. Thirty seconds, and it answers the question people are actually holding.
+  </div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow">04</div>
+  <h2>The home screen</h2>
+  <p class="lede">Seven controls, in this order. The sign-in and sync bar sits below them.</p>
+  <table>
+    <tr><th>Control</th><th>When you use it</th></tr>
+    <tr><td><strong>&#65291; New inspection</strong></td><td>A job that is not in SharePoint yet &mdash; including a walk-in</td></tr>
+    <tr><td><strong>Take over an inspection from SharePoint</strong></td><td>Picking up a job somebody has handed to you</td></tr>
+    <tr><td><strong>Browse all inspections</strong></td><td>Seeing every job in the library and who holds it</td></tr>
+    <tr><td><strong>Import from a file (offline fallback)</strong></td><td>Only when there is no signal</td></tr>
+    <tr><td><strong>Recover work in progress</strong></td><td>A lost or broken device &mdash; brings back the automatic backup</td></tr>
+    <tr><td><strong>Download data backup (all inspections)</strong></td><td>Your own safety copy of everything on the device</td></tr>
+    <tr><td><strong>Check for app update</strong></td><td>Rarely &mdash; the app tells you itself when there is one</td></tr>
+  </table>
+  <div class="notes">
+    <b>Presenter</b>
+    Do not walk through all seven. Point at the first three and say the rest are there when they are needed. The two that matter on day one are <em>New inspection</em> and <em>Take over an inspection from SharePoint</em>.
+  </div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow">05</div>
+  <h2>The office start</h2>
+  <p class="lede">Section 01 is filled at a desk, before anyone drives anywhere.</p>
+  <ol class="steps">
+    <li><div><strong>Tap &#65291; New inspection, set the stage to 01 Office</strong><span>Fill Section 01 &mdash; client, property, both contacts, lead source.</span></div></li>
+    <li><div><strong>Paste the listing URL, and upload any floor plans in Section 11</strong><span>This is the stage to do it. There is signal at a desk; there will not be in the basement.</span></div></li>
+    <li><div><strong>Change the stage to 02 Field, then hand it over</strong><span>Set the stage <em>before</em> you hand over &mdash; the stage is part of the filename.</span></div></li>
+  </ol>
+  <div class="callout">
+    <b>Six stages, one owner at a time.</b>
+    <code>OFFICE</code> &rarr; <code>FIELD</code> &rarr; <code>TECH</code> &rarr; <code>SALES</code> &rarr; <code>ADMIN</code> &rarr; <code>CLOSED</code>
+  </div>
+  <div class="notes">
+    <b>Presenter</b>
+    The point to make here is that the field inspector should arrive on site with Section 01 already done. That is the whole reason the office stage exists.
+  </div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow">06</div>
+  <h2>On site</h2>
+  <p class="lede">Sections 02 to 06, plus 03A. The site visit itself.</p>
+  <ul>
+    <li><strong>Blank fields are normal.</strong><span>The form is deliberately broader than any single job. Most inspections leave a lot blank, and that is correct. The completion counts exist to find genuine gaps, not to be driven to 100%.</span></li>
+    <li><strong>Do not skip Section 03A.</strong><span>Asbestos likelihood, hazards, access and carry route, and the discharge point. All four affect safety and price.</span></li>
+    <li><strong>To pause, just leave.</strong><span>Resume from the list any time. Nothing is lost by closing the app.</span></li>
+  </ul>
+  <div class="callout good">
+    <b>Your work is backed up while you go.</b>
+    Every four minutes while the form is open, the app writes a copy to the inspection's <code>wip/</code> folder. It needs signal and a signed-in account, and it is silent when it cannot run. A lost or broken device no longer means a lost day.
+  </div>
+  <div class="callout warn">
+    <b><code>wip/</code> is never the baton.</b>
+    It is a working copy for recovering a device. The live record is always the file in <code>current/</code>.
+  </div>
+  <div class="notes">
+    <b>Presenter</b>
+    Stress the <code>wip/</code> distinction. If somebody comes away thinking <code>wip/</code> is where the record lives, they will go looking for the wrong file.
+  </div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow">07</div>
+  <h2>The action row &mdash; at the <em>top</em> of the form</h2>
+  <p class="lede">Directly beneath the stage selector. This moved in v1.4.</p>
+  <table>
+    <tr><th>Button</th><th>What it does</th></tr>
+    <tr><td><strong>Hand over through SharePoint</strong></td><td>Puts the record in <code>current/</code> and files the previous version in <code>archive/</code></td></tr>
+    <tr><td><strong>Send report (email / SharePoint)</strong></td><td>Builds the report and opens the share sheet</td></tr>
+    <tr><td><strong>Share photo &amp; video files</strong></td><td>Shares the untouched originals through the share sheet</td></tr>
+    <tr><td><strong>Share draft (offline fallback)</strong></td><td>The old file-based handover, for when there is no signal</td></tr>
+    <tr><td><strong>Print / PDF</strong></td><td>Prints the form as it stands</td></tr>
+  </table>
+  <div class="callout warn">
+    <b>If you are training somebody from an older card, this is the difference.</b>
+    These buttons used to sit below every section, which on a phone meant scrolling past eleven sections to hand over. Anything showing them at the foot of the form is out of date.
+  </div>
+  <div class="notes">
+    <b>Presenter</b>
+    This is the single most likely thing to be done the old way out of habit. Show the row on a real screen rather than reading the table out.
+  </div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow">08</div>
+  <h2>Photos</h2>
+  <p class="lede">Take them in the Camera app. Attach them. Upload when you are back in signal.</p>
+  <div class="callout">
+    <b>Take photos in the Camera app, not in the form.</b>
+    Two reasons: your camera roll keeps an independent second copy, and the location detail survives. Neither is true if you shoot inside the app.
+  </div>
+  <ol class="steps">
+    <li><div><strong>On site, with no signal</strong><span>Photograph what you need, then attach each one to the right field. Nothing uploads yet, so nothing is waiting on a connection.</span></div></li>
+    <li><div><strong>Back in signal &mdash; car, office, wifi</strong><span>Sign in once with your Dryspace Microsoft account, then tap <strong>Upload now</strong> on the home screen. On the form itself, an <strong>Upload 3 photos</strong> button appears at the top whenever something is waiting.</span></div></li>
+    <li><div><strong>Wait until it says <em>All photos uploaded</em></strong><span>While it runs the button reads <em>Uploading &middot; 2 left &middot; 45%</em>. Until it finishes, those photos exist only on your device.</span></div></li>
+  </ol>
+  <div class="callout good">
+    <b>You cannot lose a photo by uploading it.</b>
+    The app reads every file back out of SharePoint and checks it arrived complete before counting it as done. Nothing is removed from your device on the strength of an upload that has not been confirmed.
+  </div>
+  <div class="notes">
+    <b>Presenter</b>
+    Demonstrate rather than describe: take a photo, attach it, show the count waiting, upload it, and open SharePoint to show it arrive. That one demonstration answers more questions than any amount of explaining.
+    &ldquo;Will I lose my photos&rdquo; is the first question people ask. Answer it before they ask.
+  </div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow">09</div>
+  <h2>What the card tells you about its files</h2>
+  <p class="lede">Every inspection on the home screen says where its files are. Read it before you delete anything.</p>
+  <table>
+    <tr><th>It says</th><th>It means</th></tr>
+    <tr><td><code>3 files &middot; all uploaded</code></td><td>Safe. Every file is in SharePoint and has been read back and confirmed</td></tr>
+    <tr><td><code>&middot; 1 waiting to upload</code></td><td>Still on the device only. Needs signal and a sign-in</td></tr>
+    <tr><td><code>&middot; 1 uploading</code></td><td>In flight right now. Leave it running</td></tr>
+    <tr><td><code>&middot; 1 needs attention</code></td><td>Tap Try again. If it repeats, tell the office <em>before</em> deleting anything</td></tr>
+    <tr><td><code>no files on this device</code></td><td>Exactly that &mdash; and <strong>not</strong> &ldquo;all uploaded&rdquo;</td></tr>
+  </table>
+  <div class="callout stop">
+    <b>Never delete an inspection that still has photos waiting.</b>
+    The card tells you. If in doubt, do not delete &mdash; nobody has ever been in trouble for keeping a job too long.
+  </div>
+  <div class="notes">
+    <b>Presenter</b>
+    The last row is the one to dwell on. <code>no files on this device</code> looks reassuring and is not; it is what you see after the originals have gone, or on a record you took over.
+  </div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow">10</div>
+  <h2>The measurement schedule</h2>
+  <p class="lede">Section 07. This is what pricing works from.</p>
+  <p>Wall face, length, height, treatment &mdash; one row per face. It is the technical stage's job, but the field inspector's photographs and notes are what make it possible to complete without a second visit.</p>
+  <div class="callout">
+    <b>Metres and millimetres.</b>
+    Australian units throughout, and dates in Australian format with the day name.
+  </div>
+  <div class="notes">
+    <b>Presenter</b>
+    If the room is all field inspectors, this slide is thirty seconds &mdash; just say who does it and why their photos matter to it. If technical staff are present, stop and work an example.
+  </div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow">11</div>
+  <h2>Handing over &mdash; four steps</h2>
+  <div class="callout">
+    <b>One baton, never a copy.</b>
+    At any moment exactly one file is the live record, and it lives in SharePoint. The copy on your device is a working scratch pad.
+  </div>
+  <ol class="steps">
+    <li><div><strong>Set your stage and your name</strong><span>Top of the inspection. This is what stamps the filename and the audit trail.</span></div></li>
+    <li><div><strong>Tap <em>Hand over through SharePoint</em></strong><span>Top of the form. It uploads the record into <code>current/</code> and moves the previous version into <code>archive/</code> for you.</span></div></li>
+    <li><div><strong>Tell the next person</strong><span>Send a link to the folder &mdash; never the file.</span></div></li>
+    <li class="last"><div><strong>Then delete your device copy</strong><span>Once they confirm they have it. The app will not do this for you, and it should not &mdash; deleting somebody's only copy of a day's work on their behalf is not software's decision.</span></div></li>
+  </ol>
+  <div class="callout warn">
+    <b>The last step is the one people skip.</b>
+    Keeping your copy &ldquo;just in case&rdquo; is how one job ends up being edited in two places, with nobody sure which version the client was quoted from. Your work is backed up to <code>wip/</code> automatically, so there is nothing to keep it for.
+  </div>
+  <div class="notes">
+    <b>Presenter</b>
+    <strong>This changed in v1.4 and it is the change most likely to be done the old way.</strong> It used to be five steps: the export, the upload to <code>current/</code> and the move to <code>archive/</code> were all done by hand &mdash; and on a phone they could not be done at all, because the share sheet there offers WhatsApp, not SharePoint.
+    Anyone trained on v1.3 needs the handover card again. Full protocol is <code>03</code> &sect;4; if it has already gone wrong, <code>03</code> &sect;8.
+  </div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow">12</div>
+  <h2>Taking an inspection over</h2>
+  <p class="lede">The other half of the handover, and new in v1.4.</p>
+  <p><strong>Take over an inspection from SharePoint</strong> lists everything with a file waiting in <code>current/</code>, one row per job, with a filter box across the top. Tap one and it comes onto your device. Nobody has to send you anything.</p>
+  <div class="callout warn">
+    <b>The photos arrive as thumbnails, not as files.</b>
+    They are already in the inspection's <code>photos/</code> folder, so sending them a second time would be pointless. Each shows its thumbnail with <em>in SharePoint &middot; tap to fetch</em> underneath. Tap it while you have signal and the full original comes down.
+  </div>
+  <div class="callout stop">
+    <b>Fetch what you need before you lose signal.</b>
+    With no signal, a thumbnail is all you have. This is worth thirty seconds in the car.
+  </div>
+  <p><strong>Browse all inspections</strong> shows every job in the library &mdash; not only the ones waiting &mdash; with its baton state on the row: <strong>WAITING</strong>, <strong>IN PROGRESS</strong>, or <strong>NOT HANDED OVER</strong>. From there you can take it over, read it without taking it, open the folder, or ask the holder for the baton.</p>
+  <div class="notes">
+    <b>Presenter</b>
+    The thumbnail point catches people out. Somebody takes a job over in the office, drives to site, and finds they cannot open the photos. Say it twice.
+  </div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow">13</div>
+  <h2>Where everything lives</h2>
+  <p class="lede">One folder per inspection, holding all of it.</p>
+  <div class="tree">Site Inspections &#9656; INS-2026-0142 - Smith - 12 Marine Pde, Kirra/
+    <b>current/</b>   one file, ever &mdash; the live record
+    archive/   every past handover
+    wip/       automatic backups while you work &mdash; NEVER the baton
+    photos/    the app puts these here by itself</div>
+  <p>Files name themselves, and carry the client name, so a file that has been downloaded or emailed still says whose job it is:</p>
+  <p><code>DS_Draft_INS-2026-0142_Smith_S02-FIELD_2026-08-15T1430_JS.json</code></p>
+  <div class="callout stop">
+    <b>Two files in <code>current/</code> means something has gone wrong.</b>
+    Do not guess which is right. Check the timestamps and the initials in the filename, and ask before overwriting anything. The procedure is in <code>03</code> &sect;8.
+  </div>
+  <div class="notes">
+    <b>Presenter</b>
+    Have the SharePoint library open on the projector for this slide. The tree makes far more sense next to the real thing.
+  </div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow">14</div>
+  <h2>What the app asks before it files</h2>
+  <p class="lede">Five details decide how a record <em>files</em>, rather than what it <em>says</em>.</p>
+  <table>
+    <tr><th>Field</th><th>What it decides</th></tr>
+    <tr><td>Inspection number</td><td>The folder sorts by it, and every photo filename carries it</td></tr>
+    <tr><td>Client name</td><td>Names the folder, and pins into every photo filename</td></tr>
+    <tr><td>Property address</td><td>Names the folder</td></tr>
+    <tr><td>Inspection date</td><td>Indexed as a library column</td></tr>
+    <tr><td>Your name</td><td>Records who handed the record on</td></tr>
+  </table>
+  <p>The app names any that are blank &mdash; once before the first upload, and again at each handover &mdash; shows the folder the record would file as, and lets you go back and fill them in.</p>
+  <div class="callout good">
+    <b>It never blocks anything.</b>
+    Not the photo, not the upload, not the handover. Tap OK and it goes. A blank field mid-inspection is legitimate.
+  </div>
+  <div class="callout warn">
+    <b>The folder name is fixed by the first upload.</b>
+    After that, filling the blanks in corrects the record and the library columns but renames nothing. A record with no number, client or address files as <code>Unfiled</code>.
+  </div>
+  <div class="notes">
+    <b>Presenter</b>
+    The useful habit to teach: put the inspection number and client in before the first photo goes up, not after. Ten seconds then, unfixable later.
+  </div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow">15</div>
+  <h2>When something looks wrong</h2>
+  <table>
+    <tr><th>It says</th><th>Do this</th></tr>
+    <tr><td><strong>&ldquo;No connection&rdquo;</strong></td><td>Normal in a basement. Try again when you have signal. Nothing is lost</td></tr>
+    <tr><td><strong>&ldquo;Please sign in again&rdquo;</strong></td><td>Tap Sign in. Losing signal does not sign you out; this only appears if the sign-in has genuinely expired</td></tr>
+    <tr><td><strong>&ldquo;Need attention&rdquo;</strong></td><td>Tap Try again. If it keeps failing, tell the office <em>before</em> deleting anything</td></tr>
+    <tr><td><strong>&ldquo;A new version is ready&rdquo;</strong></td><td>Tap Update. It only appears on the home screen, never mid-inspection</td></tr>
+    <tr><td><strong>Somebody else has handed this over</strong></td><td>Two people have worked the same job. It names who and when. Talk to them before continuing &mdash; continuing archives their version rather than deleting it</td></tr>
+  </table>
+  <div class="notes">
+    <b>Presenter</b>
+    None of these are emergencies and none of them lose data. Say that out loud &mdash; an inspector who thinks a red message means lost work will stop using the app.
+  </div>
+</section>
+
+<section class="slide">
+  <div class="eyebrow">16</div>
+  <h2>What to take away</h2>
+  <ol class="steps">
+    <li><div><strong>Use the installed icon, never a browser tab.</strong></div></li>
+    <li><div><strong>Photos in the Camera app, then attach.</strong><span>Upload when you are back in signal, and wait for <em>All photos uploaded</em>.</span></div></li>
+    <li><div><strong>Handover is four steps, and the last one is deleting your copy.</strong><span>Only once the next person confirms they have it.</span></div></li>
+    <li><div><strong>Blank fields are normal.</strong><span>A wide form filled in accurately beats a narrow form that forces guesses.</span></div></li>
+  </ol>
+  <div class="callout">
+    <b>Keep the two quick cards where you work.</b>
+    One in the vehicle, one at the desk. There is also a twelve-minute self-paced module you can run any time, on the iPad, with nothing to log into:
+    <code>Training/Training_Module.html</code>
+  </div>
+  <p style="color:var(--ink-3);font-size:14px">Full detail: <code>01_Setup and User Guide</code>. Handover protocol, including what to do when it has already gone wrong: <code>03_Handover and Version Control Protocol</code>.</p>
+  <div class="notes">
+    <b>Presenter</b>
+    Finish by offering to sit down with anyone for ten minutes on a live job. That offer is worth more than both cards, and the people who need it most will not ask in front of the room.
+  </div>
+</section>
+
+</div>
+
+<div class="bar">
+  <span>Site Inspection App &mdash; Setup and Use &middot; App v1.4 &middot; Form 4.2</span>
+  <span class="btns">
+    <button class="btn" id="prev" type="button">&larr; Back</button>
+    <span class="count" id="count"></span>
+    <button class="btn" id="next" type="button">Next &rarr;</button>
+    <button class="btn" id="notes" type="button">Notes (N)</button>
+  </span>
+</div>
+
+<script>
+'use strict';
+/* Deliberately no dependencies and no storage: this has to open from a USB
+   stick on a meeting-room PC with no network, the same as the rest of the pack. */
+var slides = [].slice.call(document.querySelectorAll('.slide'));
+var i = 0;
+
+function show(n){
+  i = Math.max(0, Math.min(slides.length - 1, n));
+  slides.forEach(function(s, k){ s.classList.toggle('on', k === i); });
+  document.getElementById('count').textContent = (i + 1) + ' / ' + slides.length;
+  document.getElementById('prev').disabled = (i === 0);
+  document.getElementById('next').disabled = (i === slides.length - 1);
+  /* Keep the deep slides readable when one runs longer than the screen. */
+  window.scrollTo(0, 0);
+  if(location.hash !== '#' + (i + 1)) history.replaceState(null, '', '#' + (i + 1));
+}
+
+document.getElementById('prev').onclick = function(){ show(i - 1); };
+document.getElementById('next').onclick = function(){ show(i + 1); };
+document.getElementById('notes').onclick = function(){
+  document.body.classList.toggle('notes-on');
+};
+
+document.addEventListener('keydown', function(e){
+  if(e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' '){ show(i + 1); e.preventDefault(); }
+  else if(e.key === 'ArrowLeft' || e.key === 'PageUp'){ show(i - 1); e.preventDefault(); }
+  else if(e.key === 'Home'){ show(0); e.preventDefault(); }
+  else if(e.key === 'End'){ show(slides.length - 1); e.preventDefault(); }
+  else if(e.key === 'n' || e.key === 'N'){ document.body.classList.toggle('notes-on'); }
+});
+
+var start = parseInt((location.hash || '').replace('#', ''), 10);
+show(isNaN(start) ? 0 : start - 1);
+</script>
+</body>
+</html>

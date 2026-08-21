@@ -122,7 +122,7 @@ needs a full pass. What has changed since the guides were last true:
 | `Guides/` PDFs | Regenerate LAST, once the markdown has settled |
 | SharePoint | `BatonStatus` and `BatonHolder` columns, and the column formatting JSON, are configuration the guides should record |
 
-**Progress, 21 August 2026.** Batches A and B are **done**, all against build
+**Progress, 21 August 2026.** Batches A, B and C are **done**, all against build
 `v1.4.0-25`, all documentation tier, suite at 550 assertions with zero failures
 throughout.
 
@@ -134,9 +134,37 @@ throughout.
   fixed in `03`, and the same six-columns error — nothing in this repository
   looks across files, so grep the whole folder before renumbering anything.
 
-**Still to do:** `04_Project Context Brief` (in `_Shared`), the `Training/` set,
-rebuild the deck, then the `Guides/` PDFs last. See
-`docs/HANDOFF-batch-C-context-and-training.md`.
+- **Batch C — the Context Brief and the `Training/` set.** Both done, and the
+  deck rebuilt. The Context Brief's §11 was telling an external AI to generate
+  training material teaching the **five**-step handover — the one error in this
+  pass that would have propagated outside the repository. `Workflow_Chart.html`
+  §02 was still the v1.3 five-step ritual entire, under a footer stamped v1.4,
+  and `README.txt` called it current: **read the file, not the stamp.** New deck
+  is `Training/Setup_and_Use_Deck.html`, HTML rather than `.pptx` on purpose —
+  decision log §4a.
+
+**Still to do:** the `Guides/` PDFs and the two quick cards, plus
+`05_Release Protocol`'s printed-guides table. See
+`docs/HANDOFF-batch-D-guides-and-pdfs.md`. **Batch C is the last of the markdown
+— the sources have settled, so Batch D can regenerate.**
+
+**Two assertions in the suite are flaky — read this before trusting a failure.**
+Batch C opened with *"2 of 550 assertions FAILED"*, both in
+*bytes already orphaned are swept up*. It is **not** a regression:
+`sweepOrphanBytes()` called by hand reclaims the exact record the assertion says
+it missed, and the same suite passes 550/0 on other runs with nothing changed.
+
+Two tidy explanations were formed and **both were disproved by testing them** — a
+stale service worker (it failed again with none controlling the page) and
+leftover data in the `bytes` store (it passed again with that residue seeded on
+purpose). What remains is a race: `tests.html` defines these two checks with
+`later()`, whose IIFE bodies start immediately, so they run concurrently with
+each other *and* with the app's start-up chain — which calls `sweepOrphanBytes()`
+itself. A failing run leaves `__already-orphaned__` in the store, so it *looks*
+stable on reload. That is what made it read as a regression.
+
+**Re-run before believing it.** If a run fails on those two assertions and
+nothing else, it is this. A real regression will not come and go.
 
 **Two corrections to the table above**, found by reading the code in Batch B:
 

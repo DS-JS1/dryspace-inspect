@@ -713,6 +713,64 @@ this repository and so do not show in `git status`.
 
 ---
 
+## 4a. The replacement training deck is HTML, not PowerPoint
+
+**Decided 21 August 2026, Batch C.**
+
+`Setup_and_Use_Presentation.pptx` was deleted because it taught the five-step
+handover and could not be regenerated. The obvious replacement was another
+`.pptx`. It is not what was built.
+
+The reason the deck went stale *and stayed stale unnoticed* is recorded in
+`Training/README.txt`: it was **the only item in the pack not held as editable
+source**. Every other training artefact is `.svg`, `.html` or `.md` — text, in
+the folder, greppable. When the action row moved to the top of the form, a grep
+for *"foot of the form"* across the pack found the chart and the cards. It could
+not find the deck, because the sentence was inside a zip of XML. Nobody saw it
+was wrong until somebody thought to open it, which is the failure mode this
+project keeps paying for.
+
+Rebuilding it as `.pptx` would have restored the artefact and preserved the
+defect. `Setup_and_Use_Deck.html` is plain text beside the rest of the pack,
+prints to PDF the way `Workflow_Chart.html` already does, opens on any device
+with no software, works offline, and carries its presenter notes in the same
+file.
+
+**What is given up:** nobody can edit a slide in PowerPoint. Judged a smaller
+cost than a deck that can silently disagree with the app again — and the pack has
+no other PowerPoint in it, so there is no habit being broken.
+
+**If a `.pptx` is ever genuinely wanted**, generate it from this file rather than
+maintaining it by hand, so the source of truth stays in one place.
+
+---
+
+## 4b. The Workflow Chart was stale under a v1.4 stamp
+
+**Found 21 August 2026, Batch C.** Recorded because it is the second time the
+same trap has been sprung in this documentation pass.
+
+`Training/Workflow_Chart.html` carried a footer reading *App v1.4 · Form 4.2*,
+and `Training/README.txt` listed it among the items that were *"both current at
+v1.4"*. Its section 02 was the **v1.3 five-step handover** in full — heading,
+prose, the SVG's `aria-label`, five step boxes including *"Export"* and *"Move
+the old to archive/"*, and a caption about skipping step 5.
+
+Batch C's own brief repeated the README's claim, because the README said so.
+
+**The rule this confirms:** a version number in a header is a claim about the
+file, made by whoever last edited *part* of it. It is not a check. The only thing
+that has ever caught one of these is opening the file and reading it against the
+code. That is now three separate findings on the same principle — Batch A's
+section numbers, Batch B's assertion counts, and this.
+
+**The corollary that is easy to miss:** not every stale-looking number is stale.
+The same file's lede says *"six stages, five handovers"*, which is correct — six
+stages means five transitions. A search-and-replace for "five" would have broken
+it. Read the sentence, not the digit.
+
+---
+
 ## 5. Open questions
 
 | Question | Blocking | Notes |
@@ -721,5 +779,6 @@ this repository and so do not show in `git status`.
 | **Does iOS preserve EXIF GPS through the Safari file picker?** | No | Decides whether the Google Photos Maps plan is achievable. Needs a real device test. |
 | Should the app be **publicly reachable**? | No | Currently public on GitHub Pages. Cloudflare Access with one-time PIN would make it staff-only, free, and matches the mental model. Decide before wider rollout. |
 | **Google Photos as secondary backup** | No | Scheduled server-side sync reading from SharePoint. No first-party Power Automate connector exists, so it needs a custom connector or script. |
+| **Two flaky assertions in `tests.html`** | No | *bytes already orphaned are swept up* fails intermittently on both its assertions. Found Batch C, 21 Aug 2026. **Not an app fault** — `sweepOrphanBytes()` reclaims correctly when called directly. The two checks are declared with `later()`, whose IIFE bodies start immediately, so they race each other and the app's own start-up `sweepOrphanBytes()` over one key. A stale service worker and leftover store data were both proposed and both **disproved by test**; do not re-derive them. A failing run leaves `__already-orphaned__` behind, so it looks stable on reload — that is what made it read as a regression. Fix when a batch may touch `tests.html`: own key namespace, sequenced after boot. |
 | **Analytics across records** | No | Cross-job querying needs a structured database downstream. The apps produce the data; they do not provide the querying. A SharePoint List, one item per inspection, is the agreed destination — see the Handover Protocol §11. |
 | ~~Who holds Global Administrator~~ | **Resolved 17 Aug 2026** | Now held internally. Worth reviewing periodically — a tenant whose only administrator is unreachable is a business risk well beyond this project. |

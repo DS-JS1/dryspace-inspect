@@ -16,7 +16,7 @@ Workflow_Chart.html        The whole picture. Six stages, the handover, what
                            up on its own.
 
 Quick_Card_Handover.svg    A4 portrait. Print, laminate, one per person and one
-                           in each vehicle. The five handover steps and where
+                           in each vehicle. The four handover steps and where
                            the files live.
 
 Quick_Card_Photos.svg      A4 portrait. NEW in v1.3 — how site photos get from
@@ -27,16 +27,13 @@ Training_Module.html       Self-paced module, about 12 minutes. Works offline,
                            stores nothing, needs no login. Ends with a knowledge
                            check that can be re-run any time.
 
-Setup_and_Use_Presentation.pptx         ** DELETED — TO BE REBUILT **
-                           The slide deck for walking a group through setup
-                           and use. It taught the old five-step handover, and
-                           was the one item in this pack not generated from
-                           source, so it could not be brought up to v1.4 by
-                           regenerating it. Deck and exported PDF have both
-                           been removed rather than left to be handed out.
-                           A replacement will be built from scratch. Until
-                           then, run a session from Training_Module.html and
-                           the Workflow Chart, which are both current.
+Setup_and_Use_Deck.html    The slide deck for walking a group through setup
+                           and use. 17 slides, about 30 minutes with questions.
+                           Open in a browser and present full screen: arrow
+                           keys or Space to move, N for the presenter notes.
+                           Works offline, stores nothing, needs no login.
+                           Replaces Setup_and_Use_Presentation.pptx — see the
+                           note at the end of the v1.4 section below.
 
 
 Onboarding_Emails.md       Two email templates for inviting a new inspector.
@@ -57,6 +54,9 @@ until the guides match.
 Still done by hand:
   Chart      Open Workflow_Chart.html, then Print → Save as PDF → A3 landscape,
              background graphics ON.
+  Deck       Open Setup_and_Use_Deck.html, then Print → Save as PDF → A4
+             landscape, background graphics ON. One slide per page, presenter
+             notes included — that export is the handout.
 
 Background graphics ON matters. Without it the navy headers and the coloured
 panels print as empty white boxes.
@@ -83,19 +83,31 @@ WHAT CHANGED IN v1.4 — READ THIS BEFORE RETRAINING ANYONE
    rather than deleting it.
 
 5. The buttons moved to the top of the form.
+   The action row — Hand over through SharePoint, Send report, Share photo &
+   video files, Share draft, Print / PDF — sits directly beneath the stage
+   selector now, not below every section. Anything showing these at the FOOT of
+   the form is out of date.
 
-NOTE: Setup_and_Use_Presentation.pptx has been DELETED, along with its exported
-PDF. It taught the old five-step handover, and it was the only item in this pack
-not generated from source by tools/make_guides.py — so unlike everything else
-here, it could not simply be regenerated at v1.4.
+6. Photos taken over from SharePoint arrive as thumbnails.
+   Marked "in SharePoint · tap to fetch". The bytes are already in photos/, so
+   they come down on demand. Worth saying in training: with no signal, a
+   thumbnail is all you have — fetch what you need before you go down.
+
+NOTE ON THE DECK: Setup_and_Use_Presentation.pptx was DELETED, along with its
+exported PDF. It taught the old five-step handover, and it was the only item in
+this pack not generated from source — so unlike everything else here, it could
+not simply be regenerated at v1.4.
 
 A deck teaching a handover the app no longer performs is worse than no deck at
 all, and a versioned filename only makes staleness visible to somebody who thinks
-to check. Editing it was judged more work than starting again, so a replacement
-will be built from scratch.
+to check. Editing it was judged more work than starting again.
 
-Until it exists, run a group session from Training_Module.html and the Workflow
-Chart. Both are current at v1.4 and both project perfectly well.
+The replacement is Setup_and_Use_Deck.html, built from scratch in August 2026.
+It is HTML rather than PowerPoint deliberately, and that is the whole point: the
+reason the old deck went stale and could not be recovered is that it was the one
+item here not held as editable source alongside the rest. The new one is plain
+text in the same folder as everything else, so a grep for a button name finds it,
+and it prints to PDF like the chart does.
 
 
 WHAT CHANGED IN v1.3
@@ -131,7 +143,8 @@ WHAT CHANGED IN v1.3
 
 HOW TO USE IT
 ---------------------------------------------------------------------------
-New starter    Module first, then hand them both laminated cards.
+New starter    Module first, then hand them both laminated cards. Setup_and_Use_Deck
+               if you are onboarding more than one person at once.
 Existing team  Walk through Workflow_Chart at a toolbox meeting (15 minutes),
                focusing on sections 02 and 03 — the handover and the photo path.
                The photo card is new to everyone, including experienced staff.
