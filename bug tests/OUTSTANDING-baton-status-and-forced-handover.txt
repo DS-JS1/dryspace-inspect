@@ -161,3 +161,116 @@ WHAT IS DELIBERATELY NOT COVERED
 - Julie and Mike's permission question: whether Contribute - No Delete permits
   the archive move. Answer it by handing one inspection over TWICE and looking
   at archive/. Open since before this work started.
+
+
+===========================================================================
+RESULTS — RUN 1, 21 August 2026, iPhone (Safari, in browser, build v1.4.0-25)
+===========================================================================
+
+Step 1  Create and upload ................................. PASS
+Step 2  Hand over — wip/ written, Waiting shown GREEN,
+        BatonHolder = Jamie Stone ......................... PASS
+Step 3  Take it back — In progress shown AMBER ............ PASS
+Step 4  Browse and view — VIEW ONLY banner, thumbnails .... PASS
+Step 5  Force the handover ................ NOT REACHED — see below
+Step 6  Storage ........................... FAIL / unexplained — see below
+
+ANSWERED: Julie and Mike's permission question. Contribute - No Delete DOES
+permit the archive move. archive/ held 11 files after repeated handovers.
+That question is closed.
+
+
+FINDING 1 — "Force the handover" could not be reached, and may be unreachable
+---------------------------------------------------------------------------
+Observed: the app offered "Take it over", never "Force the handover". The
+takeover then said "This inspection already exists on this device" and opened
+like a normal takeover. BatonStatus never went purple/Recovered.
+
+This is NOT the app misbehaving at the point of use. Reading the code:
+
+  batonState() (index.html:3659) decides the state from ONE thing - whether a
+  file is sitting in current/:
+      file in current/            -> 'waiting'   (offers "Take it over")
+      no file, no BatonHolder     -> 'none'
+      no file, BatonHolder set    -> 'held'      (offers "Ask for the baton"
+                                                  + "Force the handover")
+
+  The picker (index.html:3903) offers "Take it over" whenever chosen.file
+  exists, and only offers "Ask for the baton" / "Force the handover" in the
+  ELSE branch - so both need current/ to be EMPTY.
+
+  But nothing empties current/. takeOverChosen() (index.html:4096) READS the
+  file and sets BatonStatus = In progress; it does not move or delete it. The
+  handover (index.html:3274) uploads the NEW file into current/ and moves the
+  PREVIOUSLY HELD one into archive/. So from the first handover onward,
+  current/ always contains exactly one file.
+
+  If that reading is right, 'held' is unreachable through normal use, and so
+  are BOTH "Ask for the baton" and "Force the handover". That would explain
+  why this test has never been passed: you cannot get to the button.
+
+  Note also that the app and the column DISAGREE by design in this state - the
+  column says "In progress" (written at takeover) while the picker computes
+  "WAITING" from the file being present. Documented at 03 section 10: the app
+  never reads BatonStatus back.
+
+NOT YET PROVEN. The confirming check is in "NEXT RUN" below.
+
+
+FINDING 2 — Subfolder columns showing grey is CORRECT
+---------------------------------------------------------------------------
+photos/, wip/, current/ and archive/ show "Not handed over" in grey because
+they have no BatonStatus value, and the column formatting renders an empty
+value as that text. Only the top-level inspection folder carries the baton.
+Read the library at /Documents, not inside a folder. Nothing to fix.
+
+
+FINDING 3 — Device storage is not being reclaimed
+---------------------------------------------------------------------------
+  10:02pm  137.5 MB
+  10:57pm  147.0 MB     (+9.5 MB across the test)
+
+With ONE inspection on the device, its photos uploaded and verified, and every
+media record reporting bytes=MISSING - meaning no local copies are held.
+
+Deleting the folders in SharePoint is irrelevant here and does not reduce
+device storage; the two stores are entirely separate.
+
+Unexplained and NOT diagnosed. Candidates, none confirmed:
+  - orphaned rows in the 'bytes' store that the start-up sweep is not
+    reclaiming (note: the unit test covering exactly this is the one that
+    keeps failing - docs/HANDOFF-orphan-bytes-race.md)
+  - media records left behind when an inspection is deleted: the store held
+    SIX records (IMG_9610/9615/9616/9617/9644/9668) for a device carrying one
+    two-photo inspection
+  - legacy v1.3 records, or service worker caches. NOTE the storage figure is
+    whole-origin: ds-js1.github.io covers the LIVE v1.3 app and the beta
+    together, so it is not solely the beta's
+
+GAP IN THE TOOLING: diagnostics.html only ever reads the 'media' store
+(line 251, line 486). It cannot see the 'bytes' store or the 'inspections'
+store, so it cannot say where the space has gone. Step 6 can raise the alarm
+but cannot diagnose it.
+
+
+NEXT RUN — do these two things
+---------------------------------------------------------------------------
+A. Confirm or kill Finding 1. In SharePoint, open the inspection folder and
+   MOVE the file out of current/ into archive/ by hand. Do not delete it.
+   Leave BatonHolder as it is. Then in the app: Browse all inspections > that
+   inspection.
+     If it now offers "Ask for the baton" and "Force the handover", the
+     feature works and the fault is that no normal flow ever reaches it.
+     If it still offers only "Take it over", something else is wrong.
+   Then run Step 5 from there.
+
+B. Measure Finding 3 decisively. Note the footer figure. Delete the one
+   inspection from the DEVICE. Fully close and reopen the app so start-up
+   recovery runs. Read the footer figure again.
+     If it is still ~147 MB with nothing on the device, the sweep is not
+     reclaiming and that is a real fault.
+
+TEST-SCRIPT FAULT, fixed for next time: Step 4 says you "should see" Force the
+handover. That is only true when current/ is empty. Do not hand the inspection
+over again between Step 3 and Step 5 - it refills current/ and puts you back
+to "Take it over".
