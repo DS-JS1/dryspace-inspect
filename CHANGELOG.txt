@@ -1,6 +1,88 @@
 Dryspace Site Inspection App — Changelog
 ========================================
 
+DIAGNOSTICS - 21 August 2026 - test-only, no app file changed
+- Added sections 7 and 8 to diagnostics.html, for the two faults run 1 of the
+  baton test found on a real iPhone against real SharePoint. Brief:
+  docs/HANDOFF-baton-columns-not-read-and-storage.md. NO app file was touched:
+  index.html, ds-sharepoint.js, ds-media-sync.js, ds-auth.js and sw.js are all
+  unchanged, APP_VER stays 1.4.0 and CACHE_VERSION stays ds-inspect-v1.4.0-25.
+  diagnostics.html is not in sw.js APP_FILES, so nothing installed is affected.
+- Section 7 answers "can the app read the library columns", which is fault 1 and
+  is currently only a suspicion. It takes THREE readings of the same library root
+  in the same moment: reading 1 calls the transport's own list(), so it cannot
+  drift from what the app really does; readings 2 and 3 issue the current query
+  and the documented $expand=listItem($expand=fields) form directly and print the
+  raw JSON, because a query string can be read all day without revealing what
+  Graph actually sends back. The handoff says PROVE IT BEFORE FIXING IT and this
+  is the instrument for doing that - it changes nothing and recommends nothing.
+- Readings 1 and 2 are cross-checked against each other on purpose. The query
+  literal on the page is a COPY of the one in ds-sharepoint.js, and a copy
+  drifts; if the two readings disagree the page says the copy is out of date
+  rather than reporting confidently on a query the app no longer makes.
+- The verdict has five outcomes, not two. "The app is blind and the documented
+  query is not" is the only one that confirms fault 1. Blind-and-blind means the
+  columns may not exist or the account cannot see them, and says in as many words
+  not to change the query on that evidence; partial means the folders were never
+  tagged, which is a different fault entirely.
+- Section 8 answers "where has the storage gone", which is fault 2 and is not
+  diagnosed at all. Before this the page read only the media store, so it could
+  say which photos were stranded and nothing whatever about the 140.5 MB. It now
+  reports: every database on the origin, every object store with a row count and
+  a byte total, the bytes store split into originals and reports, every cache
+  with its entry count and size and whether it belongs to the current build, the
+  localStorage total, and the remainder the measured rows do not account for.
+- The caches are the point of that list. The origin serves the live v1.3 app at
+  the root and the beta together, so a cache named for another build is a
+  standing explanation for space this app cannot account for. The current
+  CACHE_VERSION is read out of sw.js at run time rather than repeated on the
+  page - a second copy of a version string is a second thing to forget to bump,
+  and this page must never be the reason a stale build looks current.
+- The bytes store is walked with a cursor, not getAll(). It holds whole
+  photographs and videos, and pulling every one into memory at once on the device
+  least able to afford it would make the page that diagnoses running out of space
+  the thing that runs the phone out of memory. Worth noting the app's own
+  sweepOrphanBytes() does exactly that at index.html:4573.
+- Section 8 also chases the handoff's one concrete lead - six media records on a
+  device carrying a two-photo inspection. It cross-references media against
+  inspections and bytes against media, and names the orphans: media records whose
+  inspection is gone are flagged as reclaimed by nothing, byte records whose media
+  record is gone are flagged as sweepOrphanBytes()'s job. Reported only. This
+  page does not sweep, tidy or delete anything.
+- TWO FAULTS WERE FOUND IN THE NEW CODE BY EXERCISING IT, both in section 8 and
+  both fixed. Ten MB was written to IndexedDB and navigator.storage.estimate()
+  still reported half a megabyte, so the remainder came out NEGATIVE while the
+  page cheerfully reported that the rows accounted for everything. It now has a
+  third branch saying the browser's figure is behind what is really stored and
+  the store rows are the ones to trust. The second was a sentence claiming the
+  browser's figure is "normally the larger of the two", which the same test had
+  just disproved on screen; it now says the gap can fall either way and why.
+- That stale figure is worth carrying into fault 2 rather than filing away. A
+  quota figure that lags a write by 9.5 MB is a quota figure that can also lag a
+  DELETE, which would report space already freed and make an empty device look
+  full. Section 8 says so where the remainder is large, and tells the reader to
+  measure again after a minute and after reopening the browser: a figure that
+  falls on its own was never a leak. It is one candidate among several, listed in
+  the order worth checking, and the page is careful not to prefer it.
+- diagnostics.html can be served stale to itself - the service worker caches
+  whatever it is asked for including this file, and it matches with
+  ignoreSearch:true so ?v=2 will not force a fresh copy. Noted on the page: if
+  the sections stop at 6 you are reading an old copy, and because loading it
+  unregisters the worker, opening it once more is the whole fix.
+- Both sections are wired into "Copy everything". The raw Graph responses go in
+  whole rather than summarised, because they are the evidence section 7 exists to
+  produce and a summary of evidence is not evidence.
+- TEST STATUS: 550 of 550, zero failures, run over HTTP before and after. That
+  includes the orphan-bytes assertion "the orphan is reclaimed", which passed on
+  this run. One passing run does not settle an intermittent race and it is NOT
+  evidence the fault is gone - docs/HANDOFF-orphan-bytes-race.md still stands.
+- Section 8's orphan detection was verified against deliberately seeded orphans
+  rather than assumed: a media record with a dead inspection id, one with no id
+  at all, and a byte record with no media record. All three were named correctly.
+  The seeded records were cleared afterwards. Incidentally, reloading the page
+  mid-test swept the seeded orphan bytes automatically, so the app's boot sweep
+  was observed working on real data it had not been told about.
+
 DOCUMENTATION PASS - 21 August 2026 (continued)
 - The release is now gated on the orphan-bytes assertion rather than shipped
   past it - owner's decision, 21 August 2026, decision log 4c. The alternative
