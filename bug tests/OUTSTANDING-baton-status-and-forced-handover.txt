@@ -1,0 +1,141 @@
+OUTSTANDING TEST — BATON STATUS AND FORCED HANDOVER
+Written 21 August 2026. Not yet done.
+
+Build required: v1.4.0-25 or later. Check the footer of the beta app; it names
+the build it is actually running.
+
+Beta app:  https://ds-js1.github.io/dryspace-inspect/beta/
+Live app:  https://ds-js1.github.io/dryspace-inspect/   (v1.3.0 — do not test here)
+
+
+WHY THIS TEST MATTERS
+---------------------------------------------------------------------------
+Two features have never been exercised end to end against real SharePoint:
+
+  1. The baton status columns — whether the app actually writes them, and
+     whether the colours appear as intended.
+  2. Forced handover — the administrator recovery path for a lost, broken or
+     abandoned device.
+
+Everything else in v1.4 has been tested on a real device. These two have not.
+
+
+BEFORE YOU START
+---------------------------------------------------------------------------
+1. Delete the test folders from the Site Inspections library.
+   KEEP the _diagnostics folder.
+   Deleted items sit in the recycle bin for 93 days (tenant default).
+   Nothing on a device is affected — that storage is entirely separate.
+
+2. Confirm the two library columns exist, named EXACTLY:
+        BatonStatus
+        BatonHolder
+   The app writes to those names. A mismatch fails silently, by design —
+   a column problem must never block a handover.
+
+3. Paste the column formatting into BatonStatus:
+   Column header > Column settings > Format this column > Advanced mode
+   (the link sits at the BOTTOM of that pane, above Save/Cancel).
+   Replace everything already in the box.
+
+   The formatting must include PURPLE for "Recovered", or step 5 below will
+   show grey and look like a failure when it is not.
+
+4. Open the beta app and confirm the footer reads:  build v1.4.0-25
+   If it reads anything lower, the cache has not turned over. Use
+   "Check for app update" on the home screen, or load
+   .../beta/index.html?nosw=1 once and then the normal address.
+
+
+THE TEST
+---------------------------------------------------------------------------
+Step 1 — Create and upload
+  New inspection. Fill in client, address, date, inspector name AND the
+  inspection number before attaching anything.
+  Attach two photos. Upload them.
+  EXPECT: both upload; the form's Upload button disappears when done.
+
+Step 2 — Hand over
+  Wait a minute or two with the form open, so an automatic wip/ backup is
+  written. (Backups run every four minutes and on leaving the form. Step 5
+  needs one to exist.)
+  Hand over through SharePoint.
+  EXPECT in the library:
+        BatonStatus = Waiting        shown GREEN
+        BatonHolder = your name
+  EXPECT on the app home screen:
+        the card reads HANDED OVER and sorts below any live records.
+
+Step 3 — Take it back
+  Home screen > Take over an inspection from SharePoint.
+  EXPECT: the picker lists it with a green WAITING badge at top left.
+  Take it over.
+  EXPECT in the library:
+        BatonStatus = In progress    shown AMBER
+        BatonHolder = your name
+
+Step 4 — Browse and view
+  Home screen > Browse all inspections.
+  EXPECT: it reports the total in the library and how many are waiting.
+  Tap the inspection. It should offer:
+        Ask for the baton
+        Force the handover     <- administrator only; you should see this
+        View it
+        Open the folder in SharePoint
+  Choose View it.
+  EXPECT: the form opens with every field greyed out and a black banner
+          reading VIEW ONLY — nothing you change here is saved.
+  Close it.
+
+Step 5 — Force the handover  ** THE ONE THAT HAS NEVER BEEN RUN **
+  Browse all inspections > the same inspection > Force the handover.
+  Read the confirmation, then confirm.
+  EXPECT in the library:
+        BatonStatus = Recovered      shown PURPLE
+        BatonHolder = Jamie Stone, recovered from Jamie Stone
+  Yes, both names being yours looks absurd. That is correct — you are both
+  the administrator and the holder. It proves the whole path.
+  EXPECT: the inspection is back on your home screen, with an audit entry
+          recording that the handover was forced and where it came from.
+
+  If it refuses with "There is nothing in this folder to recover", there is
+  no wip/ backup and nothing in archive/ yet. Hand over a second time to put
+  something in archive/, then retry.
+
+Step 6 — Storage
+  Check the footer figure for device storage.
+  Before this work it read 139.9 MB with no inspections on the device, because
+  deleted photos were leaving their bytes behind. That is fixed and a start-up
+  sweep reclaims the old ones.
+  EXPECT: a small figure that roughly matches what is actually on the device.
+  If it is still large with nothing on the home screen, say so — it means the
+  sweep is not doing its job.
+
+
+IF SOMETHING FAILS
+---------------------------------------------------------------------------
+Do NOT reload the app first. A reload runs start-up recovery and rewrites the
+very state worth looking at.
+
+Go straight to:
+    https://ds-js1.github.io/dryspace-inspect/beta/diagnostics.html
+Tap "Read the stored state", then "Copy everything", and keep it.
+
+That page shows two readings: what was there when the page opened, before the
+app booted, and what is there now. The first is the one that matters.
+
+Also note the build from the footer. Several builds all report v1.4.0, so the
+build number is the only thing that identifies which code was running.
+
+
+WHAT IS DELIBERATELY NOT COVERED
+---------------------------------------------------------------------------
+- A device that dies BETWEEN backups loses up to four minutes of work. No
+  feature fixes that; it belongs in the training.
+- Photos uploaded to a record that has already been handed over are not
+  referenced by the record in SharePoint (D53). The app warns and names the
+  remedy — hand over again. The real fix is for a takeover to reconcile
+  against the photos/ folder, and it is not built.
+- Julie and Mike's permission question: whether Contribute - No Delete permits
+  the archive move. Answer it by handing one inspection over TWICE and looking
+  at archive/. Open since before this work started.
