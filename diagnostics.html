@@ -848,22 +848,30 @@ function dropDatabase(){
     return new Promise(function(res, rej){
       var rq = indexedDB.deleteDatabase('ds-inspections');
       var settled = false;
+      /* 45 seconds, and the message names the real culprit. WebKit does not
+         reliably fire onblocked for a delete, so a held connection shows up as
+         nothing happening at all - which is why the first attempt reported a
+         timeout with no idea what was holding it. */
       var bail = setTimeout(function(){
         if(settled) return;
         settled = true;
         rej(new Error('the delete neither finished nor reported being blocked ' +
-                      'within 15 seconds. Close every other tab showing this app ' +
-                      'and try again.'));
-      }, 15000);
+                      'within 45 seconds. Something still holds the database open ' +
+                      'and WebKit is not saying so. The usual cause is THE APP ITSELF ' +
+                      'open in another Safari tab - close that tab, not just this ' +
+                      'page, then reload and try again.'));
+      }, 45000);
       rq.onsuccess = function(){ if(!settled){ settled = true; clearTimeout(bail); res(true); } };
       rq.onerror   = function(){ if(!settled){ settled = true; clearTimeout(bail); rej(rq.error || new Error('delete failed')); } };
+      /* onblocked is NOT fatal, and treating it as fatal was a fault of its own:
+         it means "somebody is still holding on", not "this will never happen".
+         Once the holders close - which the app now does, because openDB() finally
+         has an onversionchange handler - the delete proceeds and onsuccess fires.
+         Aborting here would kill a delete that was about to work. So say it and
+         keep waiting; only the deadline gives up. */
       rq.onblocked = function(){
         if(settled) return;
-        settled = true;
-        clearTimeout(bail);
-        rej(new Error('BLOCKED — something else still holds the database open. ' +
-                      'Close every other tab or window showing this app, then reload ' +
-                      'this page and try again.'));
+        line('dropdb', 'Waiting', 'something still holds the database open — giving it time', 'warn');
       };
     });
   }).then(function(){

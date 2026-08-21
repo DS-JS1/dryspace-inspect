@@ -1,6 +1,40 @@
 Dryspace Site Inspection App — Changelog
 ========================================
 
+FAULT FOUND IN THE APP - 22 August 2026 - openDB() never let go of the database
+- PATCH tier. index.html and sw.js. CACHE_VERSION -26 -> -27. APP_VER stays
+  1.4.0, still unreleased.
+- Second run of the delete button on the device: the open succeeded, all three
+  stores counted empty, storage before 139.0 MB, app frame closed - and then the
+  delete neither finished nor reported being blocked. No success, no error, no
+  onblocked. Nothing.
+- CAUSE, and it is in the app rather than the diagnostic: openDB() handled
+  onblocked but never set onversionchange. Those are the two halves of the same
+  protocol. onblocked is "somebody else is holding the database"; onversionchange
+  is how a tab STOPS BEING that somebody. Without it, a tab with the app open
+  never lets go, so an upgrade or a delete from any other context waits for ever
+  - and WebKit does not reliably fire onblocked for a delete, so the caller sees
+  no explanation at all. The comment at index.html:1604 described this symptom
+  from the receiving end without anyone noticing the other end was missing.
+- THIS IS NOT ONLY ABOUT THE DIAGNOSTIC. DB_VERSION is 2. The next schema change
+  to 3 would have deadlocked for any user with the app open in two tabs, and
+  presented as a silent hang on start-up. The delete button found a latent fault
+  in the upgrade path, which is the sort of thing a bug test is for.
+- openDB() now closes and drops its handle on versionchange, so the next call
+  reopens on demand. It fires only when another context deliberately asks for an
+  upgrade or a delete, which in practice means diagnostics.html.
+- A SECOND FAULT, in the diagnostic, found while proving the first: the delete
+  treated onblocked as fatal and rejected. onblocked means "somebody is still
+  holding on", NOT "this will never happen" - once the holders close, the delete
+  proceeds and onsuccess fires. Aborting there would have killed a delete that
+  was about to work. It now reports the wait and keeps going; only the deadline
+  gives up.
+- The delete deadline is 15 -> 45 seconds, and the message names the real
+  culprit: the app itself open in another Safari tab, which is not obvious when
+  the page you are looking at is the diagnostics page.
+- Verified: a held connection now yields on versionchange and the delete
+  completes. Happy path still deletes and reports before and after. Tests 550/550.
+
 DIAGNOSTICS - 22 August 2026 - the delete button gave up after eight seconds
 - First run on the device: "FAILED - the database did not open within 8 seconds".
   The guard behaved correctly and deleted nothing, but the failure was impatience

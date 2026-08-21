@@ -1599,7 +1599,25 @@ function openDB(){
          its bytes cannot drift apart. */
       if(!db.objectStoreNames.contains('bytes')) db.createObjectStore('bytes', {keyPath:'mid'});
     };
-    rq.onsuccess = function(){ _db = rq.result; res(_db); };
+    rq.onsuccess = function(){
+      _db = rq.result;
+      /* The other half of the onblocked message below, and it was missing.
+         onblocked says "somebody else is holding the database"; onversionchange
+         is how THIS tab stops being that somebody. Without it a tab with the app
+         open never lets go, so an upgrade or a delete from anywhere else waits
+         for ever - and WebKit does not reliably fire onblocked for a delete, so
+         the caller sees no success, no error and no explanation. That is exactly
+         what the diagnostics page hit on 22 August 2026.
+
+         Closing here costs nothing: the handle is dropped so the next openDB()
+         reopens on demand. It only fires when another context deliberately asks
+         for an upgrade or a delete, which in practice means diagnostics.html. */
+      _db.onversionchange = function(){
+        try { _db.close(); } catch(e){}
+        _db = null;
+      };
+      res(_db);
+    };
     rq.onerror = function(){ rej(rq.error); };
     rq.onblocked = function(){
       /* Another tab holding version 1 open stops the upgrade dead, and silence
