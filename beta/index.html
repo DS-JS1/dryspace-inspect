@@ -1517,6 +1517,22 @@ var SP_CONFIG = {
   /* Entra matches these as exact strings — a stray trailing slash is rejected,
      so they are listed literally rather than derived from location. Each must
      appear verbatim under Authentication in the app registration. */
+  /* Who may force a handover when somebody has left, lost a device, or simply
+     never handed on. Matched against the signed-in Microsoft account, so it
+     cannot be spoofed by typing a different name into the app.
+
+     A list rather than an Entra group check: there is one administrator, the
+     list is honest about what it is, and a group check would mean another
+     consented permission and another thing to be wrong at three in the morning.
+
+     EMPTY BY DEFAULT ON PURPOSE. Nobody is an administrator until an address is
+     added here, so the feature cannot appear by accident on somebody's phone.
+     Add the work account, not a personal one - it is the Microsoft sign-in that
+     is checked. */
+  admins: [
+    /* 'jamie@dryspacesolutions.com.au', */
+  ],
+
   redirectUris: {
     live:  'https://ds-js1.github.io/dryspace-inspect/',
     /* A test build served from a subfolder of the same Pages site, so staff on
@@ -3710,6 +3726,123 @@ function showRequest(body){
   alert(body);
 }
 
+function isAdmin(){
+  var list = SP_CONFIG.admins || [];
+  if(!list.length || !dsAuth || !dsAuth.isSignedIn()) return false;
+  var acc = dsAuth.account() || {};
+  var me = String(acc.username || '').toLowerCase();
+  if(!me) return false;
+  return list.some(function(a){ return String(a).toLowerCase() === me; });
+}
+
+/* Forced handover. Somebody has left at short notice, lost a device, or simply
+   never handed on, and the record is stranded where nobody can reach it.
+
+   Most of this already worked: recovering a working copy files back to the same
+   pinned folder, so no duplicate folder appears, and it clears the baton pointer
+   so the original device meets the fork warning if it ever resurfaces. What was
+   missing is that anyone could do it and nobody else could see it had happened.
+
+   So: restricted to an administrator, and it says so in the library. The
+   original holder's name is kept alongside the recoverer's, because "who had it
+   before this was taken off them" is the first question anybody will ask. */
+function forceHandover(entry){
+  var folderName = entry.folder.name;
+  var f = entry.folder.fields || {};
+  var them = f.BatonHolder || 'an unknown holder';
+  var me = userName() || 'an administrator';
+
+  return showDialog({
+    title: 'Force a handover',
+    note: 'For a device that is lost, broken, or belongs to somebody who has ' +
+          'left. It takes the most recent copy in SharePoint and marks the ' +
+          'library so everyone can see what happened.',
+    lines: [
+      {k: 'Inspection', v: folderName},
+      {k: 'Currently held by', v: them},
+      {k: 'Recovering as', v: me}
+    ],
+    choices: [
+      {title: 'Stop', sub: 'Nothing is changed.', value: 'stop'},
+      {title: 'Force the handover',
+       sub: 'Anything ' + them + ' has done since their last backup is not here.',
+       value: 'go'}
+    ],
+    cancel: null
+  }).then(function(choice){
+    if(choice !== 'go') return;
+    setSync('Finding the most recent copy…', 'busy');
+    return newestIn(folderName + '/wip').then(function(w){
+      if(w) return {file: w, where: 'wip'};
+      return newestIn(folderName + '/archive').then(function(a){
+        if(a) return {file: a, where: 'archive'};
+        throw new Error('There is nothing in this folder to recover — no backup ' +
+                        'and no earlier handover. The only copy is on the device.');
+      });
+    }).then(function(found){
+      return dsTransport.download(found.file.itemId).then(function(blob){
+        return blob.text ? blob.text() : new Response(blob).text();
+      }).then(function(text){
+        var payload = JSON.parse(text);
+        if(!payload.inspection) throw new Error('That file is not an inspection record.');
+        var rec = payload.inspection;
+        /* Not the baton: nothing in current/ has been agreed with. The next
+           handover from here will say so and ask, exactly as it should. */
+        rec.baton = null;
+        rec.handedOverAt = null;
+        rec.handedOverTo = null;
+        rec.audit = (rec.audit || []).concat([{
+          at: new Date().toISOString(), by: me, stage: rec.stage || 'office',
+          action: 'Handover forced by ' + me + ', recovered from ' + them +
+                  ' (' + found.where + ')'
+        }]);
+        return new Promise(function(res){
+          importRecord(rec, function(){
+            importDraftMedia(payload, function(n){
+              dsTransport.setFields(folderName, spFields(rec, {
+                status: 'Recovered',
+                holder: me + ', recovered from ' + them
+              })).catch(function(){});
+              renderHome();
+              setSync('Handover forced.', 'ok');
+              showDialog({
+                title: 'Handover forced',
+                note: 'The library now shows this as Recovered, so everyone can ' +
+                      'see it was taken rather than handed on. Hand it over ' +
+                      'normally when you are done and it returns to the usual flow.',
+                lines: [
+                  {k: 'Recovered from', v: them},
+                  {k: 'Source', v: found.where === 'wip'
+                      ? 'their automatic backup — ' + found.file.name
+                      : 'the last handover in archive/ — ' + found.file.name},
+                  {k: 'Photos attached', v: n ? String(n) : 'none referenced'}
+                ],
+                choices: [{title: 'Open it', value: 'open'},
+                          {title: 'Not now', value: 'later'}],
+                cancel: null
+              }).then(function(go){
+                if(go === 'open') openInspection(rec.id);
+                res();
+              });
+            });
+          }, res);
+        });
+      });
+    });
+  }).catch(function(e){
+    setSync('Could not force the handover: ' + ((e && e.message) || e), 'bad');
+  });
+}
+
+function newestIn(path){
+  return dsTransport.list(path).then(function(files){
+    return files.filter(function(x){ return !x.isFolder; })
+                .sort(function(a, b){
+                  return Date.parse(b.modifiedAt || 0) - Date.parse(a.modifiedAt || 0);
+                })[0] || null;
+  }, function(){ return null; });
+}
+
 function browseAllInspections(){
   if(!dsTransport || !dsAuth || !dsAuth.isSignedIn()){
     alert('Sign in to Microsoft first — the button is on the home screen.');
@@ -3776,7 +3909,16 @@ function browseAllInspections(){
                                ? 'Send ' + (chosen.folder.fields || {}).BatonHolder +
                                  ' a message asking them to hand it on.'
                                : 'Send a message asking whoever has it to hand it on.',
-                        value: 'ask'}]).concat([
+                        value: 'ask'}]
+                      /* Only shown to an administrator, and only when somebody
+                         actually holds it. Offering it on a job nobody has would
+                         be an invitation to use it as a shortcut. */
+                      .concat(isAdmin() && b.key === 'held'
+                        ? [{title: 'Force the handover',
+                            sub: 'Administrator only. For a lost or broken device, ' +
+                                 'or somebody who has left.',
+                            value: 'force'}]
+                        : [])).concat([
           {title: 'View it', sub: chosen.file
               ? 'Read the version waiting, without taking it.'
               : 'Read the last version that was handed over. Nothing is changed.',
@@ -3787,6 +3929,7 @@ function browseAllInspections(){
       }).then(function(what){
         if(what === 'take') return takeOverChosen(chosen.folder.name, chosen.file);
         if(what === 'ask') return requestBaton(chosen);
+        if(what === 'force') return forceHandover(chosen);
         if(what === 'view') return viewInspectionReadOnly(chosen.folder.name);
         if(what === 'folder' && chosen.folder.webUrl){
           window.open(chosen.folder.webUrl, '_blank', 'noopener');
