@@ -1635,6 +1635,17 @@ function fetchRemoteCopy(rec){
     .then(function(){ return true; });
 }
 
+/* Deleting a media record without deleting its bytes leaves the bytes for ever:
+   nothing references them, nothing lists them, and nothing reclaims them. On a
+   device with no inspections left at all, 139 MB of them had accumulated.
+
+   Introduced by the move to a separate byte store and not noticed, because
+   everything that USES bytes goes through the record and the record was gone.
+   Deletion is the one operation that has to know about both. */
+function forgetMedia(mid){
+  return dbDel('media', mid).then(function(){ return dbDel('bytes', mid); });
+}
+
 function putBytes(mid, originalBuf, reportBuf){
   return dbPut('bytes', {mid: mid, original: originalBuf || null, report: reportBuf || null});
 }
@@ -2459,7 +2470,7 @@ function renderMedia(field, containerId){
       x.onclick = function(ev){
         ev.stopPropagation();
         if(confirm('Remove ' + r.name + ' from this inspection?'))
-          dbDel('media', r.mid).then(function(){
+          forgetMedia(r.mid).then(function(){
             renderMedia(field, containerId);
             refreshMediaState().then(refreshCompletion);
             renderSyncBar();
@@ -2591,7 +2602,7 @@ function toggleComplete(){
 function deleteInspection(id, label){
   if(!confirm('Delete "' + label + '" and all its photos/videos from this device? This cannot be undone.\n\nIf you have not sent the report yet, cancel and send it first.')) return;
   mediaFor(id).then(function(recs){
-    return Promise.all(recs.map(function(r){ return dbDel('media', r.mid); }));
+    return Promise.all(recs.map(function(r){ return forgetMedia(r.mid); }));
   }).then(function(){ return dbDel('inspections', id); }).then(renderHome);
 }
 function renderHome(){
@@ -3650,6 +3661,55 @@ function batonState(entry){
           who: 'held by ' + f.BatonHolder};
 }
 
+/* Asking the holder to hand it on.
+
+   Deliberately the share sheet rather than a notification. Web push on iOS needs
+   the app installed to the Home Screen AND permission granted, and it needs a
+   server to send from - this app is static files on GitHub Pages, so that is
+   infrastructure, not a feature. A pre-filled message through the share sheet
+   works on iOS, Android, Windows and a Mac today, and lets the sender pick
+   whichever channel that person actually reads: SMS, WhatsApp, Teams, email.
+
+   The message carries what the holder needs to act without asking anything back:
+   which inspection, what stage, who wants it, and what to do. */
+function requestBaton(entry){
+  var f = (entry.folder && entry.folder.fields) || {};
+  var who = f.BatonHolder || 'whoever has it';
+  var me = userName() || 'a colleague';
+  var stage = f.Stage ? ' (' + f.Stage + ')' : '';
+  var body =
+    'Dryspace site inspection — can you hand this one on?' + '\n\n' +
+    entry.folder.name + stage + '\n\n' +
+    'It is showing as held by ' + who + ', and ' + me + ' needs to pick it up.' + '\n\n' +
+    'In the app: open it, then Hand over through SharePoint. It will then be' + '\n' +
+    'waiting for anyone to take over.';
+
+  if(navigator.share){
+    return navigator.share({title: 'Baton request — ' + entry.folder.name, text: body})
+      .catch(function(e){ if(!e || e.name !== 'AbortError') copyRequest(body); });
+  }
+  /* No share sheet - a desktop browser, usually. Copy it and say so, rather
+     than opening a mail client the person may not use. */
+  return copyRequest(body);
+}
+
+function copyRequest(body){
+  function told(){
+    alert('The request has been copied.\n\nPaste it into a message, Teams or an email.');
+  }
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    return navigator.clipboard.writeText(body).then(told, function(){ showRequest(body); });
+  }
+  showRequest(body);
+  return Promise.resolve();
+}
+
+function showRequest(body){
+  /* Last resort: put it on screen so it can be selected by hand. Better than a
+     dead end, and it costs nothing to include. */
+  alert(body);
+}
+
 function browseAllInspections(){
   if(!dsTransport || !dsAuth || !dsAuth.isSignedIn()){
     alert('Sign in to Microsoft first — the button is on the home screen.');
@@ -3711,7 +3771,12 @@ function browseAllInspections(){
                     ? [{title: 'Take it over',
                         sub: 'Bring it onto this device. You become the holder.',
                         value: 'take'}]
-                    : []).concat([
+                    : [{title: 'Ask for the baton',
+                        sub: b.key === 'held'
+                               ? 'Send ' + (chosen.folder.fields || {}).BatonHolder +
+                                 ' a message asking them to hand it on.'
+                               : 'Send a message asking whoever has it to hand it on.',
+                        value: 'ask'}]).concat([
           {title: 'View it', sub: chosen.file
               ? 'Read the version waiting, without taking it.'
               : 'Read the last version that was handed over. Nothing is changed.',
@@ -3721,6 +3786,7 @@ function browseAllInspections(){
         ])
       }).then(function(what){
         if(what === 'take') return takeOverChosen(chosen.folder.name, chosen.file);
+        if(what === 'ask') return requestBaton(chosen);
         if(what === 'view') return viewInspectionReadOnly(chosen.folder.name);
         if(what === 'folder' && chosen.folder.webUrl){
           window.open(chosen.folder.webUrl, '_blank', 'noopener');
@@ -3990,7 +4056,7 @@ function importRecord(rec, then, onAbort){
         'OK = replace with the imported copy\nCancel = show other options';
       if(confirm(msg)){
         /* replacing: clear the old copy's stored files so they aren't orphaned/duplicated */
-        wipe = mediaFor(rec.id).then(function(ms){ return Promise.all(ms.map(function(m){ return dbDel('media', m.mid); })); });
+        wipe = mediaFor(rec.id).then(function(ms){ return Promise.all(ms.map(function(m){ return forgetMedia(m.mid); })); });
         rec.audit = (rec.audit || []).concat([{at: new Date().toISOString(), by: userName() || 'unnamed',
           stage: rec.stage || 'office', action: 'Imported — replaced the copy on this device'}]);
       } else if(confirm('Keep BOTH copies?\n\nThis creates a FORK — two separate records carrying the same ' +
@@ -4349,6 +4415,27 @@ function migrateMediaBytes(){
     }, Promise.resolve()).then(function(){ return done; });
   }).catch(function(e){
     console.warn('Could not migrate media bytes', e);
+    return 0;
+  });
+}
+
+/* Reclaim bytes whose record is gone. Deleting a record used to leave them
+   behind, so a device could be carrying hundreds of megabytes for inspections
+   that no longer exist. Runs at start-up, costs one listing of keys, and is
+   silent when there is nothing to do.
+
+   Deliberately keyed off the media store rather than a flag: whatever caused an
+   orphan, present or future, this finds it. */
+function sweepOrphanBytes(){
+  return Promise.all([dbAll('media'), dbAll('bytes')]).then(function(r){
+    var live = {};
+    r[0].forEach(function(m){ live[m.mid] = true; });
+    var dead = r[1].filter(function(b){ return !live[b.mid]; });
+    if(!dead.length) return 0;
+    return Promise.all(dead.map(function(b){ return dbDel('bytes', b.mid); }))
+      .then(function(){ return dead.length; });
+  }).catch(function(e){
+    console.warn('Could not sweep orphaned bytes', e);
     return 0;
   });
 }
@@ -4731,6 +4818,9 @@ function init(){
      records are moved back into it. */
   migrateMediaBytes().then(function(moved){
     if(moved) console.info('Moved ' + moved + ' file(s) into the bytes store.');
+    return sweepOrphanBytes();
+  }).then(function(freed){
+    if(freed) console.info('Reclaimed bytes for ' + freed + ' deleted file(s).');
     return recoverInterruptedUploads();
   }).then(function(n){
     if(n) console.info('Recovered ' + n + ' interrupted upload(s) — queued again.');

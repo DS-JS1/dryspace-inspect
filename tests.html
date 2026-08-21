@@ -794,10 +794,20 @@ function run(W){
       function withMedia(recs){
         var tries = 0;
         return (function attempt(){
+          /* dbAll is stubbed for exactly one call and restored in the same tick.
+             renderSyncBar reads it when invoked, so the stub does not need to
+             survive the await - and holding it across one handed this rejection
+             to every other test that touched storage meanwhile. That is not
+             hypothetical: it broke two unrelated tests, and the failure looked
+             like a bug in the code under test rather than in this file.
+
+             dsAuth stays stubbed through the poll, because the continuation
+             reads it after the await, and because app start-up reassigns it. */
           W.dbAll = function(){ return Promise.resolve(recs); };
           W.dsAuth = {isSignedIn: function(){ return true; },
                       account: function(){ return {name: 'Test User'}; }};
           W.renderSyncBar();
+          W.dbAll = realAll;
           return new Promise(function(r){ setTimeout(r, 30); }).then(function(){
             var said = msg ? msg.textContent : '';
             if(/Test User/.test(said) || tries++ > 40) return said;
@@ -828,7 +838,7 @@ function run(W){
           ok(/attention/i.test(said),
              'and it still says they need attention',
              'banner said: ' + said);
-          W.dbAll = realAll; W.dsAuth = realAuth;
+          W.dsAuth = realAuth;
           /* Leave the panel as it was found. Rendering rows here made the next
              test's "hidden until there is something to report" fail, which is
              test pollution, not an app fault. */
@@ -895,8 +905,13 @@ function run(W){
       var box = D.getElementById('sy-detail');
       var realAll = W.dbAll;
       W.dbAll = function(){ return Promise.reject(new Error('storage unavailable')); };
-      return W.refreshSyncDetail().then(function(){
-        W.dbAll = realAll;
+      /* Restored in the SAME tick. refreshSyncDetail reads dbAll when it is
+         called, so the stub only has to survive the call - and holding it across
+         an await handed the rejection to every other test that read storage in
+         that window. Which is exactly what happened. */
+      var run = W.refreshSyncDetail();
+      W.dbAll = realAll;
+      return run.then(function(){
         ok(/could not be read/.test(box ? box.innerHTML : ''),
            'the panel says it could not be read',
            'panel said: ' + (box ? box.innerHTML.slice(0, 160) : 'no panel'));
@@ -1395,6 +1410,68 @@ function run(W){
       W.cur = realCur; W.viewOnly = realView;
       ok(false, 'saveNow threw in view mode', String(e && e.message || e));
     });
+  });
+
+  /* v1.4.0 patch - deleting a media record without its bytes left them for ever:
+     nothing referenced them, nothing listed them, nothing reclaimed them. A
+     device with no inspections at all had accumulated 139 MB. */
+  later('deleting a photo takes its bytes with it',
+    (function(){
+      var mid = '__orphan-test__';
+      return W.toBuffer(new Blob(['0123456789']))
+        .then(function(buf){ return W.putBytes(mid, buf, buf); })
+        .then(function(){ return W.dbPut('media', {mid: mid, iid: '__t__', name: 'x.jpg'}); })
+        .then(function(){ return W.forgetMedia(mid); })
+        .then(function(){ return W.dbGet('bytes', mid); })
+        .then(function(left){
+          ok(!left, 'the bytes are gone too',
+             'the record was deleted and its bytes were left behind');
+        });
+    })());
+
+  later('bytes already orphaned are swept up',
+    (function(){
+      /* The fix above stops it happening; this reclaims what already has. */
+      var mid = '__already-orphaned__';
+      return W.toBuffer(new Blob(['0123456789']))
+        .then(function(buf){ return W.putBytes(mid, buf, buf); })
+        .then(function(){ return W.sweepOrphanBytes(); })
+        .then(function(n){
+          ok(n >= 1, 'the sweep found it (' + n + ')');
+          return W.dbGet('bytes', mid);
+        })
+        .then(function(left){
+          ok(!left, 'and reclaimed it');
+        });
+    })());
+
+  /* v1.4.0 patch - asking the holder to hand it on, through the share sheet
+     rather than a notification: web push needs an installed app, a permission
+     grant, and a server to send from. */
+  test('a baton request says everything the holder needs to act', function(){
+    ok(typeof W.requestBaton === 'function', 'requestBaton() defined');
+    if(typeof W.requestBaton !== 'function') return;
+    var realShare = W.navigator.share, sent = null;
+    try {
+      /* W.navigator, not navigator: the app runs in the iframe and reads its
+         own. Stubbing the test page's does nothing at all. */
+      Object.defineProperty(W.navigator, 'share', {
+        configurable: true,
+        value: function(o){ sent = o; return Promise.resolve(); }
+      });
+    } catch(e){ ok(true, 'share could not be stubbed in this browser - skipped'); return; }
+
+    W.requestBaton({folder: {name: 'INS-2026-0142 - Smith - 12 Marine Pde',
+                             fields: {BatonHolder: 'Mike', Stage: 'S03-TECH'}}});
+    try { Object.defineProperty(W.navigator, 'share', {configurable: true, value: realShare}); } catch(e){}
+
+    ok(!!sent, 'it goes to the share sheet, so the sender picks the channel');
+    if(!sent) return;
+    ok(/INS-2026-0142/.test(sent.text), 'names the inspection');
+    ok(/Mike/.test(sent.text), 'names who is holding it');
+    ok(/S03-TECH/.test(sent.text), 'and what stage it is at');
+    ok(/Hand over through SharePoint/.test(sent.text),
+       'and tells them exactly what to do, so nothing has to be asked back');
   });
 
   test('the per-file status panel exists and starts empty', function(){

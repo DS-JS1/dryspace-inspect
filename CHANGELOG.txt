@@ -646,7 +646,21 @@ into "Waiting", which proved the uploading state had never been written.
   version in current/, or the last one filed in archive/ when somebody holds
   it. Every field disabled, a banner saying so, and saveNow() refuses -
   reviewing a record must not fork it onto the reviewer's device.
-- 535 assertions. CACHE_VERSION -> ds-inspect-v1.4.0-22.
+- DELETED PHOTOS WERE LEAVING THEIR BYTES BEHIND. Moving bytes into their own
+  store (D49) added a second thing to delete, and none of the three delete
+  paths knew about it - so every photo ever removed left its bytes for ever,
+  referenced by nothing and listed by nothing. A device with no inspections
+  at all was carrying 139 MB. Deletion now removes both, and a start-up
+  sweep reclaims what has already been orphaned.
+- "Ask for the baton": a pre-filled message through the share sheet naming
+  the inspection, the stage, who holds it, who wants it, and what to do.
+  Share sheet rather than a notification deliberately - web push needs an
+  installed app, a permission grant, and a server to send from.
+- Two tests were holding a stubbed dbAll across an await, which handed their
+  rejection to every other test that read storage in that window. The
+  failures looked like bugs in the code under test. Stubs are now restored
+  in the same tick as the call they cover.
+- 544 assertions. CACHE_VERSION -> ds-inspect-v1.4.0-23.
 
 The architectural change: the record now travels the same road as the photos,
 and in-progress work is backed up without anyone having to remember to do it.
