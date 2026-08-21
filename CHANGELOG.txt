@@ -1,6 +1,46 @@
 Dryspace Site Inspection App — Changelog
 ========================================
 
+RELEASE GATE - 22 August 2026 - two blockers added, one of them found by looking
+- OI-10: the v1.3 -> v1.4 upgrade has never been rehearsed on a device. Three
+  migrations run the first time a staff member updates, against their real
+  evidence photographs: IndexedDB 1 -> 2, migrateMediaBytes() moving every photo
+  off the media records into the bytes store, and ensureSchema() taking the
+  record 3 -> 4. Tested until now only against synthetic {schema:3} objects and
+  the v1.1.1 fixture in tests.html, which is not what the protocol's major-tier
+  line asks for. Owner agreed it blocks release. One person can run it.
+  Two reasons it matters more than it looks: migrateMediaBytes()'s failure path
+  marks a photo "the stored file was lost by the browser - this photo needs
+  retaking", so a hiccup is destructive to the record's state; and it opens with
+  dbAll('media'), the call OI-9 says can come back short, in which case it
+  migrates nothing and reports success.
+- OI-11, AND THIS ONE WAS NOT BEING LOOKED FOR: the beta and the live app SHARE
+  ONE DATABASE. Both use DB_NAME 'ds-inspections' and both are served from
+  ds-js1.github.io, and IndexedDB is scoped to the ORIGIN, not the path. So / and
+  /beta/ have never been two apps with two databases.
+- v1.3 opens at version 1 with a hard reject on error; v1.4 upgrades to version 2.
+  Once a device opens the beta, the live app on that device can no longer open the
+  database at all - "the requested version (1) is less than the existing version
+  (2)" - openDB() rejects and every read and write in v1.3 fails from then on. The
+  tester's phone is almost certainly in that state now.
+- Nothing recent caused it. It has been true since the beta was first placed on
+  this origin, and it went unnoticed because staff do not use the beta.
+- WHY IT IS A RELEASE MATTER RATHER THAN A TIDINESS ONE: IT REMOVES THE ROLLBACK.
+  Once v1.4 is at the root, every device that opens it carries a version-2
+  database. Putting v1.3 back would leave all of them holding a database the
+  restored app cannot open. The usual safety net - revert the root, staff carry
+  on - is not available for this release. Better known before the decision than
+  during an incident.
+- Deliberately NOT decided. Three options are written up in OPEN-ITEMS OI-11 and
+  decision log 4h: release forward-only with the loss of rollback recorded; give
+  v1.4 its own DB_NAME; or teach v1.3 to fail gracefully on a newer database.
+  Only the last helps the handsets already affected, and it means touching the
+  live app staff are using today.
+- OI-10's procedure is written down with the steps in the right ORDER, because of
+  OI-11: delete the database first, then create the inspection in the LIVE app,
+  then open the beta. Doing it the other way round tests nothing.
+- Tests 554 of 554, register guard included.
+
 OI-2 AND OI-4 CLOSED - 22 August 2026 - and the cause was NOT what three
 investigations had assumed
 - PATCH tier. tests.html, index.html, sw.js. CACHE_VERSION -28 -> -29. APP_VER

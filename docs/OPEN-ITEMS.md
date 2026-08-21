@@ -32,8 +32,75 @@ when the register itself has decayed.
 
 ## 1. Blocks release
 
-Nothing ships while any of these is open. **OI-2 closed 22 August 2026**, so this
-list is down to one.
+Nothing ships while any of these is open. OI-2 closed 22 August 2026; OI-10 and
+OI-11 were added the same day, the second of them found while checking what the
+first would involve.
+
+### OI-10 · The v1.3 → v1.4 upgrade has never been rehearsed on a device
+**Status:** open · **Tier:** a test run; an app change only if it fails
+**Detail:** `05_Release Protocol` §2, major tier · decision log §4g, §4h
+
+Three migrations run the first time a staff member updates, against their real
+evidence photographs:
+
+| | v1.3 | v1.4 |
+|---|---|---|
+| IndexedDB version | **1** | **2** |
+| Stores | `inspections`, `media` | … and `bytes` |
+| Photographs live | on the media record | in the `bytes` store |
+| Record schema | 3 | 4 |
+
+Tested so far only against synthetic `{schema: 3}` objects and the v1.1.1 fixture
+in `tests.html`. **Never against a real v1.3-produced record, with real photos, on
+a real phone** — which is what the protocol's major-tier line asks for.
+
+Two reasons it matters more than it looks. `migrateMediaBytes()`'s failure path
+marks a photo *"the stored file was lost by the browser — this photo needs
+retaking"*, so a hiccup is destructive to the record's state. And it opens with
+`dbAll('media')` — the call OI-9 says can come back short. A short listing there
+migrates nothing and reports success.
+
+**One person can do this.** Order matters, because of OI-11:
+
+1. Delete the database (diagnostics §8b) so the device starts at no version.
+2. Open the **live** app and create an inspection with at least two photographs,
+   one of them over 4 MB.
+3. Open the **beta** on the same device. That is the upgrade.
+
+**Done means:** afterwards, both photographs read back, the `bytes` store holds
+them, the media records no longer carry blobs, the record reads `schema: 4`, and
+nothing is marked *needs retaking*. Confirmed from diagnostics §6 and §8 rather
+than by eye, and appended to the bug-test file.
+
+### OI-11 · Opening the beta breaks the live app on that device, and there is no way back
+**Status:** open — **needs a decision before release** · **Tier:** see below
+**Detail:** decision log §4h
+
+Both builds use `DB_NAME = 'ds-inspections'` and both are served from
+`ds-js1.github.io`, so **they share one database.** v1.3 opens it at version 1
+(`indexedDB.open(DB_NAME, 1)`) with a hard `rq.onerror → reject`. v1.4 upgrades it
+to version 2.
+
+Once the beta has been opened on a device, the shared database is at version 2,
+and v1.3 can no longer open it: *the requested version (1) is less than the
+existing version (2)*. `openDB()` rejects, so every read and write in the live app
+fails from then on. **The tester's phone is almost certainly in this state now.**
+
+This is not new and was not introduced by any recent change — it has been true
+since the beta was first put on this origin. It has gone unnoticed because staff
+do not use the beta.
+
+**Why it blocks a release decision rather than merely being untidy: it removes the
+rollback.** Once v1.4 is at the root, every device that opens it holds a version-2
+database. Reverting the root to v1.3 would then leave every one of those devices
+with a database v1.3 cannot open — so the usual safety net, put the old one back,
+is not there. That is worth knowing **before** shipping, not after.
+
+**Done means:** a recorded decision. The options, and none is obviously right:
+accept it and release forward-only, with a written note that rollback is not
+available; give v1.4 its own `DB_NAME` so the two never share; or teach v1.3 to
+fail gracefully when it meets a newer database — which means touching the live
+app, and is the only option that helps the devices already affected.
 
 ### OI-1 · "Force the handover" has never been seen to work
 **Status:** open · **Tier:** test-only run, no code expected

@@ -944,6 +944,39 @@ The guard does not depend on knowing the cause, and that is the point of it.
 
 ---
 
+## 4h. The beta shares a database with the live app, and that removes the rollback
+
+**22 August 2026, found while scoping the upgrade rehearsal (OI-10).** Both builds
+use `DB_NAME = 'ds-inspections'`, and both are served from `ds-js1.github.io`.
+IndexedDB is scoped to the origin, not the path — so `/` and `/beta/` have never
+been two apps with two databases. They are two apps sharing one.
+
+v1.3 opens it at version 1 and rejects hard on error. v1.4 upgrades it to version
+2. **Once a device opens the beta, the live app on that device can no longer open
+the database at all**: *the requested version (1) is less than the existing version
+(2)*, `openDB()` rejects, and every read and write in v1.3 fails from then on.
+
+Nothing recent caused this. It has been true since the beta was first placed on
+this origin, and it went unnoticed because staff do not use the beta — only
+testers do, and a tester who stops using the live app on that handset never sees
+the consequence.
+
+**The reason it belongs in this log rather than in a bug list: it removes the
+rollback.** Once v1.4 is at the root, every device that opens it carries a
+version-2 database. Putting v1.3 back would leave all of them holding a database
+the restored app cannot open. The habitual safety net — revert the root, staff
+carry on — **is not available for this release**, and that is a fact worth having
+before the decision rather than during an incident.
+
+**Deliberately not decided here.** The three options are written up in OPEN-ITEMS
+OI-11: release forward-only with the loss of rollback recorded; give v1.4 its own
+`DB_NAME`; or teach v1.3 to fail gracefully on a newer database. Only the last
+helps the handsets already affected, and it means touching the live app that staff
+are using today — which is precisely the sort of change this project does not make
+casually.
+
+---
+
 ## 5. Open questions
 
 | Question | Blocking | Notes |
