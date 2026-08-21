@@ -32,12 +32,30 @@ when the register itself has decayed.
 
 ## 1. Blocks release
 
-Nothing ships while any of these is open. OI-2 closed 22 August 2026; OI-10 and
-OI-11 were added the same day, the second of them found while checking what the
-first would involve.
+Nothing ships while any of these is open. **Down to one.** OI-2 and OI-11 closed
+22 August 2026, and OI-10 was re-graded out of this list the same day once it was
+known that nobody has ever had data in the app.
+
+### OI-1 · "Force the handover" has never been seen to work
+**Status:** open · **Tier:** test-only run, no code expected
+**Detail:** `bug tests/OUTSTANDING-baton-status-and-forced-handover.txt` step 5;
+`docs/HANDOFF-22-august-baton-and-storage.md` §2
+
+The reason it was unreachable is fixed and proved *at the transport* — the app
+receives `BatonHolder`, so `batonState()` can reach `held`, so the gate at
+`index.html:3917` can open. **Nobody has watched the button appear and work.**
+
+**Done means:** steps 4 and 5 run on a real device against real SharePoint, **with
+two different people** — one administrator, one holder. Every run so far has had
+one person as both, which is not what the feature is for and is part of why this
+went unnoticed. Result appended to the bug-test file.
+
+---
+
+## 2. Open, not blocking
 
 ### OI-10 · The v1.3 → v1.4 upgrade has never been rehearsed on a device
-**Status:** open · **Tier:** a test run; an app change only if it fails
+**Status:** open — **re-graded 22 Aug 2026, no longer blocks release** · **Tier:** a test run
 **Detail:** `05_Release Protocol` §2, major tier · decision log §4g, §4h
 
 Three migrations run the first time a staff member updates, against their real
@@ -53,6 +71,11 @@ evidence photographs:
 Tested so far only against synthetic `{schema: 3}` objects and the v1.1.1 fixture
 in `tests.html`. **Never against a real v1.3-produced record, with real photos, on
 a real phone** — which is what the protocol's major-tier line asks for.
+
+**Why it no longer blocks:** the app has never been deployed to staff and nobody
+but the owner has used it, so no real v1.3 record exists anywhere to migrate. The
+code still runs on every boot and must not misbehave on a fresh install, which is
+why this stays open — but it is a smoke test now, not a data-safety gate.
 
 Two reasons it matters more than it looks. `migrateMediaBytes()`'s failure path
 marks a photo *"the stored file was lost by the browser — this photo needs
@@ -72,53 +95,6 @@ them, the media records no longer carry blobs, the record reads `schema: 4`, and
 nothing is marked *needs retaking*. Confirmed from diagnostics §6 and §8 rather
 than by eye, and appended to the bug-test file.
 
-### OI-11 · Opening the beta breaks the live app on that device, and there is no way back
-**Status:** open — **needs a decision before release** · **Tier:** see below
-**Detail:** decision log §4h
-
-Both builds use `DB_NAME = 'ds-inspections'` and both are served from
-`ds-js1.github.io`, so **they share one database.** v1.3 opens it at version 1
-(`indexedDB.open(DB_NAME, 1)`) with a hard `rq.onerror → reject`. v1.4 upgrades it
-to version 2.
-
-Once the beta has been opened on a device, the shared database is at version 2,
-and v1.3 can no longer open it: *the requested version (1) is less than the
-existing version (2)*. `openDB()` rejects, so every read and write in the live app
-fails from then on. **The tester's phone is almost certainly in this state now.**
-
-This is not new and was not introduced by any recent change — it has been true
-since the beta was first put on this origin. It has gone unnoticed because staff
-do not use the beta.
-
-**Why it blocks a release decision rather than merely being untidy: it removes the
-rollback.** Once v1.4 is at the root, every device that opens it holds a version-2
-database. Reverting the root to v1.3 would then leave every one of those devices
-with a database v1.3 cannot open — so the usual safety net, put the old one back,
-is not there. That is worth knowing **before** shipping, not after.
-
-**Done means:** a recorded decision. The options, and none is obviously right:
-accept it and release forward-only, with a written note that rollback is not
-available; give v1.4 its own `DB_NAME` so the two never share; or teach v1.3 to
-fail gracefully when it meets a newer database — which means touching the live
-app, and is the only option that helps the devices already affected.
-
-### OI-1 · "Force the handover" has never been seen to work
-**Status:** open · **Tier:** test-only run, no code expected
-**Detail:** `bug tests/OUTSTANDING-baton-status-and-forced-handover.txt` step 5;
-`docs/HANDOFF-22-august-baton-and-storage.md` §2
-
-The reason it was unreachable is fixed and proved *at the transport* — the app
-receives `BatonHolder`, so `batonState()` can reach `held`, so the gate at
-`index.html:3917` can open. **Nobody has watched the button appear and work.**
-
-**Done means:** steps 4 and 5 run on a real device against real SharePoint, **with
-two different people** — one administrator, one holder. Every run so far has had
-one person as both, which is not what the feature is for and is part of why this
-went unnoticed. Result appended to the bug-test file.
-
----
-
-## 2. Open, not blocking
 
 ### OI-9 · `dbAll()` can return `[]` from a store that is not empty
 **Status:** open — **guarded, not cured** · **Tier:** unknown
@@ -209,6 +185,7 @@ agreed destination.
 
 | ID | Item | Closed | By what |
 |---|---|---|---|
+| OI-C12 | The beta and the live app shared one database, so opening the beta broke the live app and removed the rollback | 22 Aug 2026 | The beta now uses `ds-inspections-beta`. Fixed while it cost nothing; the same collision would have returned at v1.5-beta against v1.4-live with staff photos on the line. Decision log §4h |
 | OI-C11 | The orphan-bytes assertion failed ~5 runs in 8 | 22 Aug 2026 | Not a harness race after all — `dbAll()` was returning `[]` from a non-empty store (OI-9). Checks lifted out of `later()` and sequenced after boot, with per-run keys. **20 consecutive runs 554/554**, 16 under load, 6 from a cleared store |
 | OI-C10 | `sweepOrphanBytes()` returned `0` both when it failed and when it found nothing | 22 Aug 2026 | Returns `SWEEP_FAILED` (-1) on failure; the boot caller warns rather than reporting a count |
 | OI-C1 | The app could not read the library columns back, so "Force the handover" could never be offered | 22 Aug 2026 | `$expand=listItem($expand=fields)`. Proved on device before changing: 0 of 3 folders under the old form, 3 of 3 under the documented one. `f19fec2` |

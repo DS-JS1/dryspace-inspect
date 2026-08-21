@@ -968,12 +968,30 @@ the restored app cannot open. The habitual safety net — revert the root, staff
 carry on — **is not available for this release**, and that is a fact worth having
 before the decision rather than during an incident.
 
-**Deliberately not decided here.** The three options are written up in OPEN-ITEMS
-OI-11: release forward-only with the loss of rollback recorded; give v1.4 its own
-`DB_NAME`; or teach v1.3 to fail gracefully on a newer database. Only the last
-helps the handsets already affected, and it means touching the live app that staff
-are using today — which is precisely the sort of change this project does not make
-casually.
+**DECIDED, 22 August 2026: the beta gets its own database.** `DB_NAME` is now
+`isBetaBuild() ? 'ds-inspections-beta' : 'ds-inspections'`.
+
+What settled it was learning the premise was wrong. The rollback argument assumed
+staff handsets carrying version-2 databases; **the app has never been deployed and
+nobody but the owner has ever used it.** There was nothing to roll back for. That
+turned a difficult release decision into a free one — and made the third option,
+teaching v1.3 to fail gracefully, unnecessary, since the only affected handset is
+cleared by deleting the site's data.
+
+**Taken now precisely because it was free.** The same collision returns at the
+v1.5 beta against v1.4 live, and by then staff will have photographs on their
+phones: the same one-line change becomes a migration. A window in which structural
+choices cost nothing is not a reason to postpone them.
+
+It is also right on its own terms. A test build has no business writing to the
+storage a real inspection lives in, and `CLAUDE.md` already says real inspections
+belong in the live app. The cost — beta data does not carry over to the live app —
+is the intended behaviour rather than a side effect.
+
+`diagnostics.html` derives the same name from the path, because its first read
+happens before the app boots and it cannot ask. `tests.html` checks the two agree,
+since a diagnostic pointed at the wrong store reports an empty device with total
+confidence.
 
 ---
 

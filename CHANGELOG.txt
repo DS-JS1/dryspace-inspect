@@ -1,6 +1,45 @@
 Dryspace Site Inspection App — Changelog
 ========================================
 
+THE BETA GETS ITS OWN DATABASE - 22 August 2026 - OI-11 closed, OI-10 re-graded
+- PATCH tier. index.html, diagnostics.html, tests.html, sw.js. CACHE_VERSION
+  -29 -> -30. APP_VER stays 1.4.0, still unreleased.
+- DB_NAME is now isBetaBuild() ? 'ds-inspections-beta' : 'ds-inspections'. One
+  line, and it closes a trap that had been set since the beta first went on this
+  origin: IndexedDB is scoped to the ORIGIN, not the path, so / and /beta/ were
+  never two apps with two databases. They were two builds sharing one.
+- CONFIRMED ON THE DEVICE. The live app rendered its shell with an EMPTY storage
+  line and no "No inspections yet" card - renderHome() opens with a database read,
+  openDB() was rejecting, and everything below the shell silently did not happen.
+  It looked like a working app, which is what makes this the nastier kind of
+  fault.
+- WHAT SETTLED THE DECISION WAS LEARNING THE PREMISE WAS WRONG. The rollback
+  argument assumed staff handsets carrying version-2 databases. The app has never
+  been deployed and nobody but the owner has ever used it, so there was nothing to
+  roll back for. A difficult release decision became a free one, and the third
+  option - teaching v1.3 to fail gracefully on a newer database - became
+  unnecessary, since the one affected handset is cleared by deleting the site data.
+- TAKEN NOW BECAUSE IT WAS FREE. The same collision returns at the v1.5 beta
+  against v1.4 live, and by then staff will have photographs on their phones: the
+  same one-line change becomes a migration. A window in which structural choices
+  cost nothing is not a reason to postpone them. Decision log 4h.
+- It is right on its own terms too. A test build has no business writing to the
+  storage a real inspection lives in, and CLAUDE.md already says real inspections
+  belong in the live app. Beta data not carrying over is the intended behaviour,
+  not a side effect.
+- diagnostics.html derives the same name from the path rather than asking the app,
+  because its FIRST read happens before the app boots. That makes two copies of a
+  name, so tests.html now checks they agree - three assertions. A diagnostic
+  pointed at the wrong store reports an empty device with total confidence, which
+  is worse than no diagnostic at all.
+- The drift guard was verified by breaking it: the diagnostics name was changed to
+  a deliberate typo, the suite went red and named the file, and it was restored.
+- OI-10 RE-GRADED OUT OF BLOCKS-RELEASE. With no real v1.3 record anywhere, the
+  v1.3 -> v1.4 migration has nothing to migrate. The code still runs on every boot
+  and must not misbehave on a fresh install, so it stays open as a smoke test -
+  but it is not a data-safety gate. Blockers are back down to one: OI-1.
+- Tests 557 of 557.
+
 RELEASE GATE - 22 August 2026 - two blockers added, one of them found by looking
 - OI-10: the v1.3 -> v1.4 upgrade has never been rehearsed on a device. Three
   migrations run the first time a staff member updates, against their real
