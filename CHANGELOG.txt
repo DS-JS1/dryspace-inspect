@@ -1,6 +1,80 @@
 Dryspace Site Inspection App — Changelog
 ========================================
 
+FAULT 1 FIXED - 22 August 2026 - the app can read the library columns again
+- PATCH tier. Bug fix, no new capability, no schema change. Folder stays v1.4.
+  ds-sharepoint.js and sw.js. APP_VER stays 1.4.0 because v1.4.0 has never been
+  released; CACHE_VERSION ds-inspect-v1.4.0-25 -> -26, because an app file
+  changed and a forgotten cache bump is silent.
+- ds-sharepoint.js:350 read expand=listItem($select=fields). $select on a nested
+  navigation property NAMES it without populating it, so Graph returned a
+  listItem carrying nothing but an etag. list() mapped every folder to
+  fields:null and five consumers degraded in silence. Now
+  $expand=listItem($expand=fields), which is the documented form.
+- The visible cost was that batonState() could never return 'held', because
+  'held' requires fields.BatonHolder. "Force the handover" is gated on
+  isAdmin() && b.key === 'held', so the button could not be offered to anybody.
+  That is why the baton test had never been passed: the button was unreachable,
+  and nothing about the test script was wrong.
+- PROVED BEFORE IT WAS CHANGED, on an iPhone against real SharePoint, 12:31am
+  22 August 2026, exactly as the brief demanded. Three readings of the same
+  library root in the same moment: the app's own list() 0 of 3 folders with
+  columns, the old form raw 0 of 3, the documented form 3 of 3. The raw
+  responses are the whole argument - under the old form listItem came back as
+  {"@odata.etag": ...} and nothing else; under the documented form the same
+  folder carried its fields, and Graph's own context URL acknowledged the
+  expansion as listItem(fields()). INS - 22xx - Frinight TestClient returned
+  BatonStatus=Waiting, BatonHolder=Jamie Stone, Stage=S01-OFFICE - set the whole
+  time, and invisible to the app.
+- Readings 1 and 2 agreed, so the page's drift check stayed silent, which is
+  what makes reading 2 worth having: it confirms the page was reporting on the
+  query the app really makes rather than on a stale copy of one.
+- The $-prefixed form was shipped EXACTLY as tested, prefixes and all, rather
+  than changing only the expand. What ran on the device is what ships.
+- diagnostics.html section 7 re-pointed from proof to regression check. The old
+  form is kept as a CONTROL and must keep returning nothing: if it ever starts
+  returning fields the control has stopped discriminating and a pass there stops
+  meaning anything, which the panel now says outright. Healthy is the app and
+  the documented form agreeing with the control blind; the app blind while the
+  documented form works is now reported as REGRESSION rather than as the
+  original fault.
+- Tests 550 of 550, zero failures, with the fix in.
+- STILL OWED: a real-device retest of baton steps 4 and 5, which is the only
+  thing that can show "Force the handover" is now reachable. The fix is proved
+  at the transport; the button is not proved at the app. Ideally with a second
+  person, since every run so far has had one person as both administrator and
+  holder.
+- NOT DONE, deliberately: the swallowed setFields() failures at index.html:3802,
+  4114 and 3265. The brief says that needs a decision-log entry rather than a
+  quiet change, and it has not been decided.
+
+FAULT 2 - 22 August 2026 - narrowed, not solved. The space is not in this app.
+- Measured on the tester's iPhone with the extended page, device empty: 137.5 MB
+  reported for the whole origin, and 0.2 MB accounted for. Unattributed 137.3 MB.
+- What that rules OUT, by measurement rather than by argument: IndexedDB holds
+  three stores with nought rows each; there is exactly ONE database on the
+  origin, so no v1.3 database is hiding there; caches held one cache, 10 entries,
+  0.2 MB, and it belongs to the current build, so no other build's cache is
+  hiding either; localStorage is 4 keys and negligible.
+- The tester had also cleared caches repeatedly before this run and the figure
+  did not move. Combined with the above, the space is not in anything the
+  storage APIs will enumerate for this app.
+- What is left, and it is now the leading candidate rather than one of three:
+  the figure itself. It rises with real use - 137.5 to 147.0 MB across the first
+  test - but does not come back down, which is the signature of an accounting
+  figure that is not reclaimed rather than of data still held. iOS Safari, and
+  storage is reported as NOT persistent on this device.
+- NEXT, and it needs no code: read the same figure again after a minute, then
+  after fully closing and reopening Safari, then check Settings > Safari >
+  Advanced > Website Data for ds-js1.github.io. That last one is an independent
+  measurement from outside the page's own APIs, which is exactly what a
+  disagreement between the app and the browser calls for. A figure that falls on
+  its own was never a leak.
+- The handoff's media-record lead is CLOSED for this device: nought media records
+  and nought byte records, so nothing was outliving its inspection here. That
+  does not clear the delete path in general, since the device was already empty
+  when it was measured.
+
 DIAGNOSTICS - 22 August 2026 - the cache figures were being measured too late
 - Section 8 was capturing the caches AFTER the page had already destroyed them,
   and would have wasted the one device run it exists to serve. Fixed before the
