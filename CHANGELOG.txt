@@ -1012,6 +1012,77 @@ after: 550 assertions, zero failures, both times.
   a record with nothing filled in files as Unfiled; and the open Contribute -
   No Delete question about the archive move.
 
-Still to do in this pass: 01_Setup and User Guide, 02_Iteration Guide,
-04_Project Context Brief (in _Shared), the Training pack as a set, and the
-Guides/ PDFs last, once the markdown has settled.
+01_Setup and User Guide - brought up to build v1.4.0-25
+- Part B pointed at "Handover Protocol section 8" for the site and column
+  setup. Section 8 is now "If something has already gone wrong"; the setup is
+  section 10. This is the SAME wrong cross-reference Batch A fixed inside 03,
+  surviving in a second document because nothing looks across files. Also
+  corrected there: the library was described as carrying six columns, and it
+  carries eight - a v1.3 library needs BatonStatus and BatonHolder added.
+- THE FILING NUDGE IS TWO CHECKS, NOT ONE, and only one had been written down
+  anywhere. Before the first upload, once per inspection, never once the folder
+  is pinned, because after that it changes nothing. And again at every handover
+  with blanks, pinned or not - and when the folder IS pinned it says so, because
+  filling the fields in then corrects the record and the library columns and
+  renames nothing. Both are now described, with the five fields and what each
+  one decides.
+- Photos taken over from SharePoint arrive as thumbnails and nothing said so.
+  The record carries references, not bytes - the files are already in photos/
+  beside it. Each shows "in SharePoint - tap to fetch". With no signal a
+  thumbnail is all you have, which is worth thirty seconds in the car and is now
+  a known limit as well.
+- Sending a report on a device that took the record over asks a question nobody
+  had documented: bring the photos down first, or send thumbnails plus links.
+  Added, because the right answer depends on who the report is for.
+- The Upload button on the form, with its progress text and the fact it appears
+  only when something is waiting; the HANDED OVER badge and what opening one
+  asks; Browse all inspections, View it and Ask for the baton; the filterable
+  picker replacing the numbered prompt; the full home-screen and action-row
+  button lists, in order, as tables.
+- The card wording is now a table, including the one that was actively
+  misleading: "no files on this device" means exactly that and NOT "all
+  uploaded". Added "1 uploading", which the app shows and no document listed.
+- A new Part C subsection on which BUILD a device is running, and to quote the
+  whole footer line in a bug report. Several builds all report v1.4.0.
+- Three limits written down for the first time: the automatic backup needs
+  signal and a signed-in account and is silent when it cannot run; it does
+  nothing until the record has a number, client or address, because there is no
+  folder yet; and the folder name is fixed by the first upload.
+- Handover detail that had accumulated here was cut back to a pointer at 03.
+  Two documents describing one process is how they come to disagree.
+
+02_Iteration Guide - brought up to build v1.4.0-25
+- IT GAVE THE ASSERTION COUNT TWICE AND WAS WRONG BOTH TIMES - 366 in section 1
+  and 237 in section 5, against 550 actual. A number that decays silently is
+  worse than none, so it now carries the count plus the instruction to take
+  today's printed number as the session baseline and watch it not drop.
+- Section 3 gained the storage layer, which was missing entirely: DB_VERSION 2,
+  the three stores, what separates bytes from metadata and why (dbAll('media')
+  runs on every render), migrateMediaBytes() at start-up, that a photo whose
+  bytes were already lost is marked for retaking once, and that deletion is the
+  one operation that must know about both stores. The no-Blob rule is stated
+  with D45/D49 named as settled.
+- Section 4 listed two release gates; the suite enforces five. Added the
+  field_ids_v<APP_VER>.json manifest and the Guides/ PDFs, both named for
+  APP_VER and both a test failure if missing, and noted that the manifest is
+  hand-maintained while every other gate reads APP_VER for itself.
+- New section 4 subsection on where the build number comes from: the live
+  service-worker cache name, not a constant, because APP_VER cannot tell one
+  build from another once patches fold into an unreleased version.
+- New section 8 on the two dialog styles, with pickFromList and showDialog
+  described and the still-native list named. This is deliberate and unfinished,
+  not an oversight, and a session that assumes otherwise will "tidy" a native
+  confirm on a capture-adjacent path. The parked-ideas list moved to 9.
+- Section 6 said to merge release/v1.x into main. The working branch is plain
+  v1.4; release/ was a v1.3 convention. Also said plainly that pushing to main
+  IS the release.
+- Section 1: the file map gained docs/, Guides/, Training/, tools/ and the field
+  id manifest, and a note that the architecture template and context brief left
+  this repository on 18 August.
+
+Still to do in this pass: 04_Project Context Brief (in _Shared), the Training
+pack as a set, and the Guides/ PDFs last, once the markdown has settled.
+
+Noted in passing, not fixed: 05_Release Protocol section on printed guides still
+names Guides/02_Iteration Guide_v1.3.pdf. The files are at v1.4.0. Left for the
+batch that regenerates them, so the fix and the files move together.

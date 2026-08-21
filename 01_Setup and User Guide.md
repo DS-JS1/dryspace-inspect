@@ -8,7 +8,13 @@ Live app: https://ds-js1.github.io/dryspace-inspect/
 > **What changed in v1.4.** The record itself now moves through SharePoint — handed
 > over and picked up through the inspection's own folder, with no file to email.
 > Work in progress is backed up automatically. The buttons moved to the top of the
-> form. Parts A and D changed most.
+> form. Parts A, D and E changed most.
+
+> **Handover has its own document.** Anything about the baton, who holds a record,
+> the library columns, forced handover or reading an inspection without taking it
+> is in `03_Handover and Version Control Protocol`. This guide points at it rather
+> than repeating it, because two documents describing one process is how they come
+> to disagree.
 
 ---
 
@@ -32,7 +38,7 @@ An offline-first web app built from the v4 Site Inspection Form: 13 sections,
 - **Measurement schedule** — Section 07 holds a table of wall faces with length,
   height, calculated area, treatment and grade, with running totals.
 - **Office pre-fill and handover** — the office fills Section 01 during the
-  qualification call, then shares a draft to the field team.
+  qualification call, then hands the record to the field team.
 - **Photos upload to SharePoint** *(new in v1.3)* — full-quality originals, filed
   automatically into the inspection's own folder.
 - **Send** — one button builds a self-contained HTML report (all answers, embedded
@@ -42,6 +48,8 @@ An offline-first web app built from the v4 Site Inspection Form: 13 sections,
   picked up through the inspection's own folder, with no file to email.
 - **Work in progress is backed up automatically** *(new in v1.4)* — so a lost
   phone no longer means a lost day.
+- **You can see every inspection in the business** *(new in v1.4)* — not only the
+  ones on your device, and you can read one without taking it.
 
 ### What changed in v1.4
 
@@ -55,10 +63,15 @@ SharePoint at all.
 inspection from SharePoint** on the home screen lists everything waiting and
 brings the one you choose onto your device. Nobody has to send you a file.
 
-**Your work is backed up while you type.** Every few minutes, and when you leave
-the form, the app quietly saves a copy to the inspection's `wip/` folder. If your
-phone is lost or broken, **Recover work in progress** on the home screen brings it
-back. Previously an unfinished inspection existed only on your device.
+**Choosing is now a list you can filter and tap.** Taking over and recovering used
+to be a numbered question with the whole list read out inside it. They are now a
+proper list with a filter box across the top — client, address, number or stage —
+so finding one job among fifty is a matter of typing three letters.
+
+**Your work is backed up while you type.** Every four minutes, and once when you
+leave the form, the app quietly saves a copy to the inspection's `wip/` folder.
+If your phone is lost or broken, **Recover work in progress** on the home screen
+brings it back. Previously an unfinished inspection existed only on your device.
 
 > A backup in `wip/` is a **working copy, not the baton**. The live record is
 > always the file in `current/`. The app keeps them apart on purpose.
@@ -67,8 +80,15 @@ back. Previously an unfinished inspection existed only on your device.
 handed the same inspection over since you picked it up, the app says who and when
 and asks before continuing. Their version is archived, never deleted.
 
+**A record you have handed over says so.** Its card carries a **HANDED OVER**
+badge, and opening it asks whether you meant to — because the live record is now
+the file in SharePoint, and anything you type into the copy changes nothing there.
+
 **The buttons moved to the top of the form.** They used to sit below every
 section, so handing over meant scrolling past the whole form to reach them.
+
+**There is now an Upload button on the form itself.** Uploading used to mean going
+back to the home screen, which is exactly the step people skipped.
 
 **Both offline paths still exist**, labelled *offline fallback*: *Share draft* and
 *Import from a file*. Use them when you have no signal — and remember that the
@@ -93,11 +113,12 @@ account. It is remembered. Losing signal does not sign you out.
 SharePoint and confirms it arrived complete before treating it as done.
 
 **The app tells you when it has been updated.** A green bar appears saying a new
-version is ready, with an *Update* button, plus a *Check for app update* button on
-the home screen. Updates no longer apply silently.
+version is ready, with an *Update now* button, plus a *Check for app update*
+button on the home screen. Updates no longer apply silently.
 
-**One folder per inspection** in the new Site Inspections site, holding `current/`,
-`archive/` and `photos/` together. See `03_Handover and Version Control Protocol`.
+**One folder per inspection** in the new Site Inspections site. From v1.4 it holds
+`current/`, `archive/`, `wip/` and `photos/`. See
+`03_Handover and Version Control Protocol` §3.
 
 **Files say whose job they are.** Photos and drafts now carry the client name, so a
 file that has been downloaded or emailed is still identifiable.
@@ -116,14 +137,20 @@ file that has been downloaded or emailed is still identifiable.
   Pages from the `main` branch.
 - **Publishing a new version** is covered in `02_Iteration Guide`.
 
-### One-time setup for v1.3
+### One-time setup for v1.3 and v1.4
 
-Two things must be in place before photo upload will work:
+Two things must be in place before photo upload or handover will work:
 
 1. **Entra app registration** with admin consent granted — the app cannot upload
    until a tenant administrator approves it once.
-2. **The Site Inspections site**, its permission group, and the six index columns
-   — see `03_Handover and Version Control Protocol` §8.
+2. **The Site Inspections site**, its permission group, its library settings and
+   the eight index columns — see `03_Handover and Version Control Protocol` §10.
+   Two of those columns, `BatonStatus` and `BatonHolder`, were added for v1.4; a
+   library set up for v1.3 has six and needs the other two.
+
+> **A missing column fails silently, by design.** An upload or a handover is never
+> refused because the index could not be written. If the library columns look
+> empty after a handover, check their spelling first — `03` §10 explains why.
 
 ---
 
@@ -144,36 +171,88 @@ Two things must be in place before photo upload will work:
 2. Click the install icon at the right of the address bar.
 
 > **Always use the installed icon, not a browser tab.** Installed apps get
-> protected storage; data in an ordinary tab can be cleared by the browser.
+> protected storage; data in an ordinary tab can be cleared by the browser. This
+> was confirmed on a real device on 18 August 2026 — an ordinary Safari tab is
+> refused durable storage outright.
 
 ### Picking up a new version
 
 From v1.3 the app tells you: a green bar appears saying a new version is ready.
-Tap **Update**. You can also check on demand with *Check for app update*.
+Tap **Update now**. You can also check on demand with *Check for app update*.
 
-> **The v1.3 update itself is the exception.** Devices currently running v1.1.1
-> have no banner and cannot be given one retrospectively. For that one update,
-> open the app while online, **fully close it (swipe it away)**, then open it
-> again.
+> **The v1.3 update itself was the exception.** Devices running v1.1.1 had no
+> banner and could not be given one retrospectively. For that one update, staff
+> opened the app while online, fully closed it (swiped it away), then opened it
+> again. Everything from v1.3 onward updates itself.
+
+### Which build am I actually running?
+
+The line at the foot of the home screen reads, for example:
+
+```
+Dryspace Inspection App v1.4.0 — Form 4.2 · Version date … · Works fully offline · build 1.4.0-25
+```
+
+**Quote the whole line, including the build, in any bug report.** The version on
+its own cannot tell one build from another — several different builds all report
+v1.4.0. The build number is read from what is actually being served, so it is the
+one number that cannot be out of date.
 
 ---
 
 ## Part D — Using the app
 
+### The home screen
+
+Its buttons, in order:
+
+| Button | What it does |
+|---|---|
+| **＋ New inspection** | Start one on this device |
+| **Take over an inspection from SharePoint** | Lists everything waiting in a `current/` folder; tap one to bring it onto this device and become its holder |
+| **Browse all inspections** | Every inspection in the library, whether or not it is waiting |
+| **Import from a file (offline fallback)** | Accepts a draft or report file, for a device with no signal |
+| **Recover work in progress** | Lists the automatic `wip/` backups. **Not** the way to take a job over |
+| **Download data backup (all inspections)** | All field data on this device, as one JSON file |
+| **Check for app update** | Asks now rather than waiting for the banner |
+
+The sign-in and sync bar sits below them.
+
+Each inspection on the device gets a card showing its stage, when it was last
+updated and by whom, a **DRAFT**, **COMPLETE** or **HANDED OVER** badge, and how
+its files stand.
+
 ### Set your name once
 
-At the top of any inspection there is a *Your name* box. Fill it in once and the
-app remembers it on that device. Your name is stamped into exported filenames and
-the audit trail.
+At the top of any inspection, beside the stage selector, there is a *Your name*
+box. Fill it in once and the app remembers it on that device. Your name is stamped
+into exported filenames, the audit trail and the library's `LastEditor` column.
 
 ### Sign in once — new in v1.3
 
 Home screen → **Sign in**, with your Dryspace Microsoft account. This is what lets
-photos upload. It is remembered, and losing signal does not sign you out.
+photos upload, records hand over, and work in progress be backed up. It is
+remembered, and losing signal does not sign you out.
+
+### The action row — at the top of the form
+
+Directly beneath the stage selector, in this order:
+
+| Button | What it does |
+|---|---|
+| **Hand over through SharePoint** | Puts the record in `current/` and files the previous version in `archive/`. See `03` |
+| **Send report (email / SharePoint)** | Builds the report and opens the share sheet |
+| **Share photo & video files** | Shares the untouched originals through the share sheet |
+| **Share draft (offline fallback)** | The old file-based handover, for no signal |
+| **Print / PDF** | Prints the form as it stands |
+
+Along the very top of the screen sit *‹ All*, the *Saved [time]* indicator,
+*Highlight gaps*, *Mark complete*, the Upload button when something is waiting,
+and *Send*.
 
 ### Office workflow (qualification call)
 
-1. On the office PC, tap **+ New inspection**. Set the stage to *01 Office* and
+1. On the office PC, tap **＋ New inspection**. Set the stage to *01 Office* and
    fill Section 01 — HubSpot deal name, client, property, both contacts.
 2. Paste the property listing URL if there is one, and upload any floor plans in
    Section 11. **This is the stage to do it** — there is signal at a desk.
@@ -187,7 +266,7 @@ photos upload. It is remembered, and losing signal does not sign you out.
 ### Field workflow (site visit)
 
 1. Tap **Take over an inspection from SharePoint** and pick the job, or
-   **+ New inspection** for a walk-in.
+   **＋ New inspection** for a walk-in.
 2. Work through Sections 02 to 06 plus 03A. Blank fields are fine.
 3. **Do not skip Section 03A.** Asbestos likelihood, hazards, access constraints
    and the discharge point all affect safety and price.
@@ -195,9 +274,60 @@ photos upload. It is remembered, and losing signal does not sign you out.
 5. Watch for *"Saved [time]"* in the top bar.
 6. To pause, just leave. Resume from the list any time.
 7. When finished, set the stage to *03 Technical* and tap **Hand over through
-   SharePoint** — **after checking the photos have uploaded.** The home screen
-   card for each inspection says whether its files are waiting, all uploaded, or
+   SharePoint** — **after checking the photos have uploaded.** The card for each
+   inspection says whether its files are waiting, uploading, all uploaded, or
    need attention.
+
+### Taking an inspection over
+
+**Take over an inspection from SharePoint** lists everything waiting, one row per
+job, with the stage on the row and a filter box across the top. Tap one and it
+comes onto your device.
+
+**The photos come across as thumbnails, not as files.** They are already in the
+inspection's `photos/` folder, so sending them a second time would be pointless.
+Each one shows its thumbnail with **in SharePoint · tap to fetch** underneath —
+tap it while you have signal and the full original comes down and behaves like any
+other photo on your device.
+
+> **Fetch what you need before you lose signal.** A thumbnail is all you have until
+> you do. This is worth thirty seconds in the car.
+
+### Before the first upload — the filing nudge
+
+The folder name is fixed by the **first upload** and cannot be changed afterwards.
+So the first time you upload photos on an inspection with blanks in the five
+details that decide the filing, the app names them, shows the folder it would file
+as, and lets you go back and fill them in.
+
+The five are **Inspection number**, **Client name**, **Property address**,
+**Inspection date** and **Your name**. A record with no number, client or address
+files as **`Unfiled`**.
+
+- Asked **once per inspection**, and never once the folder is already fixed —
+  after that, filling them in changes nothing about the folder.
+- **It never blocks the upload.** Tap OK and it goes.
+- **It is never asked at capture.** Taking the photo always comes first.
+
+The same check runs again at handover, whichever way the folder stands. If the
+folder is already fixed it says so plainly: filling the blanks in now corrects the
+record and the library columns but **will not rename the folder or any photo in
+it**.
+
+### Seeing where everything is
+
+**Browse all inspections** shows every inspection in the library — not only the
+ones waiting, and not only the ones on your device — with the baton state on each
+row. Tap one and you can take it over, read it without taking it (**View it**),
+open the folder in SharePoint, or, when somebody else holds it, **Ask for the
+baton** — which writes the message for you and puts it on the share sheet or the
+clipboard.
+
+*View it* opens the record with every field disabled and a **VIEW ONLY — nothing
+you change here is saved** bar across the top. Nothing you do there is written
+anywhere.
+
+The three baton states and what they mean are in `03` §5.
 
 ### Seeing what is still empty
 
@@ -262,16 +392,51 @@ report copy — which is what keeps emailed reports deliverable.
 
 ### Uploading
 
-Back in signal — car, office, wifi — tap **Upload now** on the home screen. Each
-file is listed with its own state and, if one fails, the reason. It
-tells you how many files are waiting.
+There are two Upload buttons, and they do the same thing.
 
-Wait until it says **"All photos uploaded"**. Until then, those photos exist only
-on your device.
+- **On the form**, at the top, and **only when something is waiting**. It reads
+  *Upload 3 photos*, and while it runs it reads *Uploading · 2 left · 45%* with a
+  bar filling across it. The count only ever falls.
+- **On the home screen**, *Upload now* in the sync bar, on the same condition.
 
-If something fails: *"No connection"* is normal in a basement. *"Need attention"*
+Back in signal — car, office, wifi — tap either. Each file is listed with its own
+state and, if one fails, the reason.
+
+Wait until the bar says **"All photos uploaded."** Until then, those photos exist
+only on your device.
+
+**What a card tells you.** Each inspection's card ends with one of:
+
+| It says | It means |
+|---|---|
+| `3 files · all uploaded` | Safe in SharePoint |
+| `3 files · 1 waiting to upload` | Tap Upload |
+| `3 files · 1 uploading` | In progress now |
+| `3 files · 1 needs attention` | Tap **Try again**; tell the office if it repeats |
+| `no files on this device` | Exactly that — this inspection has no files here. **It does not mean "all uploaded"** |
+
+If something fails: *"No connection"* is normal in a basement. **Needs attention**
 means tap **Try again**, and tell the office if it repeats — **before deleting
 anything.** A failed upload leaves the original untouched.
+
+> **Photos added after you have handed over.** The app lets you — adding one
+> somebody missed is a legitimate thing to do, and the file goes to the right
+> folder either way. But it warns you first, because the record waiting in
+> SharePoint was written at handover and will not list them. **Hand over again**
+> once they have uploaded, and the record catches up with the folder.
+
+### Sending a report when the photos are not on this device
+
+If you took the inspection over, its photos are thumbnails until you fetch them.
+Tap **Send report** and the app asks which you want:
+
+- **Bring them down first** — needs signal. Embeds the readable copies. Best for a
+  desk, and for printing.
+- **Send now** — thumbnails plus a link to each original in SharePoint. Smaller,
+  and quick.
+
+Either way the full-resolution original stays in the `photos/` folder and the
+report links to it.
 
 ### HEIC conversion — the honest position
 
@@ -302,9 +467,9 @@ detail at review size.
 
 ### Protecting your data
 
-- Each device holds its own inspections. Sending the report, sharing a draft or
+- Each device holds its own inspections. Handing over, sending the report or
   uploading photos is what turns it into shared business data.
-- **Only delete an inspection after its report has been sent and its photos show as
+- **Only delete an inspection after it has been handed over and its photos show as
   uploaded.** Delete is permanent and includes the photos.
 - Use **Download data backup** weekly and file it in SharePoint. It covers field
   data across every inspection on that device — but **not** photos, which are
@@ -319,8 +484,9 @@ detail at review size.
 Optional. Roughly fifteen minutes, one time, using standard M365 connectors with no
 premium licence.
 
-> **Photos no longer need this** — they upload directly from v1.3. This flow is now
-> only for filing the emailed **report** file.
+> **Photos no longer need this** — they upload directly from v1.3. Nor does the
+> record itself, which travels through SharePoint from v1.4. This flow is now only
+> for filing the emailed **report** file.
 
 1. Go to `make.powerautomate.com` signed in with your Dryspace M365 account.
    Create → Automated cloud flow, named "DS Inspection Reports".
@@ -342,9 +508,17 @@ premium licence.
   `wip/` while you edit. It does not merge, and it does not tell another device
   anything. Two people editing one inspection still produces two versions — the
   app will warn at handover, but it cannot combine them.
+- **The automatic backup needs signal and a signed-in account.** It is silent when
+  it cannot run, deliberately — a warning in front of somebody standing on a roof
+  helps nobody. It also does nothing until the inspection has a number, a client or
+  an address, because until then there is no folder to write to.
 - **Nothing is deleted from SharePoint by the app**, ever. Old `wip/` files stay
   until somebody clears them out, and the device copy is yours to delete after a
   handover.
+- **The folder name is fixed by the first upload.** Correcting the inspection
+  number afterwards fixes the record and the library columns and renames nothing.
+- **Photos taken over from SharePoint are thumbnails until you fetch them.** With
+  no signal, a thumbnail is all you have.
 - **Report photos are compressed** to around 1,600 px to keep emails deliverable.
   The full-quality originals are in SharePoint.
 - **Video never travels inside drafts or reports** — it goes via OneDrive.

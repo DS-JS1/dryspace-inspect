@@ -553,6 +553,71 @@ described in §7 next to signing in, since the gate is the Microsoft account.
 
 ---
 
+### The same wrong cross-reference was in a second document — 21 August 2026
+
+Batch B of the documentation pass: `01_Setup and User Guide` and
+`02_Iteration Guide`, against the same build `v1.4.0-25`. Documentation tier,
+no app file touched, 550 assertions passing either side.
+
+**Batch A fixed *"Handover Protocol §8"* inside `03`. `01` Part B was pointing at
+the same wrong section, and Batch A had no way to know.** The setup instructions
+it sends people to are §10; §8 is now *If something has already gone wrong*. `01`
+also still described the library as carrying six columns, which is the other
+error Batch A had just corrected in `03`.
+
+So the rule from Batch A needs a second half. *A cross-reference from code into a
+document pins that document's numbering* — and **fixing a cross-reference in one
+document does not fix the others that carry it.** Nothing in this repository
+looks across files. Before renumbering anything, grep the whole folder for the
+document's name, not just the code:
+
+```
+grep -rn "Handover and Version Control" . --include=*.md --include=*.txt
+```
+
+This is cheap and it is the only thing that would have caught it.
+
+**The filing nudge is two checks with different rules, and only one was written
+down.** `docs/HANDOFF-v1.4-polish.md` describes it as a single prompt before the
+first upload, asked once per inspection and never after the folder is pinned.
+That is `confirmFilingBeforeFirstUpload()` and it is accurate as far as it goes.
+There is a second, `confirmFiling()`, which runs at **every handover** with any
+of the five fields blank — including after the folder is pinned, where it changes
+its own wording to say that filling them in now corrects the record and the
+library columns but will **not** rename the folder or any photo in it.
+
+Both are correct and neither should be removed. The distinction matters because
+they answer different questions: the first is *"is this about to file somewhere
+you did not intend?"*, the second is *"is this about to become somebody else's
+problem with holes in it?"*. A session that reads only the handoff will assume
+one prompt and delete the other as a duplicate.
+
+**A count restated in prose decays silently.** `02_Iteration Guide` gave the
+test-suite assertion count in two places and was wrong in both — 366 in §1 and
+237 in §5, against 550 actual. Neither number was ever a lie when it was
+written; the suite simply grew and nothing pointed at the document. Two wrong
+numbers in one file also means the second was copied without being checked.
+
+Kept rather than removed, because the count IS the thing a person needs at the
+start of a session — but now with the instruction to take the number the suite
+prints today as the session baseline, and to care that it does not *drop*. That
+turns a fact that rots into a procedure that does not.
+
+The same reasoning is why `01` now tells staff to quote the **build** line from
+the footer in a bug report. `APP_VER` has reported 1.4.0 for twenty-five builds;
+the number that cannot be stale is the one read from what is actually served.
+
+**Also brought current, without needing a decision:** the storage layer in `02`
+§3 (`DB_VERSION` 2, the three stores, `migrateMediaBytes()`, and the no-Blob rule
+with D45/D49 named as settled); the three release gates §4 did not list
+(`field_ids_v<APP_VER>.json`, the `Guides/` PDFs, the changelog); the two dialog
+styles as `02` §8, stated as deliberate and unfinished so nobody tidies a native
+`confirm()` off a capture-adjacent path; and in `01`, thumbnails-on-takeover with
+tap-to-fetch, the report's bring-them-down-first question, the form's Upload
+button, the HANDED OVER badge, browse, read-only view and asking for the baton.
+
+---
+
 ## 3. Reversed decisions — do not revert to these
 
 Each of these was once true. Reverting reintroduces a known problem.

@@ -122,12 +122,34 @@ needs a full pass. What has changed since the guides were last true:
 | `Guides/` PDFs | Regenerate LAST, once the markdown has settled |
 | SharePoint | `BatonStatus` and `BatonHolder` columns, and the column formatting JSON, are configuration the guides should record |
 
-**Progress, 21 August 2026.** `03_Handover and Version Control Protocol` is
-**done** — rewritten against build `v1.4.0-25`, with its section numbers corrected
-(the app sends people to §8, which was the wrong section; see the decision log §2,
-21 Aug). `CHANGELOG.txt` and `docs/DECISION-LOG.md` carry the detail. Still to do:
-`01_Setup and User Guide`, `02_Iteration Guide`, `04_Project Context Brief`, the
-`Training/` set, then the `Guides/` PDFs last.
+**Progress, 21 August 2026.** Batches A and B are **done**, all against build
+`v1.4.0-25`, all documentation tier, suite at 550 assertions with zero failures
+throughout.
+
+- **Batch A — `03_Handover and Version Control Protocol`.** Rewritten, with its
+  section numbers corrected: the app sends people to §8, which was the wrong
+  section. Commit `b7cd864`.
+- **Batch B — `01_Setup and User Guide` and `02_Iteration Guide`.** Rewritten.
+  `01` Part B was carrying the *same* wrong §8 cross-reference Batch A had just
+  fixed in `03`, and the same six-columns error — nothing in this repository
+  looks across files, so grep the whole folder before renumbering anything.
+
+**Still to do:** `04_Project Context Brief` (in `_Shared`), the `Training/` set,
+rebuild the deck, then the `Guides/` PDFs last. See
+`docs/HANDOFF-batch-C-context-and-training.md`.
+
+**Two corrections to the table above**, found by reading the code in Batch B:
+
+- The **filing nudge is two checks**, not one. `confirmFilingBeforeFirstUpload()`
+  is the one described above — once per inspection, never after the folder is
+  pinned. `confirmFiling()` runs at **every handover** with blanks, pinned or
+  not, and changes its wording when the folder is already fixed. Both are
+  correct; do not treat either as a duplicate of the other.
+- Cards also show **`· 1 uploading`**, a fourth state the earlier list omitted.
+
+**Noted, not fixed:** `05_Release Protocol` still names
+`Guides/02_Iteration Guide_v1.3.pdf` in its printed-guides table. The files are
+at v1.4.0. Left for Batch D so the fix and the regenerated files move together.
 
 `CHANGELOG.txt` and `docs/DECISION-LOG.md` **are current.** Keep them that way as
 you go rather than reconstructing them afterwards.
