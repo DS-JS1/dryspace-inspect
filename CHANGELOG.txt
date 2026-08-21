@@ -1,6 +1,36 @@
 Dryspace Site Inspection App — Changelog
 ========================================
 
+DIAGNOSTICS - 22 August 2026 - the delete button gave up after eight seconds
+- First run on the device: "FAILED - the database did not open within 8 seconds".
+  The guard behaved correctly and deleted nothing, but the failure was impatience
+  rather than a broken database, and the message did not say what to do next.
+- Three faults in one, all fixed:
+  1. EIGHT SECONDS was a guess, and a poor one on the very device whose
+     IndexedDB may be holding 140 MB. An empty database opens instantly; a large
+     file does not. Now 45 seconds, with a heartbeat showing seconds elapsed so
+     the page reads as busy rather than frozen.
+  2. NO onblocked HANDLER on the open. WebKit fires onblocked when another
+     connection holds an upgrade, and with no handler the request never settles -
+     so a busy database was indistinguishable from a dead one, and the eight
+     second bail was the only thing that ever fired. index.html:1604 handles this
+     on the app's own open, which is evidence the condition is real here.
+  3. NO WAY FORWARD when it fails. It now names the route that does not need
+     this page at all: Settings, Safari, Advanced, Website Data, swipe github.io,
+     Delete. Bigger hammer - it takes the sign-in and both apps' offline copies -
+     but it reclaims the same space and answers the same question, and on a
+     device with no inspections it costs only signing in again.
+- A slow open is itself a finding and the message now says so. An empty database
+  that takes tens of seconds to open is consistent with a file that grew and did
+  not shrink, which is the hypothesis under test.
+- onupgradeneeded is now reported too: it can only fire if the database is
+  absent, in which case there is nothing to reclaim and nothing to delete.
+- Verified all three paths: happy path still deletes and reports before/after;
+  onblocked reports and leaves the app frame standing; a hard open error takes
+  the same route. On both failure paths the confirm is never reached and the
+  frame is not torn down, so a failure costs nothing but the tap.
+- Tests 550 of 550.
+
 DIAGNOSTICS - 22 August 2026 - a guarded delete-database button, and Website Data
 - Website Data on the tester's iPhone reads github.io = 145 MB against the page's
   137.5 MB for the origin. Two measurements, one of them from outside the page's
