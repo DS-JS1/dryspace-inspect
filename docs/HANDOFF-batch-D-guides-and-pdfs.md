@@ -38,7 +38,22 @@ it no longer applies. Nothing in Batches A–C is expected to change again.
 
 ---
 
-## 2a. You are starting from two dirty trees
+## 2a. State you are starting from
+
+**Both repositories are committed and pushed** as of 21 August 2026. The app repo
+is at `d989308` on `v1.4`, matching `origin/v1.4`; `_Shared` is clean and in sync
+on `main`. Batches A, B and C are all in. You start from a clean tree.
+
+> **One test-only change landed after Batch C closed.** The orphan-bytes test
+> was flaky — it asserted the *count* `sweepOrphanBytes()` returned, which any
+> other sweeper could take to zero first. It now asserts the outcome per key.
+> **If you see a failure in the byte-sweep tests, it is real** — the known
+> flakiness is gone, and confirmed over three consecutive clean runs. Do not
+> write a failure off as the known one.
+
+### Superseded: the dirty-tree warning
+
+### Superseded detail
 
 Verified 21 August 2026, at the close of Batch C:
 

@@ -1429,20 +1429,42 @@ function run(W){
         });
     })());
 
-  later('bytes already orphaned are swept up',
+  later('bytes already orphaned are swept up, and live ones are left alone',
     (function(){
-      /* The fix above stops it happening; this reclaims what already has. */
-      var mid = '__already-orphaned__';
-      return W.toBuffer(new Blob(['0123456789']))
-        .then(function(buf){ return W.putBytes(mid, buf, buf); })
-        .then(function(){ return W.sweepOrphanBytes(); })
-        .then(function(n){
-          ok(n >= 1, 'the sweep found it (' + n + ')');
-          return W.dbGet('bytes', mid);
-        })
-        .then(function(left){
-          ok(!left, 'and reclaimed it');
-        });
+      /* The fix above stops orphans being created; this reclaims what already
+         has been.
+
+         It used to assert the COUNT the sweep returned, which is a property of
+         global state: the app runs its own sweep at start-up, and the sibling
+         test above sweeps too, so whichever got there first left this one
+         returning zero. That is flakiness, not a regression - it was chased
+         twice, once to a stale service worker and once to leftover data, and
+         both were wrong.
+
+         Asserting the outcome per key is deterministic no matter who else
+         sweeps: an orphan must be gone, and bytes whose record still exists
+         must survive any number of sweeps. The live key also proves the sweep
+         is SELECTIVE rather than merely destructive, which counting never did.
+
+         The live record is written BEFORE its bytes, so there is no instant at
+         which it looks like an orphan to a sweep running alongside. */
+      var orphan = '__orphan-swept__', live = '__live-kept__';
+      return W.toBuffer(new Blob(['0123456789'])).then(function(buf){
+        return W.dbPut('media', {mid: live, iid: '__t__', name: 'keep.jpg'})
+          .then(function(){ return W.putBytes(live, buf, buf); })
+          .then(function(){ return W.putBytes(orphan, buf, buf); });
+      })
+      .then(function(){ return W.sweepOrphanBytes(); })
+      .then(function(){
+        return Promise.all([W.dbGet('bytes', orphan), W.dbGet('bytes', live)]);
+      })
+      .then(function(r){
+        ok(!r[0], 'the orphan is reclaimed',
+           'bytes with no record behind them survived the sweep');
+        ok(!!r[1], 'and bytes whose record still exists are left alone',
+           'the sweep took bytes that were still in use');
+        return W.forgetMedia(live);
+      });
     })());
 
   /* v1.4.0 patch - asking the holder to hand it on, through the share sheet

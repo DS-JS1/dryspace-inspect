@@ -1,5 +1,19 @@
 Dryspace Site Inspection App — Changelog
 ========================================
+
+DOCUMENTATION PASS - 21 August 2026 (continued)
+- The orphan-bytes test is no longer flaky. It asserted the COUNT that
+  sweepOrphanBytes() returned, which is a property of global state: the app runs
+  its own sweep at start-up and the sibling test sweeps too, so whichever got
+  there first left this one returning zero. It now asserts the outcome PER KEY -
+  an orphan must be gone, and bytes whose record still exists must survive - and
+  the live key is written before its bytes so there is no instant when it looks
+  like an orphan. That also tests something counting never did: that the sweep
+  is selective rather than merely destructive. Test-only; no app file touched.
+  Two earlier explanations for this failure - a stale service worker, then
+  leftover store data - were both wrong and are recorded so nobody re-derives
+  them.
+
 v1.0.0 — 20 July 2026
 - Initial release. Built from Site Inspection Form v4 (Project 2.1), all 12
   sections and dynamic reveals preserved.
