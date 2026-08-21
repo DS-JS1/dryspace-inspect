@@ -4610,17 +4610,51 @@ function migrateMediaBytes(){
 
    Deliberately keyed off the media store rather than a flag: whatever caused an
    orphan, present or future, this finds it. */
+/* Returned when the sweep could not run. Distinct from 0, which means it ran
+   and found nothing: those two were the same value until 22 August 2026, so a
+   storage failure was indistinguishable from a clean sweep and orphaned bytes
+   could be silently never reclaimed for ever. */
+var SWEEP_FAILED = -1;
+
 function sweepOrphanBytes(){
   return Promise.all([dbAll('media'), dbAll('bytes')]).then(function(r){
     var live = {};
     r[0].forEach(function(m){ live[m.mid] = true; });
-    var dead = r[1].filter(function(b){ return !live[b.mid]; });
-    if(!dead.length) return 0;
-    return Promise.all(dead.map(function(b){ return dbDel('bytes', b.mid); }))
-      .then(function(){ return dead.length; });
+    var candidates = r[1].filter(function(b){ return !live[b.mid]; });
+    if(!candidates.length) return 0;
+
+    /* CANDIDATES, not victims. Each one is confirmed by a point lookup before
+       anything is deleted, and that is not belt-and-braces.
+
+       On 22 August 2026, under load, dbAll() was caught returning an EMPTY
+       ARRAY from a store that was not empty: dbAll('bytes') gave [] while
+       dbGet found every record and a freshly opened connection counted them by
+       key. Both listings came back empty together that time, so the sweep
+       merely did nothing - but the same fault in only the FIRST listing means
+       an empty `live` map and every byte record in the store looking like an
+       orphan. That is every photograph on the device, deleted, on the strength
+       of one bad read.
+
+       A point get is the read that stayed correct throughout, and it is the
+       cheap one: this only runs for records already believed dead. The
+       non-negotiable is that a local original is never deleted until it is
+       verified in SharePoint - deleting it on a misread listing breaks that
+       just as thoroughly as uploading badly would. */
+    var doomed = [];
+    return candidates.reduce(function(chain, b){
+      return chain.then(function(){
+        return dbGet('media', b.mid).then(function(rec){
+          if(!rec) doomed.push(b.mid);
+        });
+      });
+    }, Promise.resolve()).then(function(){
+      if(!doomed.length) return 0;
+      return Promise.all(doomed.map(function(mid){ return dbDel('bytes', mid); }))
+        .then(function(){ return doomed.length; });
+    });
   }).catch(function(e){
     console.warn('Could not sweep orphaned bytes', e);
-    return 0;
+    return SWEEP_FAILED;
   });
 }
 
@@ -5004,7 +5038,11 @@ function init(){
     if(moved) console.info('Moved ' + moved + ' file(s) into the bytes store.');
     return sweepOrphanBytes();
   }).then(function(freed){
-    if(freed) console.info('Reclaimed bytes for ' + freed + ' deleted file(s).');
+    /* SWEEP_FAILED is not a count. Reporting it as one printed "Reclaimed bytes
+       for -1 deleted file(s)", which is the sort of line that gets read as
+       noise rather than as the storage failure it is. */
+    if(freed === SWEEP_FAILED) console.warn('Orphaned bytes could NOT be swept — storage did not answer.');
+    else if(freed) console.info('Reclaimed bytes for ' + freed + ' deleted file(s).');
     return recoverInterruptedUploads();
   }).then(function(n){
     if(n) console.info('Recovered ' + n + ' interrupted upload(s) — queued again.');

@@ -1429,21 +1429,9 @@ function run(W){
         });
     })());
 
-  later('bytes already orphaned are swept up',
-    (function(){
-      /* The fix above stops it happening; this reclaims what already has. */
-      var mid = '__already-orphaned__';
-      return W.toBuffer(new Blob(['0123456789']))
-        .then(function(buf){ return W.putBytes(mid, buf, buf); })
-        .then(function(){ return W.sweepOrphanBytes(); })
-        .then(function(n){
-          ok(n >= 1, 'the sweep found it (' + n + ')');
-          return W.dbGet('bytes', mid);
-        })
-        .then(function(left){
-          ok(!left, 'and reclaimed it');
-        });
-    })());
+  /* The orphan sweep checks used to live here, inside later(). They now run in
+     orphanChecks() below, sequenced after the app's boot chain has finished.
+     See the comment there - the reason is not tidiness. */
 
   /* v1.4.0 patch - asking the holder to hand it on, through the share sheet
      rather than a notification: web push needs an installed app, a permission
@@ -1732,6 +1720,46 @@ function releaseChecks(W){
   })
 
   .then(function(){
+    /* The open-items register is only worth having if it cannot quietly rot, and
+       a document nothing checks always does. This does NOT fail because items are
+       open - open work is normal, and a suite that goes red for honest
+       outstanding work teaches people to ignore it. It fails when the register
+       itself has decayed: gone missing, or carrying an open item with no exit
+       criterion, which is how "outstanding" turns into "forgotten". */
+    return fetch('docs/OPEN-ITEMS.md' + bust)
+      .then(function(r){
+        if(!r.ok){
+          record(false, 'open-items register exists',
+                 'docs/OPEN-ITEMS.md is missing - it is referenced by CLAUDE.md ' +
+                 'and gates every release in 05_Release Protocol section 2');
+          return null;
+        }
+        return r.text();
+      })
+      .then(function(md){
+        if(md === null) return;
+        ok(true, 'open-items register exists');
+
+        /* Every "### OI-n - title" heading in the open sections must be followed
+           by a "Done means:" before the next heading. Closed items live in a
+           table and are deliberately not checked. */
+        var open = md.split(/^## 4\. Closed/m)[0];
+        var blocks = open.split(/^### /m).slice(1);
+        var missing = blocks.filter(function(b){
+          return /^OI-\d+/.test(b) && b.indexOf('Done means') === -1;
+        }).map(function(b){ return b.split('\n')[0].trim(); });
+
+        ok(blocks.length > 0, 'register lists at least one item',
+           'no "### OI-n" headings found - has the format changed?');
+        ok(missing.length === 0,
+           'every open item says what would close it',
+           missing.length ? 'no "Done means" for: ' + missing.join('; ') : '');
+      })
+      .catch(function(e){
+        record(false, 'open-items register readable', String(e && e.message || e));
+      });
+  })
+  .then(function(){
     /* The printed guides are the one thing a person can be holding weeks later
        with no way to tell it is out of date. Each PDF carries the version in its
        name, so checking is simply asking whether the current one exists. This is
@@ -1756,6 +1784,95 @@ function releaseChecks(W){
           });
       });
     }, Promise.resolve());
+  });
+}
+
+/* ---------- the orphan sweep, deliberately on its own ----------
+
+   This ran inside later() until 22 August 2026 and failed on roughly five runs
+   in eight under load. Two earlier attempts blamed a stale service worker and
+   leftover store data; both were disproved. The rewrite to assert per-key
+   outcomes rather than the returned count was a real improvement and did not
+   stop it either.
+
+   WHAT IT ACTUALLY WAS, measured rather than reasoned: while the app's start-up
+   chain was still running, the app's own dbAll() returned an EMPTY ARRAY from a
+   store that was not empty. Captured at the moment of failure - dbAll('bytes')
+   gave [], while dbGet found every record and a freshly opened connection
+   counted two, by key. sweepOrphanBytes() reads dbAll('bytes'), so it saw
+   nothing to sweep, freed nought, and the orphan survived. The assertion was
+   right every time.
+
+   later() is what put the test there: its IIFE body runs immediately, during
+   run(), so the writes and the sweep interleaved with the boot chain's own
+   migrate-sweep-recover sequence.
+
+   Two changes, and both matter:
+
+   1. Wait for a REAL signal that boot has finished, not a timeout. A bigger
+      setTimeout is the same bug with a longer fuse. dsTransport is set by
+      initSync(), which is the last link in the chain, so its appearance means
+      the chain has drained.
+
+   2. Keys unique to this run. A foreign sweep can then neither satisfy nor
+      defeat the assertion, and a failing run cannot leave residue that changes
+      what the next run starts from - which is what made this look stable on
+      reload and so read as a regression.
+
+   The app-side fault this exposed is not fixed here; a test may not paper over
+   the thing it found. See sweepOrphanBytes() and OPEN-ITEMS OI-9. */
+function bootSettled(W){
+  /* initSync() runs at the end of migrate -> sweep -> recover, and sets
+     dsTransport. Polling for it waits on the app rather than on the clock. */
+  var deadline = Date.now() + 15000;
+  return new Promise(function(res){
+    (function poll(){
+      var done = false;
+      try { done = !!W.dsTransport; } catch(e){ done = false; }
+      if(done || Date.now() > deadline) return res(!!done);
+      setTimeout(poll, 50);
+    })();
+  });
+}
+
+function orphanChecks(W){
+  section('Orphaned bytes are reclaimed');
+  var run = 'r' + Date.now() + '-' + Math.floor(Math.random() * 1e6);
+  var orphan = '__orphan-' + run + '__', live = '__live-' + run + '__';
+
+  return bootSettled(W).then(function(settled){
+    ok(settled, 'the app finished starting up before this ran',
+       'dsTransport never appeared within 15s - initSync() did not run, so the ' +
+       'boot sweep may still be in flight and this result cannot be trusted');
+    return W.toBuffer(new Blob(['0123456789']));
+  }).then(function(buf){
+    /* The live record is written BEFORE its bytes, so there is no instant at
+       which it looks like an orphan to any sweep running alongside. */
+    return W.dbPut('media', {mid: live, iid: '__t__', name: 'keep.jpg'})
+      .then(function(){ return W.putBytes(live, buf, buf); })
+      .then(function(){ return W.putBytes(orphan, buf, buf); });
+  }).then(function(){
+    return W.sweepOrphanBytes();
+  }).then(function(){
+    return Promise.all([W.dbGet('bytes', orphan), W.dbGet('bytes', live)]);
+  }).then(function(r){
+    ok(!r[0], 'the orphan is reclaimed',
+       'bytes with no record behind them survived the sweep');
+    ok(!!r[1], 'and bytes whose record still exists are left alone',
+       'the sweep took bytes that were still in use');
+  }).then(function(){
+    /* Clean up on BOTH paths. A failing run used to leave its orphan behind,
+       so the next run started from different conditions than the one before. */
+    return Promise.all([
+      W.forgetMedia(live).catch(function(){}),
+      W.dbDel('bytes', orphan).catch(function(){})
+    ]);
+  }, function(e){
+    record(false, 'orphan sweep checks - threw', String(e && e.message || e));
+    return Promise.all([
+      W.forgetMedia(live).catch(function(){}),
+      W.dbDel('bytes', orphan).catch(function(){})
+    ]);
   });
 }
 
@@ -3041,6 +3158,7 @@ clearWorkers()
   .then(loadApp)
   .then(function(W){ APPW = W; return run(W); })
   .then(function(){ return Promise.all(PENDING); })
+  .then(function(){ return orphanChecks(APPW); })
   .then(function(){ return crossCheckV111(APPW); })
   .then(function(){ return releaseChecks(APPW); })
   .then(mediaModuleChecks)
