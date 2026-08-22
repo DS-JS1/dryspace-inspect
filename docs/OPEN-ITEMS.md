@@ -153,8 +153,9 @@ an administrator tidying SharePoint by hand.
 
 ### OI-13 · iOS truncates the native dialogs, so instructions staff need are never seen
 **Status:** open · **Tier:** minor — visible behaviour change
-**Detail:** `docs/HANDOFF-v1.4-polish.md` §6 raised the two-languages problem and
-was never actioned; the truncation was seen on a device 22 August 2026
+**Detail:** `docs/HANDOFF-session-A-dialogs-and-audit.md` — the brief, with the
+conversion order. `docs/HANDOFF-v1.4-polish.md` §6 raised the two-languages
+problem and was never actioned; the truncation was seen on a device 22 Aug 2026
 
 The handover confirmation is a native `alert()` (`index.html:3349`). On an iPhone
 it renders the first line large, the body small, **and cuts the message off**. The
@@ -180,8 +181,8 @@ desktop browser, which does not truncate and will not show the fault.
 
 ### OI-14 · The audit trail is recorded but cannot be read in the app
 **Status:** open · **Tier:** minor — new capability
-**Detail:** `index.html:2072` `logAudit()`, `index.html:2095` the count,
-`index.html:2924` `auditTrail` in the export
+**Detail:** `docs/HANDOFF-session-A-dialogs-and-audit.md` §3 · `index.html:2072`
+`logAudit()`, `index.html:2095` the count, `index.html:2924` the export
 
 Every meaningful action writes an audit entry — created, stage changed, marked
 complete, handed over, and **handover forced by X, recovered from Y**. The record
