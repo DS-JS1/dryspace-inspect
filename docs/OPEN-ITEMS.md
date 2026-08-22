@@ -96,8 +96,8 @@ nothing is marked *needs retaking*. Confirmed from diagnostics §6 and §8 rathe
 than by eye, and appended to the bug-test file.
 
 
-### OI-12 · Is the `held` state reachable without editing SharePoint by hand?
-**Status:** open — **answer it while running OI-1** · **Tier:** unknown until answered
+### OI-12 · How does a folder reach `held`? Not confirmed either way
+**Status:** open · **Tier:** unknown until answered
 **Detail:** `index.html:3719` `batonState()`, `index.html:3335` the handover's move
 
 "Force the handover" is gated on `isAdmin() && batonState === 'held'`, and `held`
@@ -117,10 +117,62 @@ were not being read at all, so `BatonHolder` was invisible and every folder fell
 to `none`. With that fixed, the question is open again and has never been
 answered on its own terms.
 
-**Done means:** either a normal sequence is found that empties `current/` and
-reaches `held` — recorded with the steps — or it is established that none exists,
-in which case this becomes a design decision about how an administrator is ever
-meant to reach a stranded record.
+**NOT confirmed — and briefly recorded here as confirmed, which was wrong.** A
+freshly handed-over record correctly showed `waiting`, and that was read as
+proving `held` unreachable. The browse screen in the same moment showed a folder
+sitting in **`held`**: *INS - 22xx - Frinight TestClient*, IN PROGRESS, amber,
+"held by Jamie Stone", "no file waiting in current/". So `held` plainly exists.
+
+What remains genuinely open is **how a folder gets there**. That one reached it
+during run 1, when the tester moved the file out of `current/` into `archive/`
+**by hand in SharePoint**. Reading the code, the handover uploads into `current/`
+and archives only the previously held file, and taking over reads without moving
+— so no ordinary sequence obviously empties `current/`. That is a reading, not a
+finding, and it has never been tested on its own.
+
+The likely missing step, for whoever picks this up: the folder layout is
+`current/` → `wip/` → `archive/`, and the model only reads coherently if
+`current/` means *waiting to be picked up*. Once somebody has taken the record
+onto their device it is no longer waiting, so **taking over arguably ought to move
+the file out of `current/`** — which would make `held` arise naturally and needs no
+change to the gate at all. That is a reading, not a decision.
+
+**Whatever is chosen, the move must happen only after the record is verified on
+the taking device.** Moving it out of `current/` first would put a record's only
+copy in flight, which is the non-negotiable this project exists around.
+
+**Done means:** either a normal sequence is demonstrated that empties `current/`
+and reaches `held`, written down with the steps — or it is established that none
+exists, and then a decision-log entry choosing between moving the file on
+takeover, widening the gate, or accepting that the state is only ever reached by
+an administrator tidying SharePoint by hand.
+
+### OI-13 · iOS truncates the native dialogs, so instructions staff need are never seen
+**Status:** open · **Tier:** minor — visible behaviour change
+**Detail:** `docs/HANDOFF-v1.4-polish.md` §6 raised the two-languages problem and
+was never actioned; the truncation was seen on a device 22 August 2026
+
+The handover confirmation is a native `alert()` (`index.html:3349`). On an iPhone
+it renders the first line large, the body small, **and cuts the message off**. The
+owner's screenshot ends mid-sentence at *"Tell the next person, with a link to the
+folder. Delete your copy from"* — with no scroll and no way to read the rest.
+
+**The truncated half is the operative half.** What is lost is *"…your copy from this
+device once they confirm they have it."* — the one instruction that stops two
+people holding the same record. This is not a cosmetic complaint about bold text;
+it is guidance the app believes it has given and has not.
+
+Around **30** `alert()` / `confirm()` calls remain alongside the custom box
+(`pickFromList` / `showDialog`), so the app speaks two visual languages and the
+native one cannot be trusted to show what it is given.
+
+**Carry the warning with it:** *do not convert a dialog on the capture path
+without a device test.* A custom modal that fails to close is worse than an ugly
+native one that cannot.
+
+**Done means:** the messages staff actually meet — handover, take-over, fork
+warning — display in full on an iPhone, verified on the device rather than in a
+desktop browser, which does not truncate and will not show the fault.
 
 ### OI-9 · `dbAll()` can return `[]` from a store that is not empty
 **Status:** open — **guarded, not cured** · **Tier:** unknown

@@ -1,6 +1,44 @@
 Dryspace Site Inspection App — Changelog
 ========================================
 
+FAULT 1'S FIX PROVEN IN THE WILD - 22 August 2026 - all three baton states render
+- The browse screen on the device now shows all three states side by side, with
+  the columns read correctly. This is the $expand fix doing its job in normal use
+  rather than in a diagnostic:
+      IN PROGRESS  amber  INS - 22xx - Frinight TestClient   "held by Jamie Stone"
+      WAITING      green  SatTest-10 38am - SatTest Client   "last held by Jamie Stone"
+      NOT HANDED OVER grey  Unfiled  "photos uploaded, but the record has never been sent"
+  Stage (S01-OFFICE), holder and handover time all present. Before the fix every
+  one of those read as blank or NOT HANDED OVER.
+- OI-12 WAS BRIEFLY RECORDED AS CONFIRMED AND THAT WAS WRONG. A freshly handed
+  over record correctly showed WAITING, and that was read as proving 'held'
+  unreachable - from a text description, before the screenshot arrived. The same
+  screen showed a folder sitting in 'held'. The conclusion was drawn from the
+  wrong record and should not have been drawn at all. Corrected in the register.
+- What is actually open is narrower: HOW a folder reaches 'held'. The one that is
+  there got there in run 1, when the file was moved out of current/ by hand in
+  SharePoint. Whether any ordinary sequence does it is still untested.
+- The record just created behaved correctly throughout: handed over, appeared as
+  WAITING with its filename and time, and offering "Take it over" on a record
+  already on this device produced the fork warning, which is the right answer.
+
+OI-13 REFRAMED - 22 August 2026 - iOS is TRUNCATING the dialogs, not just styling
+- Reported as a formatting complaint about bold text. It is worse than that. The
+  handover confirmation is a native alert() at index.html:3349, and on an iPhone
+  it renders the first line large, the body small, and CUTS THE MESSAGE OFF. The
+  screenshot ends mid-sentence at "Tell the next person, with a link to the
+  folder. Delete your copy from" - no scroll, no way to read the rest.
+- THE TRUNCATED HALF IS THE OPERATIVE HALF: "...your copy from this device once
+  they confirm they have it." That is the one instruction that stops two people
+  holding the same record. The app believes it has given guidance it has not.
+- Around 30 alert()/confirm() calls remain beside the custom box. The polish
+  handoff section 6 named the two-languages problem and listed the candidates;
+  it was never actioned, and it now has a concrete cost rather than an aesthetic
+  one. Carries its own warning: do not convert a dialog on the capture path
+  without a device test.
+- Worth noting for whoever fixes it: a desktop browser does NOT truncate, so the
+  fault is invisible unless it is checked on a phone.
+
 OI-11 CONFIRMED CLOSED ON THE DEVICE - 22 August 2026
 - Clearing the leftover ds-inspections through the new diagnostics 8c brought the
   live app back: its inspection list and its storage line both returned. That is
