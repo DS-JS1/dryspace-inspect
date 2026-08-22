@@ -1,6 +1,40 @@
 Dryspace Site Inspection App — Changelog
 ========================================
 
+OI-17 CONFIRMED FIXED ON THE DEVICE - 22 August 2026 - and the lesson written down
+- Re-run on the phone: "all 3 readable - hypothesis 2 ruled out". OI-17 closed.
+- OI-10's remaining gap closed too: diagnostics NEVER reported the record schema,
+  so the one number that item exists to check could not be read off the
+  instrument its own exit criterion names. The storage panel now reports
+  "Record schema (expected 4)" with a per-value count and flags anything behind.
+- SCHEMA_NOW mirrors the top of ensureSchema(), and tests.html checks the two
+  agree by actually running ensureSchema({}) rather than by reading a number
+  twice. A mirrored constant that drifts is OI-17 one field along.
+- Also tested: the blob panel goes through bytesFor(), no longer judges existence
+  on the pre-v1.4 fields, and issues the bytes request BEFORE the media one.
+- Tests 590 -> 597.
+
+- THE LESSON IS NOW IN THREE PLACES A PERSON WILL HIT IT, not just in a changelog
+  entry and an open item that gets struck when it closes:
+  · CLAUDE.md non-negotiables - loaded at the start of every session
+  · 02_Iteration Guide section 3 - found by whoever is changing storage
+  · DECISION-LOG 4j - the permanent record of why
+- Stated as: a storage change is not finished until diagnostics.html is updated
+  in the SAME commit. The page is a second reader of the layout and reads raw,
+  before the app boots, so it cannot follow a change automatically - it just
+  starts lying, confidently. The test to apply: what does this make a HEALTHY
+  device say?
+- NOTE: 02_Iteration Guide.md changed, so Guides/02_Iteration Guide_v1.4.0.pdf is
+  now stale. The filename is unchanged so tests.html still passes - it checks the
+  PDF exists for the current version, not that it matches. Regenerate before
+  release: open the .md, Print -> Save as PDF, background graphics ON.
+
+- Session B's handoff refreshed. Its state table was four commits stale and it
+  did not know about /rehearsal/, OI-16 or OI-17. Added a "what changed since
+  this brief was written" section: the tap that settles OI-12 is now OI-16 step
+  5, and option A moves a file between folders, so the new diagnostics rule
+  applies directly to that session's work.
+
 OI-10 RUN 2 - 22 August 2026 - the migration PASSED and the diagnostic lied
 - The rehearsal ran. /rehearsal/ upgraded the real ds-inspections from version 1
   to 2 and the bytes store came out holding 3 rows, 18.2 MB of originals -

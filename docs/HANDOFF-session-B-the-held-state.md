@@ -197,8 +197,8 @@ current state, not the one this brief was written against.
 
 | | |
 |---|---|
-| `v1.4` | `SESSION_A_HEAD` |
-| `main` | `MAIN_HEAD` — root untouched, **v1.3.0 still live** |
+| `v1.4` | `b7cd047` — Session A complete in code, **not verified on a device** |
+| `main` | `ed864a6` — root untouched, **v1.3.0 still live** |
 | Beta | `https://ds-js1.github.io/dryspace-inspect/beta/`, build `v1.4.0-31` |
 | Rehearsal | `https://ds-js1.github.io/dryspace-inspect/rehearsal/` — **new, and temporary** |
 | Tests | 597/597 |
