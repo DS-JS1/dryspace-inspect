@@ -57,7 +57,7 @@ vehicle for closing the five. Strike it when they are struck.
 steps 2–4 are testing the wrong code. The footer names the build. Nothing here
 touches `main`'s root, and none of it is a release.
 
-### First attempt, 22 August 2026 — stopped at step 1, and the checklist was wrong
+#### First attempt, 22 August 2026 — stopped at step 1, and the checklist was wrong
 
 **Step 1 as first written could not have worked, and step 1 is now blocked on a
 decision.** Opening the beta after the live app does not upgrade anything: the two
@@ -154,7 +154,7 @@ retaking"*, so a hiccup is destructive to the record's state. And it opens with
 `dbAll('media')` — the call OI-9 says can come back short. A short listing there
 migrates nothing and reports success.
 
-### THESE STEPS WERE WRONG. Corrected 22 August 2026, on the device.
+#### THESE STEPS WERE WRONG. Corrected 22 August 2026, on the device.
 
 The procedure below used to read: delete the database with diagnostics §8b, make
 a record in the **live** app, then *"open the **beta** on the same device — that
@@ -191,7 +191,7 @@ behaviour rather than a side effect"* — but nobody came back and corrected the
 steps. The decision and the procedure it invalidated sat three screens apart in
 the same register for a day.
 
-### What it actually takes
+#### What it actually takes
 
 The migration only runs where v1.4 opens `ds-inspections`, and `isBetaBuild()` is
 true for `/beta/` **and nothing else**. So any non-beta path serves a v1.4 that
