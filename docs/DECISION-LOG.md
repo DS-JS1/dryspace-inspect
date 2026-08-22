@@ -993,6 +993,48 @@ happens before the app boots and it cannot ask. `tests.html` checks the two agre
 since a diagnostic pointed at the wrong store reports an empty device with total
 confidence.
 
+### What this decision broke, found on the device 22 August 2026
+
+**It invalidated OI-10's rehearsal, and nobody came back to say so.** This entry
+was written *while scoping* that rehearsal and records, a paragraph above, that
+beta data not carrying over is *"the intended behaviour rather than a side
+effect"*. What went unsaid is the consequence: OI-10's steps were *make a record
+in the live app, then open the beta — that is the upgrade*, and after this
+decision the beta opens a **different, empty** database. `migrateMediaBytes()`
+then runs against an empty store, migrates nothing, and reports success. The
+rehearsal would have passed while testing nothing.
+
+The decision and the procedure it invalidated sat three screens apart in the same
+register for a day, and it took a person on a phone to notice. **The lesson is
+not "check the register" — it is that a decision which changes what a stored
+procedure DOES has not landed until that procedure is rewritten.** Where a
+decision entry cannot name the procedures it affects, it should say it does not
+know.
+
+**The rehearsal is only possible off a non-beta path**, because `isBetaBuild()`
+is true for `/beta/` and nothing else, so anything else opens the real
+`ds-inspections`. That makes a throwaway `/rehearsal/` copy the one honest
+rehearsal available before release — and it inherits this entry's one-way
+property: once the real database reaches version 2, v1.3.0 cannot open it again
+and diagnostics §8c is the way back. The options and their costs are in OI-10;
+the choice is not made here.
+
+### Also confirmed on the device the same day
+
+**v1.3.0's hang is real, and it is the reproduction Batch 1 said never happened.**
+The owner tapped *Upload now* in the live app and it stuck on *Uploading…*
+indefinitely. The live root has **no bounded wait anywhere**: `tx()` handles
+`oncomplete` and `onerror` but not `onabort`, `ds-sharepoint.js` contains no
+`AbortController`, and `index.html` has no database deadline. Any stall hangs for
+ever and reports nothing, and the app cannot say which of the two it was.
+
+Both fixes (D43, D44 and the request deadlines) are in v1.4 and neither is in the
+live app, so **this is evidence those fixes were worth making, not evidence
+against them.** It does not reopen B5, which `CLAUDE.md` guards: this is a
+different layer and a known one. What stays genuinely unknown is *why* it
+stalled — v1.4 will surface that as a reported error rather than a hang, which
+is where to look if it recurs.
+
 ---
 
 ## 4i. A dialog's buttons must carry their own meaning — 22 August 2026

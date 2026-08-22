@@ -1,6 +1,61 @@
 Dryspace Site Inspection App — Changelog
 ========================================
 
+OI-16 RUN 1 - 22 August 2026 - stopped at step 1, and step 1 was wrong
+- The batch was attempted and got no further than its first row. Two faults, one
+  of them in the checklist written hours earlier.
+
+- FAULT 1, THE SERIOUS ONE: THE UPGRADE REHEARSAL TESTS NOTHING. OI-10's steps
+  say "open the beta on the same device - that is the upgrade". It is not, and
+  has not been since decision log 4h separated the databases on 22 August. The
+  live app writes ds-inspections at version 1; the beta opens ds-inspections-beta
+  and CREATES IT EMPTY at version 2. migrateMediaBytes() then runs against an
+  empty store, migrates nothing and REPORTS SUCCESS.
+- That is OI-10's own stated worry - "a short listing there migrates nothing and
+  reports success" - arrived at from the other end. The rehearsal would have
+  passed while proving nothing, which is worse than not running it.
+- 4h was written WHILE SCOPING OI-10 and even records that beta data not carrying
+  over is intended. The consequence for OI-10's steps went unwritten. The decision
+  and the procedure it invalidated sat three screens apart in the same register
+  for a day. A decision that changes what a stored procedure DOES has not landed
+  until that procedure is rewritten.
+- Two smaller faults in the same steps: diagnostics 8b cannot clear the live
+  database (diagnostics.html only exists at /beta/ and derives its target from the
+  path, so 8b clears ds-inspections-beta; 8c is the route to the live one), and
+  the steps never said not to upload, so the obvious button got tapped.
+- OI-10 rewritten with the correction and three ways forward. The only honest
+  pre-release rehearsal is a throwaway /rehearsal/ copy of v1.4 on main, because
+  isBetaBuild() is true for /beta/ and nothing else, so any other path opens the
+  real database. It is ONE-WAY on that handset - once ds-inspections reaches
+  version 2, v1.3.0 cannot open it again (4h) and 8c is the way back. Prepared
+  and not pushed; the choice is the owner's.
+
+- FAULT 2, EXPECTED AND NOT TO BE CHASED: THE LIVE APP HUNG. New inspection, one
+  photo, Upload now, stuck on "Uploading..." indefinitely. The live root serves
+  v1.3.0, which has NO BOUNDED WAIT ANYWHERE: tx() handles oncomplete and onerror
+  but not onabort (OI-C7 / D43, D44), ds-sharepoint.js has no AbortController,
+  index.html has no database deadline. Any stall - storage or network - hangs for
+  ever and reports nothing. Both fixes are in v1.4 and neither is in the live app.
+- This is the on-device reproduction Batch 1 recorded as never having happened.
+  It is evidence the fixes were worth making, not evidence against them, and it
+  does NOT reopen B5 - different layer, already known, and CLAUDE.md guards it.
+- What stays unknown is WHY it stalled. v1.3.0 cannot say which of its two
+  unbounded waits it was. v1.4 bounds both, so a recurrence on the beta surfaces
+  as a reported error rather than a hang. That is now a watch note on OI-16.
+
+- THE DIAGNOSTIC RUN WAS THE RIGHT INSTINCT AT THE WRONG LAYER. The chunked
+  upload test passed cleanly - 6.36 MB, 2 chunks, byte-exact read-back - but it
+  ran from /beta/diagnostics.html, against the beta's database, in a different
+  app from the one that hung. It could not have seen the fault, and the transport
+  was never the suspect; it was proved on 18 August with a 41.3 MB video.
+- Recorded on OI-16 so the same trip is not made twice: a diagnostic run from
+  /beta/ says nothing about the live app's state.
+
+- Steps 2-6 do not depend on step 1 and can be run now. Step 2 no longer needs
+  the record from step 1; make one in the beta.
+- Housekeeping: the run left _diagnostics/diag_2026-08-22T05-43-40_IMG_9632.jpeg
+  (6.36 MB) in the library. Nothing references it.
+
 SESSION A DONE IN CODE - 22 August 2026 - OI-13 and OI-14, minor, folded into 1.4.0
 - APP_VER stays 1.4.0 (unreleased, so this folds in). CACHE_VERSION 30 -> 31.
   Nothing pushed to main's root, nothing tagged.

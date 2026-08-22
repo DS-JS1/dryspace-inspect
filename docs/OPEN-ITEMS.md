@@ -47,10 +47,8 @@ of them stands between v1.4.0 and a release decision.
 **OI-12** and **OI-5**. Raised 22 August 2026 at the close of Session A
 
 Five separate items are each blocked on the same scarce thing: a real iPhone,
-with real SharePoint behind it. Run separately they cost five trips; run in the
-order below they cost one, because each step leaves behind exactly what the next
-step needs — the upgrade rehearsal produces the record with photographs that the
-dialog checks then hand over.
+with real SharePoint behind it. Run separately they cost five trips; run together
+they cost one.
 
 **This is a checklist, not a task.** It closes nothing by itself; it is the
 vehicle for closing the five. Strike it when they are struck.
@@ -59,11 +57,49 @@ vehicle for closing the five. Strike it when they are struck.
 steps 2–4 are testing the wrong code. The footer names the build. Nothing here
 touches `main`'s root, and none of it is a release.
 
+### First attempt, 22 August 2026 — stopped at step 1, and the checklist was wrong
+
+**Step 1 as first written could not have worked, and step 1 is now blocked on a
+decision.** Opening the beta after the live app does not upgrade anything: the two
+use different databases (decision log §4h), so the migration runs against an empty
+store and reports success having migrated nothing. **See OI-10, which now carries
+the correction and three ways forward.** Do not attempt step 1 until one is
+chosen; steps 2–6 do not depend on it and can be run now.
+
+**The live app hung, and that is expected — do not chase it.** The owner created a
+record in the **live** app, added a photo, tapped **Upload now**, and the app stuck
+on *Uploading…*. The live root serves **v1.3.0**, and v1.3.0 has **no bounded waits
+anywhere**: `tx()` handles `oncomplete` and `onerror` but **not `onabort`**
+(OI-C7 / D43, D44), and there is no `AbortController` in its `ds-sharepoint.js`
+and no database deadline in its `index.html`. Any stall, in storage or on the
+network, hangs for ever and reports nothing. Both fixes are in v1.4 and neither is
+in the live app. **This is the on-device reproduction that decision log
+§"Batch 1" says never happened** — worth having, and not a reason to reopen
+anything. Recover by reloading the live app; the record survives.
+
+**Nothing in this batch requires an upload from the live app.** Step 1 needs
+v1.3-format *data* on the device, not a proven upload. Do not tap **Upload now**
+there.
+
+**`diagnostics.html` is only at `/beta/`, and it reads the beta's database.** It
+derives its target from the path, so it cannot see the live app's state at all,
+and §8b deletes `ds-inspections-beta` rather than the live `ds-inspections`
+(§8c does that). A diagnostic run from `/beta/` says nothing about a fault in the
+live app — the first attempt's chunked-upload run was clean, and could not have
+been anything else.
+
+**Watch for, during steps 2–4:** the stall that hung the live app is
+**undiagnosed**, because v1.3.0 cannot report which of its two unbounded waits it
+was. v1.4 bounds both, so if the same stall recurs on the beta it will surface as
+a reported error instead of a hang. If it does, that is a real fault and worth
+chasing. If several uploads pass cleanly, record it as the unbounded-wait fault
+alone and let it go.
+
 | # | For | On | What to do |
 |---|---|---|---|
-| 1 | **OI-10** | live → beta | The upgrade rehearsal. **Do this first — it needs a clean database, and everything after it wants the record it produces.** Delete the database (diagnostics §8b). Open the **live** app, create an inspection with two photographs, one over 4 MB. Then open the **beta** on the same device: that is the upgrade. Confirm from diagnostics §6 and §8 — not by eye — that both photographs read back, `bytes` holds them, the media records carry no blobs, the record reads `schema: 4`, and nothing is marked *needs retaking* |
-| 2 | **OI-13** | beta | **The fork warning — the one that matters most.** With the record from step 1 on the device: *Share draft (offline fallback)* to get a `DS_Draft` file out, then change something in the record so the copy on the device is the newer one, then import that file back. **Screenshot the dialog.** It must show all three choices, and the last one — *Cancel this import / Nothing on this device changes* — must be readable without the box being cut |
-| 3 | **OI-13** | beta | **The handover confirmation**, the message photographed truncating. Hand the record over through SharePoint. **Screenshot it.** It must show *"Delete your copy from this device once they confirm they have it."* in full — that sentence is the whole point of the item |
+| 1 | **OI-10** | — | **BLOCKED, and not on the phone.** The rehearsal as scripted tests nothing; OI-10 now carries why and three ways forward. Pick one first. Steps 2–6 do not need it |
+| 2 | **OI-13** | beta | **The fork warning — the one that matters most.** Make a record **in the beta** with a photograph (it no longer has to come from step 1). *Share draft (offline fallback)* to get a `DS_Draft` file out, then change something in the record so the copy on the device is the newer one, then import that file back. **Screenshot the dialog.** It must show all three choices, and the last one — *Cancel this import / Nothing on this device changes* — must be readable without the box being cut |
+| 3 | **OI-13** | beta | **The handover confirmation**, the message photographed truncating. Hand that record over through SharePoint. **Screenshot it.** It must show *"Delete your copy from this device once they confirm they have it."* in full — that sentence is the whole point of the item |
 | 4 | **OI-14** | beta | Open the record and tap the **"N logged changes"** count in the status bar. The entries open, newest first, each carrying what happened, when, and who. Scroll to the oldest and back |
 | 5 | **OI-12** | beta | **One tap, and it settles a question argued from code alone.** Browse the library in the app, and open the same folder in SharePoint **in the same few minutes**. If a folder reads *WAITING* in the app while the library column reads *In progress*, the divergence is real. Note both readings and the time |
 | 6 | **OI-5** | either | Take a photograph on the iPhone, select it through the app's file input, and inspect it for GPS EXIF. Decides whether the Google Photos Maps plan is achievable at all |
@@ -77,10 +113,15 @@ than the fault being fixed — a modal that traps somebody on a phone in a
 basement. The capture path was deliberately left on native dialogs for this
 reason, so nothing at capture time can be affected either way.
 
+**Housekeeping:** the first attempt's diagnostic left
+`_diagnostics/diag_2026-08-22T05-43-40_IMG_9632.jpeg` (6.36 MB) in the library.
+Delete it when convenient; nothing references it.
+
 **Done means:** every row above is run and its result written into the item it
 belongs to, with the two screenshots attached for step 2 and step 3. Rows may be
 answered across more than one sitting; the batch is struck when the last one is
-answered, whether the answer was the hoped-for one or not.
+answered, whether the answer was the hoped-for one or not. **Step 1 is answered
+by a recorded decision as much as by a test run** — see OI-10.
 
 ### OI-10 · The v1.3 → v1.4 upgrade has never been rehearsed on a device
 **Status:** open — **re-graded 22 Aug 2026, no longer blocks release** · **Tier:** a test run
@@ -113,17 +154,69 @@ retaking"*, so a hiccup is destructive to the record's state. And it opens with
 `dbAll('media')` — the call OI-9 says can come back short. A short listing there
 migrates nothing and reports success.
 
-**One person can do this.** Order matters, because of OI-11:
+### THESE STEPS WERE WRONG. Corrected 22 August 2026, on the device.
 
-1. Delete the database (diagnostics §8b) so the device starts at no version.
-2. Open the **live** app and create an inspection with at least two photographs,
-   one of them over 4 MB.
-3. Open the **beta** on the same device. That is the upgrade.
+The procedure below used to read: delete the database with diagnostics §8b, make
+a record in the **live** app, then *"open the **beta** on the same device — that
+is the upgrade"*. **It is not the upgrade, and has not been since the same day it
+was written.**
 
-**Done means:** afterwards, both photographs read back, the `bytes` store holds
-them, the media records no longer carry blobs, the record reads `schema: 4`, and
-nothing is marked *needs retaking*. Confirmed from diagnostics §6 and §8 rather
-than by eye, and appended to the bug-test file.
+Decision log §4h separated the databases: `DB_NAME` is now
+`isBetaBuild() ? 'ds-inspections-beta' : 'ds-inspections'`. So:
+
+| | opens | at version |
+|---|---|---|
+| live app, at the root | `ds-inspections` | 1 |
+| v1.4 at `/beta/` | `ds-inspections-beta` | 2 |
+
+The live app writes one database and the beta creates a **different, empty** one.
+Opening the beta after the live app upgrades nothing — `migrateMediaBytes()` runs
+against an empty store, finds no media, and **reports success having migrated
+nothing.** That is this item's own stated worry (*"a short listing there migrates
+nothing and reports success"*) reached from the other end, and the old steps walk
+straight into it.
+
+Two further faults in the old steps, found the same way:
+
+- **§8b cannot clear the live database.** `diagnostics.html` exists only at
+  `/beta/`, and it derives its target from the path, so §8b always deletes
+  `ds-inspections-beta`. **§8c** is the only route to the live `ds-inspections` —
+  which is exactly why §8c was built.
+- **Do not upload anything during this test.** The rehearsal needs v1.3-format
+  *data*, not a proven upload. See OI-16's note on the live app's hang.
+
+**How it was found:** §4h was written *"while scoping the upgrade rehearsal
+(OI-10)"* and records that beta data not carrying over is *"the intended
+behaviour rather than a side effect"* — but nobody came back and corrected these
+steps. The decision and the procedure it invalidated sat three screens apart in
+the same register for a day.
+
+### What it actually takes
+
+The migration only runs where v1.4 opens `ds-inspections`, and `isBetaBuild()` is
+true for `/beta/` **and nothing else**. So any non-beta path serves a v1.4 that
+upgrades the real database. Three ways forward, none of them free:
+
+1. **A throwaway `/rehearsal/` copy of v1.4 on `main`** — same shape as `/beta/`,
+   root untouched, releases nothing. The one honest rehearsal available before
+   release, because it upgrades the real database exactly as the release will.
+   **It is one-way on that handset:** once `ds-inspections` reaches version 2 the
+   live v1.3.0 app can no longer open it (§4h), and the way back is diagnostics
+   §8c. **Do not sign in from it** — `spRedirectUri()` returns the *live* URI,
+   which Entra matches by exact string; the rehearsal is a local storage test and
+   needs no network.
+2. **Rehearse at release**, accepting the migration is unproven on a device until
+   the moment it matters. §4h already records that this release has no rollback.
+3. **Declare it untestable before release** and close this item on that reasoning,
+   recorded in the decision log.
+
+**Done means:** a real v1.3-produced record, with real photographs on a real
+phone, is carried through an upgrade that genuinely runs — both photographs read
+back, the `bytes` store holds them, the media records no longer carry blobs, the
+record reads `schema: 4`, and nothing is marked *needs retaking* — confirmed from
+diagnostics §6 and §8 rather than by eye, and appended to the bug-test file. **Or**
+option 2 or 3 above is chosen and recorded in the decision log with its reasoning.
+An upgrade that migrated nothing does not close this, however green it looks.
 
 
 ### OI-12 · How does a folder reach `held`? Not confirmed either way
