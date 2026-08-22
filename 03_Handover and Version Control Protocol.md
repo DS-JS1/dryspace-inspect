@@ -254,21 +254,41 @@ New in v1.4. Until now the folder list said what each inspection *was* and
 nothing about who *had* it — so the one question this protocol exists to answer
 could only be answered by ringing round.
 
-### Three states, one vocabulary
+### Four states, one vocabulary
 
-The same three words and the same three colours are used by the app's browse
-list, the take-over list, and the SharePoint library:
+The same words and the same colours are used by the app's browse list, the
+take-over list, and the SharePoint library:
 
 | Badge | Colour | What it means |
 |---|---|---|
-| **WAITING** | green | A file is sitting in `current/`. Anyone can take it over. Shows *last held by* whoever sent it. |
+| **WAITING** | green | Nobody has it, and a file is sitting in `current/` ready to be picked up. Shows *last held by* whoever sent it. |
 | **IN PROGRESS** | amber | Somebody has it on their device. Shows *held by* their name. |
 | **NOT HANDED OVER** | grey | Photos have uploaded, but the record has never been sent. |
+| **NO FILE IN CURRENT/** | red | The library says the record is waiting, and there is nothing in `current/` to pick up. Somebody moved or deleted it in SharePoint. |
 
-> **Why the third state exists.** A folder is created the moment the first
+> **What decides the badge — changed in v1.4.** The state is read from the
+> `BatonStatus` **column**, not from whether a file is sitting in `current/`.
+> Those are two different questions: `current/` says what the live record **is**,
+> and the column says **who has it**. The app used to answer the second with the
+> first, and because a takeover leaves the file exactly where the handover put it
+> (§4), a record already on somebody's device read **WAITING** and was offered to
+> the next person — which is the one thing this protocol exists to prevent.
+> Decision log **D60** and **§4k**.
+
+> **So a file in `current/` does not mean the record is free.** When a folder
+> reads **IN PROGRESS**, the file still in `current/` is the copy that person
+> took. It is not waiting for you, and the app will not offer it to you.
+
+> **Why NOT HANDED OVER exists.** A folder is created the moment the first
 > *photo* uploads, so an inspection nobody has ever handed over has an empty
 > `current/` too. Reading that as "somebody has it" sent people looking for a
 > colleague who was never involved.
+
+> **Why NO FILE IN CURRENT/ exists.** Nothing the app does can produce it: a
+> handover uploads the new file **before** it archives the old one, so `current/`
+> holds one file or two, never none. It means somebody moved or deleted the file
+> in SharePoint by hand. It is a real alarm, and it is not the same as *NOT
+> HANDED OVER* — there, nothing was ever sent.
 
 ### Browse all inspections
 
@@ -276,11 +296,12 @@ list, the take-over list, and the SharePoint library:
 with its state said plainly, and tells you how many of them are waiting. Tap one
 and you are offered, depending on its state:
 
-- **Take it over** — only when a file is waiting. Bringing an inspection down
-  makes you the holder.
+- **Take it over** — only when the record is **WAITING**, which means nobody
+  holds it. Bringing an inspection down makes you the holder.
 - **Ask for the baton** — when somebody else has it. See below.
-- **Force the handover** — administrators only, and only when somebody holds it.
-  See §8.
+- **Force the handover** — administrators only, and only when the record cannot
+  be picked up the ordinary way: somebody holds it (**IN PROGRESS**), or the file
+  that should be in `current/` is gone (**NO FILE IN CURRENT/**). See §8.
 - **View it** — read it without taking it. See below.
 - **Open the folder in SharePoint** — the photos, `current/` and `archive/`.
 
@@ -296,9 +317,12 @@ a banner reading *VIEW ONLY — nothing you change here is saved*. Nothing is
 written to your device and nothing is written to SharePoint.
 
 - If the inspection is **waiting**, you are reading the version in `current/`.
-- If **somebody holds it**, you are reading the most recent file in `archive/` —
-  which is exactly what they last sent. "You cannot look at it because a
-  colleague has it" is not an answer anybody would accept.
+- If **somebody holds it**, you are still reading the file in `current/` — which
+  is the copy they took — and the banner says so rather than calling it "ready to
+  be picked up".
+- Only when `current/` is **empty** does it fall back to the most recent file in
+  `archive/`. "You cannot look at it because a colleague has it" is not an answer
+  anybody would accept.
 
 ### Asking for the baton
 
@@ -388,6 +412,14 @@ record has never been sent from anybody's device — the folder exists because
 photos were uploaded to it. **IN PROGRESS** in amber means somebody has it; the
 name is on the row, and *Ask for the baton* will compose the message for you.
 
+**NO FILE IN CURRENT/** in red is the one to act on: the library says the record
+is waiting and there is nothing there. The app cannot empty `current/`, so
+somebody moved or deleted the file in SharePoint. Look in `archive/` and in
+`wip/` first — the file is usually one of those, moved by hand. If it cannot be
+found, an administrator can **Force the handover** from that folder, which brings
+the most recent copy still in it back onto a device and marks the library
+`Recovered`.
+
 **The app warns you are about to overwrite newer work**
 Importing an inspection that already exists shows both timestamps, both stages and
 both editors, and warns you when the copy on your device is the newer one. Read it
@@ -404,7 +436,12 @@ if you have been asked to.
 
 **A device is lost, broken, or its owner has left**
 This is what **Force the handover** is for, and it is administrators only (§7).
-Browse all inspections → the inspection → *Force the handover*. It takes the most
+Browse all inspections → the inspection → *Force the handover*. It is offered on
+**IN PROGRESS** and on **NO FILE IN CURRENT/** — the two states where the record
+cannot be picked up the ordinary way — and never on one that is simply waiting,
+where taking it over already works. The dialog says which of the two it was
+reached from, because *"currently held by"* is a lie about somebody who handed
+the record over properly. It takes the most
 recent copy in SharePoint — the automatic backup in `wip/` if there is one,
 otherwise the last file in `archive/` — brings it onto the administrator's device,
 and marks the library so everyone can see it was taken rather than handed on:
@@ -570,18 +607,28 @@ rollback and protection against deletion. Set them before rollout, not after.
    `Recovered` must be present** — without it a forced handover shows grey and
    reads as a failure when it is not.
 
-> **`Recovered` is a SharePoint-only word.** The app writes it, but its own lists
-> only ever show three states. A folder marked `Recovered` appears in the app as
-> **IN PROGRESS**, held by the administrator, with the previous holder's name
-> carried along in `BatonHolder`. That is correct — somebody does now hold it —
-> but if you are comparing a screen against the library, this is the one place
-> the two vocabularies differ.
+> **`Recovered` is a SharePoint-only word.** The app writes it and reads it, but
+> shows it as **IN PROGRESS**, held by the administrator, with the previous
+> holder's name carried along in `BatonHolder`. That is correct — somebody does
+> now hold it — but if you are comparing a screen against the library, this is
+> the one place the two vocabularies differ.
 
-> **The app never reads `BatonStatus` back.** It works out WAITING / IN PROGRESS /
-> NOT HANDED OVER from whether a file is sitting in `current/` and whether
-> `BatonHolder` has a name in it. `BatonStatus` exists so the library can be
-> sorted, filtered and coloured. Editing it by hand changes what SharePoint shows
-> and nothing else — and the next handover will overwrite it.
+> **The app reads `BatonStatus` back — changed in v1.4, and this paragraph used to
+> say the opposite.** It is what decides WAITING / IN PROGRESS, with the file in
+> `current/` corroborating rather than deciding; **NO FILE IN CURRENT/** is what
+> it says when the two cannot both be true. The column is therefore no longer
+> only for sorting and colouring: **editing it by hand changes what the app
+> offers.** Setting a waiting record to *In progress* hides *Take it over* from
+> everybody; setting a held one to *Waiting* offers it to the next person while
+> somebody still has it. The next handover or takeover overwrites whatever you
+> typed. Decision log **D60** and **§4k**.
+
+> **If a column write fails, nothing says so.** The app never lets a column
+> problem block a handover — the record is the job and the columns are the index
+> (D24) — so a failed write is silent, and a folder can sit reading *Waiting*
+> after somebody has taken it. That is **OI-3**, and it is an open decision rather
+> than an oversight. If a folder's badge disagrees with what you know to be true,
+> the fix is a handover or a takeover, which rewrites both columns.
 
 > **Verify the permission level with a real person, not on paper.** Ask someone on
 > *Contribute - No Delete* to upload a file and then try to delete it. A permission

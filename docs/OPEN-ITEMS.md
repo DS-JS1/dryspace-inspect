@@ -101,7 +101,7 @@ alone and let it go.
 | 2 | **OI-13** | beta | **The fork warning — the one that matters most.** Make a record **in the beta** with a photograph (it no longer has to come from step 1). *Share draft (offline fallback)* to get a `DS_Draft` file out, then change something in the record so the copy on the device is the newer one, then import that file back. **Screenshot the dialog.** It must show all three choices, and the last one — *Cancel this import / Nothing on this device changes* — must be readable without the box being cut |
 | 3 | **OI-13** | beta | **The handover confirmation**, the message photographed truncating. Hand that record over through SharePoint. **Screenshot it.** It must show *"Delete your copy from this device once they confirm they have it."* in full — that sentence is the whole point of the item |
 | 4 | **OI-14** | beta | Open the record and tap the **"N logged changes"** count in the status bar. The entries open, newest first, each carrying what happened, when, and who. Scroll to the oldest and back |
-| 5 | **OI-12** | beta | **One tap, and it settles a question argued from code alone.** Browse the library in the app, and open the same folder in SharePoint **in the same few minutes**. If a folder reads *WAITING* in the app while the library column reads *In progress*, the divergence is real. Note both readings and the time |
+| 5 | **OI-12** | beta, **`v1.4.0-32` or later** | **Rewritten 22 Aug 2026 — the old step could not have shown what it was looking for.** It said to hand a record over and then compare, but a handover writes *Waiting* and the app reads *WAITING*, so the two AGREE and the step would have refuted a divergence that only appears after a **takeover**. So: hand a record over, then **take it over**, then browse the library in the app and open the same folder in SharePoint **in the same few minutes**. On `-32` the app must now read **IN PROGRESS** and agree with the column; **Take it over** must be gone; and an administrator must be offered **Force the handover**. Note both readings and the time |
 | 6 | **OI-5** | either | Take a photograph on the iPhone, select it through the app's file input, and inspect it for GPS EXIF. Decides whether the Google Photos Maps plan is achievable at all |
 
 **Steps 2 and 3 are the ones a desktop cannot stand in for.** A desktop browser
@@ -121,6 +121,11 @@ owes.
 **Housekeeping:** the first attempt's diagnostic left
 `_diagnostics/diag_2026-08-22T05-43-40_IMG_9632.jpeg` (6.36 MB) in the library.
 Delete it when convenient; nothing references it.
+
+**Step 5 changed on 22 August 2026** — both what it asks and what it proves. It
+was a divergence check argued from code; OI-12 is now decided and built, so it is
+the device verification that item owes. It needs **`v1.4.0-32` or later**, where
+steps 2–4 need only `-31`.
 
 **Done means:** every row above is run and its result written into the item it
 belongs to, with the two screenshots attached for step 2 and step 3. Rows may be
@@ -350,15 +355,25 @@ explicitly.
 **Status:** open — **do this at the v1.4.0 release, before pushing to root** · **Tier:** part of the release, not a change
 **Detail:** `05_Release Protocol` §4a and §2 · `tools/make_guides.py` · raised 22 Aug 2026
 
-**Two of the four sources changed on 22 August and neither PDF was regenerated:**
+**All four sources have now changed on 22 August and no PDF was regenerated:**
 
 | Source | What changed | Its PDF |
 |---|---|---|
 | `02_Iteration Guide.md` | gained the OI-17 rule — a storage change is not finished until `diagnostics.html` is updated in the same commit | `Guides/02_Iteration Guide_v1.4.0.pdf` — **stale** |
 | `05_Release Protocol.md` | gained the Pages deploy confirmation at the head of §5 | `Guides/05_Release Protocol_v1.4.0.pdf` — **stale** |
+| `03_Handover and Version Control Protocol.md` | OI-12 / D60 — four badge states not three, what *Take it over* and *Force the handover* are offered on, and the reversal of *"the app never reads `BatonStatus` back"* | `Guides/03_Handover and Version Control Protocol_v1.4.0.pdf` — **stale, and it is the one staff are pointed at** |
+| `01_Setup and User Guide.md` | OI-12 / D60 — a note that `BatonStatus` is now read back, so a missing or misspelled column changes what the app offers | `Guides/01_Setup and User Guide_v1.4.0.pdf` — **stale** |
 
-So the printed guides and their sources now disagree, on exactly the two
-documents somebody would reach for while doing a release.
+So the printed guides and their sources now disagree, on every one of the four —
+including the handover protocol, which is what somebody reaches for when a folder
+is in a state they do not recognise.
+
+**`Training/Setup_and_Use_Deck_v1.4.0.pdf` is stale too, and it is not covered by
+`make_guides.py`.** The deck gained the fourth badge state and the rule that
+*Take it over* only appears on **WAITING** (OI-12 / D60). It is exported from
+`Setup_and_Use_Deck.html` by hand — open it, Print → Save as PDF, background
+graphics ON — so it will not be picked up by the script and needs doing at the
+same time.
 
 **Nothing will catch this.** The staleness signal is the version in the PDF's
 filename — the app says v1.4, a PDF saying v1.3 is visibly old, *"no process, no
@@ -394,75 +409,63 @@ the script rather than the browser. **Or** a recorded decision that the
 existence check is enough and freshness stays a human step, with the two
 overstatements above corrected so the documents stop claiming otherwise.
 
-### OI-12 · How does a folder reach `held`? Not confirmed either way
-**Status:** open · **Tier:** unknown until answered
-**The cheap half is OI-16, step 5** — one tap settles whether the library/app
-divergence is real. The design question stays here
-**Detail:** `index.html:3719` `batonState()`, `index.html:3335` the handover's move
+### OI-12 · How does a folder reach `held`? — **answered and built, awaiting a device**
+**Status:** open — **decided and built 22 Aug 2026, not verified on a device** · **Tier:** minor — visible behaviour change
+**Verify it as OI-16, step 5**, which has been rewritten: the old step could not
+have shown what it was looking for
+**Detail:** decision log **§4k** and **D60** · `index.html` `batonState()`,
+`batonAvailable()`, `browseAllInspections()`, `importFromSharePoint()`
 
-"Force the handover" is gated on `isAdmin() && batonState === 'held'`, and `held`
-needs `current/` **empty** with `BatonHolder` **set**.
+**The question is answered.** No app-driven sequence can empty `current/`, and
+this is now counted rather than argued: the app contains **one** `move` call —
+the handover's archive step — and **no** deletes, and that move is strictly
+preceded by the upload into `current/`. So `current/` goes 1 → 2 → 1 and never
+0; a failure between the two leaves **two** files, which is what D36 chose
+deliberately. The one folder ever seen in `held` got there because a tester moved
+the file out by hand in SharePoint. The reading in the handoff was right.
 
-But the handover uploads the new record into `current/` and moves only the
-*previously held* file to `archive/`, so `current/` ends every handover holding
-exactly one file. Taking over reads that file without moving it. **On that
-reading, no ordinary sequence ever empties `current/`** — and if that is right,
-the button cannot be reached in real use by anyone, which is a fault in the
-feature rather than in the test.
+**And the unreachable button was the smaller half.** Because a file is present in
+every state the app can produce, a record already taken onto somebody's device
+read **WAITING** and was **offered to the next person** — from the browse list
+and from the take-over list both. Two people holding one record is the fault the
+whole baton protocol exists to prevent, and the comment above
+`browseAllInspections()` had said so all along. The intent was recorded; the code
+did not implement it.
 
-This was raised as run 1's Finding 1 and recorded as **WRONG**. That verdict is
-not safe: the confirming check moved the file out by hand and got `none` rather
-than `held`, which looked like a refutation but was really fault 1 — the columns
-were not being read at all, so `BatonHolder` was invisible and every folder fell
-to `none`. With that fixed, the question is open again and has never been
-answered on its own terms.
+**What was decided — D60, decision log §4k.** `current/` says what the live record
+**is**; `BatonStatus` says who has **custody** of it. `batonState()` reads the
+column, with the file corroborating rather than deciding. `held` now arises from
+an ordinary takeover, so *Force the handover* is reachable in exactly the case
+D59 describes, **and D39 does not have to be reopened**. Moving the file on
+takeover, widening the gate, and documenting the hand-tidy route were all
+considered and rejected, with reasons, in §4k.
 
-**NOT confirmed — and briefly recorded here as confirmed, which was wrong.** A
-freshly handed-over record correctly showed `waiting`, and that was read as
-proving `held` unreachable. The browse screen in the same moment showed a folder
-sitting in **`held`**: *INS - 22xx - Frinight TestClient*, IN PROGRESS, amber,
-"held by Jamie Stone", "no file waiting in current/". So `held` plainly exists.
+**What was built.** `batonState()` reads `BatonStatus`; a new state `missing`
+(**NO FILE IN CURRENT/**, red) for a column that says *waiting* with nothing
+there to pick up — the disagreement is surfaced, not resolved silently;
+`batonAvailable()` answers *"can this be picked up?"* once for both lists, so a
+held record is no longer offered; *Force the handover* is offered from `held` and
+from `missing`, and its dialog says which; the read-only viewer no longer
+announces a held record as *"ready to be picked up"*. Tests 597 → 620.
 
-What remains genuinely open is **how a folder gets there**. That one reached it
-during run 1, when the tester moved the file out of `current/` into `archive/`
-**by hand in SharePoint**. Reading the code, the handover uploads into `current/`
-and archives only the previously held file, and taking over reads without moving
-— so no ordinary sequence obviously empties `current/`. That is a reading, not a
-finding, and it has never been tested on its own.
+**The cost, recorded rather than absorbed: this raises what OI-3 costs.** Column
+writes are swallowed on failure by design, so a takeover whose column write
+failed still reads `waiting`. That is not a regression — it is what every folder
+did before — but the column now decides what the app **offers**, not only what
+the library displays. See OI-3.
 
-The likely missing step, for whoever picks this up: the folder layout is
-`current/` → `wip/` → `archive/`, and the model only reads coherently if
-`current/` means *waiting to be picked up*. Once somebody has taken the record
-onto their device it is no longer waiting, so **taking over arguably ought to move
-the file out of `current/`** — which would make `held` arise naturally and needs no
-change to the gate at all. That is a reading, not a decision.
+**Still not observed.** The app/library divergence this rests on has been argued
+from the code and never seen. It is the same one tap it always was, and OI-16
+step 5 now asks for it after a **takeover**, which is the only point at which the
+two ever disagreed — the old step asked after a handover, where both correctly
+read *Waiting*, and would have been recorded as refuting it.
 
-**Whatever is chosen, the move must happen only after the record is verified on
-the taking device.** Moving it out of `current/` first would put a record's only
-copy in flight, which is the non-negotiable this project exists around.
-
-**A related divergence, argued from the code rather than observed.** Taking over
-writes `BatonStatus = In progress` to the column (`index.html:4175`) and does not
-move the file out of `current/`. `batonState()` returns `waiting` whenever a file
-is present, without consulting the column. So after any takeover the library
-should read *In progress* while the app reads *WAITING*, and anyone checking
-SharePoint to find out who holds a record gets an answer the app disagrees with.
-
-**The screenshots do NOT show this, and they were briefly written up as though
-they did.** The phone and the laptop captures are twenty-five minutes apart, with
-a takeover in between, so they show two different moments rather than one
-disagreement — the owner said so and was right. The divergence above stands on the
-code alone and has never been observed.
-
-**Cheap to settle:** browse the library in the app now, without touching
-anything. If a folder shows *WAITING* while SharePoint shows *In progress* for
-the same folder at the same time, it is real.
-
-**Done means:** either a normal sequence is demonstrated that empties `current/`
-and reaches `held`, written down with the steps — or it is established that none
-exists, and then a decision-log entry choosing between moving the file on
-takeover, widening the gate, or accepting that the state is only ever reached by
-an administrator tidying SharePoint by hand.
+**Done means:** a run on a real device that reaches `held` by the new route —
+take a record over on a second device, and confirm that the app shows
+**IN PROGRESS**, the library column shows *In progress*, **Take it over** is no
+longer offered, and **Force the handover** is offered to an administrator and
+still works. A desktop check cannot stand in for it. If any of that fails, the
+item re-scopes rather than closing.
 
 ### OI-13 · iOS truncates the native dialogs, so instructions staff need are never seen
 **Status:** open — **built 22 Aug 2026, awaiting the device** · **Tier:** minor — visible behaviour change
@@ -609,6 +612,16 @@ block a handover, because the photograph is evidence and the columns are a
 convenience. But the same silence is why OI-1's root cause survived a release
 cycle undetected.
 
+**This got more expensive on 22 August 2026.** OI-12 / D60 made `batonState()`
+read `BatonStatus`, so the column now decides what the app **offers** — whether
+*Take it over* appears, whether *Force the handover* appears — and not only what
+the library displays. A takeover whose column write is swallowed still reads
+`waiting`, which is exactly the fork D60 closed everywhere else. **It is not a
+regression**: that is what every folder did before D60, and a folder with no
+column at all still falls back to the file. But the argument for keeping the
+silence is weaker than it was, because "the columns are a convenience" is no
+longer the whole truth. Weigh that when this is decided.
+
 **Done means:** a decision-log entry either way — a visible-but-non-blocking
 signal, or a recorded decision to keep the silence and why. **Do not just change
 it**; two handoffs have now asked for this to be decided rather than done.
@@ -691,6 +704,7 @@ ones first:
 
 | Document | Status |
 |---|---|
+| `docs/HANDOFF-session-B-the-held-state.md` | **Live** — OI-12. Answered and built 22 Aug 2026; the device verification it asks for is OI-16 step 5. **Its §3 procedure is wrong** — see the correction at the head of that section |
 | `docs/HANDOFF-session-A-dialogs-and-audit.md` | **Live** — OI-13, OI-14. Built 22 Aug 2026; the device verification it asks for is OI-16 |
 | `docs/HANDOFF-22-august-baton-and-storage.md` | **Live** — OI-1, OI-2, OI-3 |
 | `docs/HANDOFF-orphan-bytes-race.md` | **Live** — OI-2, and OI-4 in its §6 |

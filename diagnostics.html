@@ -166,6 +166,14 @@ input[type=text]{font:inherit;font-size:13px;padding:9px 10px;border-radius:9px;
     folder found is used. <strong>Name one you know has a holder set</strong>, or a
     blank column proves nothing.
     <br><br>
+    <strong>This check got more important on 22 August 2026.</strong> Since D60 the
+    app reads <code>BatonStatus</code> to decide who holds a record, so a
+    regression here no longer only hides <em>Force the handover</em> — every
+    folder falls back to &quot;is there a file in <code>current/</code>?&quot;, which
+    reports a record already on somebody&rsquo;s device as <strong>WAITING</strong>
+    and offers it to the next person. A blank column reading is a fork waiting to
+    happen, not a cosmetic fault.
+    <br><br>
     Read-only. It lists and it prints. It writes nothing.
   </p>
   <input type="text" id="colfolder" placeholder="folder to print in full, e.g. INS - 2201 - Frinight TestClient">

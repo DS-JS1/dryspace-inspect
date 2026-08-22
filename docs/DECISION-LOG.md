@@ -156,6 +156,7 @@ Current and in force.
 | D57 | **Splitting a record from its bytes added a second thing to delete, and deletion did not know** | D49 moved photo bytes into their own store and every reader was updated, because everything that USES bytes goes through the record. Deletion is the one operation that has to know about both, and it did not — so every photo ever removed left its bytes behind, referenced by nothing and listed by nothing. A device with no inspections left was carrying 139 MB. Both are deleted together now, and a start-up sweep reclaims existing orphans. The general lesson: when you split one thing into two, the delete path is where the split leaks. | v1.4 |
 | D58 | **Asking for the baton goes through the share sheet, not a notification** | Web push on iOS requires the app installed to the Home Screen, permission granted, AND a server to send from — this app is static files on GitHub Pages, so that is infrastructure rather than a feature, and anyone running it in a browser tab would silently receive nothing. A pre-filled message through the share sheet works on every platform today and lets the sender choose the channel that person actually reads. The message carries what the holder needs to act without asking anything back: which inspection, what stage, who wants it, and what to do. In-app notification is a real future option once there is a server to send from. | v1.4 |
 | D59 | **Forcing a handover is an administrator's act, and it must leave a mark** | A device lost, broken, or belonging to somebody who has left strands the record where nobody can reach it. Recovering a working copy already handled the mechanics — it files back to the same pinned folder, so no duplicate appears, and clears the baton so the original device meets the fork warning if it resurfaces. The gaps were that anybody could do it and nobody else could tell it had happened. Restricted to an address in `SP_CONFIG.admins`, matched against the signed-in Microsoft account rather than the name typed into the app, so it cannot be granted by typing. The library is marked `Recovered` carrying BOTH names, because "who had it before this was taken off them" is the first question anybody asks. The list is empty by default: nobody is an administrator until somebody says so. One thing no feature can fix — if a device dies between backups, those four minutes are gone, and that belongs in the training rather than in code. | v1.4 |
+| D60 | **`current/` says what the live record IS; the column says who has CUSTODY of it** | `batonState()` asked *"is there a file in `current/`?"*, which is a different question from *"who has this?"*, and answering the second with the first was wrong in both directions. The handover uploads into `current/` and archives only the file it replaces, and a takeover reads that file without moving it, because `current/` changes only at a deliberate handover (D39) — so a file is present in every state the app can produce. `held` was unreachable by anybody, and, the half that mattered, a record already on somebody's device read **WAITING** and was offered to the next person, which is the fork the baton rule exists to prevent. `BatonStatus` is written at exactly the moments custody changes (D55), so it is the instrument for the custody question; the file corroborates rather than decides. The folder protocol does not change and nothing moves anywhere new. Where the two cannot both be true it is **said** rather than resolved silently. Full reasoning, and the three options rejected, in §4k. | v1.4 |
 
 ---
 
@@ -1126,6 +1127,95 @@ actually migrated — which is to say, until the first time it mattered.
 
 Written up as a structural rule in `02_Iteration Guide.md` §3, so it is found by
 somebody changing storage rather than only by somebody reading this log.
+
+---
+
+## 4k. `current/` is not a lock, and the column is not decoration — 22 August 2026
+
+**The decision:** custody is read from `BatonStatus`. The file in `current/` says
+what the live record **is**; the column says **who has it**. Where the two cannot
+both be true, the app says so rather than choosing a winner.
+
+**The contradiction that raised it (OI-12).** `batonState()` treated an empty
+`current/` with a holder recorded as `held` — the only state in which an
+administrator is offered *Force the handover*. The handover code, in the same
+file, calls an empty `current/` *"a state the protocol has no procedure for,
+and which reads as lost data to whoever opens the folder"* (D36), and D39
+promises `current/` changes only at a deliberate handover. Both cannot be true.
+
+**Settled by counting, not by arguing.** The app contains **one** `move` call —
+the handover's archive step — and **no** deletes, and that move is strictly
+preceded by the upload into `current/`. So `current/` goes 1 → 2 → 1 and never
+0, and a failure between the two leaves **two** files, which is what D36 chose
+on purpose. **No app-driven sequence can empty `current/`.** The one folder ever
+observed in `held` got there because a tester moved the file out by hand in
+SharePoint. The reading in the handoff was right.
+
+**The unreachable button was the smaller half.** Because a file is present in
+every state, a record already taken onto somebody's device read **WAITING** in
+both lists and was offered to the next person to pick up. Two people holding one
+record is the fault the whole protocol exists to prevent, and the comment above
+`browseAllInspections()` had described the intended behaviour correctly all
+along: *"an inspection sitting on somebody's device is not waiting for anyone,
+and offering it would invite two people to pick up the same job."* The intent was
+recorded; the implementation did not deliver it. That is what makes this a
+correctness fix rather than a tidy-up.
+
+**Why the contradiction was never real.** The two things measure different
+questions. `current/` is the record's **content** — the newest version anybody
+handed over. It is not, and never was, a lock. Custody is a separate fact, and
+the columns already carried it, written at both ends of a handover for exactly
+that reason (D55). Once the questions are separated, `held` arises from an
+ordinary takeover, *Force the handover* becomes reachable in precisely the case
+D59 describes, and **D39 does not have to be reopened at all**.
+
+### What was rejected
+
+| Option | Why not |
+|---|---|
+| **Move the file out of `current/` on takeover** | The intuitive fix, and it contradicts D39 to buy something the column already provides. It also manufactures the empty-`current/` state D36 refuses to create, puts a move in the path of a record's only SharePoint copy, and quietly disables the two-device check: the handover compares the eTag in `current/` against the baton pointer (D35, *the baton pointer decision*), and with `current/` empty there is nothing to compare, so the warning that stops one device burying another's work never fires. A protocol change, a lifecycle change, and a lost safeguard, for a state that can be read instead. |
+| **Widen the gate so an administrator can force from `waiting`** | The smallest change, and it leaves the contradiction in place for the next person to trip over — while doing nothing about the fork, which was the real fault underneath. It also makes forcing available on records that can simply be picked up, which turns an emergency route into a shortcut. |
+| **Accept it, and document that `held` is reached by tidying SharePoint by hand** | Honest, and defensible while the only symptom was an unreachable button. Not defensible once the same belief is offering a held record to the next person: no amount of documentation stops two people picking up one job. |
+
+### What it costs, and what was done about it
+
+**The column can be stale in a way a file cannot.** `setFields()` failures are
+swallowed by design (OI-3, still undecided), so a takeover whose column write
+failed still reads `waiting`. That is **not a regression** — it is what every
+folder did in every case before this change — but the column is load-bearing
+now, and OI-3 has moved from *"the library display is wrong"* to *"the app
+offers the wrong thing"*. Its entry says so. The device holding the record is
+never misled either way: it knows locally.
+
+**A folder with no baton column at all still works.** With nothing to read, the
+file is all there is to go on and the old behaviour stands — which is what makes
+this safe for folders written before the columns existed.
+
+**The disagreement is surfaced.** A fourth state, `missing` — **NO FILE IN
+CURRENT/**, in red — for a column that says the record is waiting when there is
+nothing there to pick up. Nothing the app does can produce it, so it means the
+file was moved or removed in SharePoint by hand. It used to read as *"somebody
+has it"*, which sent people asking after a colleague who had never been involved.
+An administrator can force a handover from it too, on the same reasoning as
+`held`: the record cannot be picked up the ordinary way, and recovering the
+newest copy in the folder is the same remedy. That is not the rejected option
+above — it does not widen the gate to `waiting`, where taking it over already
+works.
+
+**One rule, written once.** `batonAvailable()` answers *"can this be picked
+up?"* for both lists. Two spellings of one rule drift, and the last time they
+drifted the answer was *yes* about a record already on somebody's device.
+
+**A related lie, from the same belief.** The read-only viewer announced the copy
+in `current/` as *"the version waiting in current/, ready to be picked up"* while
+somebody was working on it, and its archive fallback was written expecting an
+empty `current/` that never occurs. The banner follows custody now. A screen that
+contradicts the badge on the list it was opened from teaches people to trust
+neither (D44).
+
+**Still owed: a device.** The design is answered and built, and the app/library
+divergence it rests on has been argued from the code and never observed. OI-12
+stays open for a run on a real phone that reaches `held` by the new route.
 
 ---
 

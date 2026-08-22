@@ -13,6 +13,35 @@ a protocol with recorded reasons, not a bug with a fix.
 
 ---
 
+> ## ANSWERED, 22 August 2026 — read this before §3
+>
+> **Option B was chosen and built.** Decision log **D60** and **§4k** carry the
+> reasoning and the three rejected options; the changelog carries what changed;
+> **OI-12** stays open for the device run it owes. D39 was **not** reopened — it
+> did not have to be.
+>
+> **§2's reading is confirmed, by counting rather than arguing.** The app holds
+> **one** `move` call — the handover's archive step — and **no** deletes, and that
+> move is strictly preceded by the upload into `current/`. `current/` goes
+> 1 → 2 → 1 and never 0.
+>
+> **§3's first check, as written, could not have shown what it was looking for.**
+> A handover writes `Waiting` and the app reads `WAITING`, so the two **agree**
+> and the step would have been recorded as refuting a divergence that only
+> appears after a **takeover**. Corrected in **OI-16 step 5**, which is now the
+> device verification OI-12 owes rather than a divergence check.
+>
+> **§3's second check was run and it decided the session** — not the way the
+> brief expected. Looking for a sequence that empties `current/` turned up
+> something larger: because a file is present in every state the app can produce,
+> a record already on somebody's device read **WAITING** and was **offered to the
+> next person**, from both lists. The unreachable button was the smaller half.
+>
+> The rest of this brief is history now, and it is accurate history — its reading
+> was right. Read it for the reasoning, not for the instructions.
+
+---
+
 ## 1. Say the tier first
 
 **Unknown until §2 is settled, and that is deliberate.** The answers range from a
@@ -70,6 +99,13 @@ which the owner caught. **It has never been seen.**
 ---
 
 ## 3. Do this first — it costs one tap and it decides the session
+
+> **The first check below is wrong as written — 22 August 2026.** Handing a record
+> over writes `Waiting` and the app reads `WAITING`, so both readings **agree**
+> and the step refutes nothing. The divergence only appears after a **takeover**.
+> **OI-16 step 5** carries the corrected procedure. The second check — try to
+> reach `held` without editing SharePoint by hand — was run against the code and
+> is answered in §4k of the decision log.
 
 Hand a record over on a device, then **browse the library in the app and open the
 same folder in SharePoint at the same moment**, without touching anything between.
@@ -192,8 +228,11 @@ out what a move does to that comparison before choosing it. Note that
 
 ## 8. State at handover
 
-**Refreshed at the close of Session A, 22 August 2026.** The table below is the
-current state, not the one this brief was written against.
+**Refreshed at the close of Session A, 22 August 2026, and superseded at the
+close of Session B.** Session B left `v1.4` carrying D60, `CACHE_VERSION`
+`ds-inspect-v1.4.0-32`, tests at **620/620**, nothing pushed, nothing tagged, and
+OI-12 open pending OI-16 step 5. The table below is Session A's state, kept as it
+was.
 
 | | |
 |---|---|

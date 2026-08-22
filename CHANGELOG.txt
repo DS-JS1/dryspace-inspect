@@ -1,6 +1,92 @@
 Dryspace Site Inspection App — Changelog
 ========================================
 
+OI-12 - 22 August 2026 - custody comes from the column, not from the file
+- THE READING IS CONFIRMED, from the code rather than from a device. The whole
+  app contains ONE move call - index.html, the handover's archive step - and no
+  deletes at all, and that move is strictly preceded by putSmall into current/.
+  So current/ goes 1 -> 2 -> 1 and never 0; a failure between the two leaves TWO
+  files, which is what D36 chose deliberately. No app-driven sequence can empty
+  current/, so `held` could not be reached through the app by anybody.
+
+- AND THE UNREACHABLE BUTTON WAS THE SMALLER HALF. batonState() returned
+  `waiting` whenever a file was present, and a takeover leaves that file where it
+  is (D39), so a record already on somebody's device read WAITING and was OFFERED
+  to the next person - from the browse list and from the take-over list both.
+  That is the fork the baton rule exists to prevent, and the comment above
+  browseAllInspections() had said so all along: "an inspection sitting on
+  somebody's device is not waiting for anyone, and offering it would invite two
+  people to pick up the same job". The intent was recorded; the code did not
+  implement it.
+
+- THE CONTRADICTION DISSOLVES ONCE THE TWO QUESTIONS ARE SEPARATED. current/ says
+  what the live record IS. BatonStatus says who has CUSTODY of it, and it is
+  written at exactly the moments custody changes (D55). batonState() now reads
+  the column, with the file corroborating rather than deciding. D39 is untouched,
+  no file moves anywhere new, and the folder protocol does not change. Recorded
+  as D60, with what was rejected and why.
+
+- `held` is now reached by an ordinary sequence: take a record over. Which means
+  forced handover is offered in exactly the case D59 describes - somebody has the
+  record and their device is lost, broken, or gone - without widening the gate to
+  compensate.
+
+- THE DISAGREEMENT IS SURFACED, NOT RESOLVED SILENTLY. New state `missing`,
+  "NO FILE IN CURRENT/" in red: the column says the record is waiting and there
+  is nothing there to pick up. Nothing the app does can produce it, so it means
+  the file was moved or removed in SharePoint by hand - which is exactly how the
+  one folder ever seen in `held` got there. It used to read as "somebody has it",
+  sending people to ask a colleague who was never involved. An administrator can
+  force a handover from it too: the record cannot be picked up the ordinary way
+  there either, and recovering the newest copy in the folder is the same remedy.
+  The dialog says which state it was reached from, because "currently held by" is
+  a lie about somebody who handed the record over properly.
+
+- ALSO FIXED, same wrong belief: the read-only viewer announced the copy in
+  current/ as "waiting in current/, ready to be picked up" while somebody was
+  working on it. It was written believing a held inspection has an empty current/
+  - it does not, so the archive fallback fires far more rarely than intended,
+  which costs nothing because the file in current/ IS the version the holder
+  took. The banner now follows custody. A screen that contradicts the badge on
+  the list it was opened from teaches people to trust neither (D44).
+
+- batonAvailable() is written once and asked by both lists. Two spellings of one
+  rule drift, and the last time they drifted the answer was "yes" about a record
+  already on somebody's device.
+
+- THE COLUMN IS LOAD-BEARING NOW, and that raises what OI-3 costs. setFields()
+  failures are swallowed by design, so a takeover whose column write failed still
+  reads waiting. Not a regression - that is what EVERY folder did before - but
+  OI-3 has gone from "the library display is wrong" to "the app offers the wrong
+  thing", and its entry says so.
+
+- Tests 597 -> 620. The existing baton assertions were left untouched and still
+  pass: a folder with no baton column falls back to the file exactly as before.
+  The take-over test used to check that the list scanned current/ and called that
+  "lists only inspections with a file waiting" - it now checks the offer as well,
+  which is the thing that was wrong.
+
+- CACHE_VERSION -> ds-inspect-v1.4.0-32. APP_VER stays 1.4.0.
+
+- NOT CLOSED. OI-12 stays open, re-scoped: the design question is answered and
+  built, and it owes a device run that reaches `held` by the new route - take a
+  record over on a second device, and confirm the app says IN PROGRESS while the
+  library column says In progress, with "Take it over" gone and "Force the
+  handover" offered to an administrator. Desktop checks cannot stand in for it.
+  OI-16 step 5 carries it.
+
+- OI-16 STEP 5 WAS WRONG AND IS CORRECTED. As written it said to hand a record
+  over and then compare the app against the library - but a handover writes
+  Waiting and the app reads WAITING, so the two AGREE and the step would have
+  been recorded as refuting the divergence. The divergence only appears after a
+  TAKEOVER. Same correction in the Session B handoff, whose section 3 carries the
+  same fault.
+
+- 03_Handover Protocol section 9 said "The app never reads BatonStatus back". It
+  does now, and that paragraph was the clearest statement of the belief this
+  change overturns. Rewritten, along with the badge table, which gains the fourth
+  state.
+
 OI-17 CONFIRMED FIXED ON THE DEVICE - 22 August 2026 - and the lesson written down
 - Re-run on the phone: "all 3 readable - hypothesis 2 ruled out". OI-17 closed.
 - OI-10's remaining gap closed too: diagnostics NEVER reported the record schema,

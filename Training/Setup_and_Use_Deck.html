@@ -414,10 +414,16 @@
     <b>Fetch what you need before you lose signal.</b>
     With no signal, a thumbnail is all you have. This is worth thirty seconds in the car.
   </div>
-  <p><strong>Browse all inspections</strong> shows every job in the library &mdash; not only the ones waiting &mdash; with its baton state on the row: <strong>WAITING</strong>, <strong>IN PROGRESS</strong>, or <strong>NOT HANDED OVER</strong>. From there you can take it over, read it without taking it, open the folder, or ask the holder for the baton.</p>
+  <p><strong>Browse all inspections</strong> shows every job in the library &mdash; not only the ones waiting &mdash; with its baton state on the row: <strong>WAITING</strong> in green, <strong>IN PROGRESS</strong> in amber, <strong>NOT HANDED OVER</strong> in grey, and <strong>NO FILE IN CURRENT/</strong> in red. From there you can take it over, read it without taking it, open the folder, or ask the holder for the baton.</p>
+  <div class="callout stop">
+    <b>You can only take over a job nobody has.</b>
+    <em>Take it over</em> appears on <strong>WAITING</strong> only. If somebody is holding it, the app offers you <em>Ask for the baton</em> instead &mdash; two people working on one record is the thing this whole routine exists to prevent. Red means the record's file has been moved or deleted in SharePoint; tell whoever looks after the library.
+  </div>
   <div class="notes">
     <b>Presenter</b>
     The thumbnail point catches people out. Somebody takes a job over in the office, drives to site, and finds they cannot open the photos. Say it twice.
+    <br><br>
+    If anyone asks why a job shows amber while there is still a file sitting in <code>current/</code>: that file is the copy the holder took, not one waiting for them. The colour comes from the library column, not from the folder.
   </div>
 </section>
 

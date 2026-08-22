@@ -85,6 +85,7 @@ input[type=text],input[type=date],select,textarea{font-size:16px !important;padd
 .bs-waiting{background:#15803d;color:#fff}
 .bs-held{background:#b45309;color:#fff}
 .bs-none{background:#6b7280;color:#fff}
+.bs-missing{background:#b91c1c;color:#fff}
 .view-banner{background:#1f2937;color:#fff;padding:10px 14px;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 .vb-t{font-weight:700;font-size:13px;letter-spacing:.03em;flex:1 1 100%}
 .vb-s{font-size:11px;color:#cbd5e1;flex:1 1 auto}
@@ -94,6 +95,7 @@ input[type=text],input[type=date],select,textarea{font-size:16px !important;padd
 
 .pick-row-w.bs-waiting{background:none;color:#15803d}
 .pick-row-w.bs-held{background:none;color:#b45309}
+.pick-row-w.bs-missing{background:none;color:#b91c1c}
 
 .audit-open{display:inline-block;font:inherit;font-weight:600;background:none;border:0;border-bottom:1px solid currentColor;padding:4px 2px;margin:-4px 0;color:#1d4ed8;cursor:pointer}
 .pick-ents{margin:10px 14px 0;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden}
@@ -3587,7 +3589,12 @@ function scanInspectionFolders(sub){
       return chain.then(function(){
         return dsTransport.list(f.name + '/' + sub).then(function(files){
           files.filter(function(x){ return !x.isFolder; })
-               .forEach(function(x){ found.push({folder: f.name, file: x}); });
+               /* The folder's columns travel with it. Whether a record is
+                  AVAILABLE is a question about custody, and custody lives in the
+                  columns rather than in the file (OI-12) — a caller handed only
+                  a name and a file cannot ask it. */
+               .forEach(function(x){ found.push({folder: f.name, fields: f.fields || {},
+                                                 file: x}); });
         }, function(){ /* a folder without this subfolder is simply not on offer */ });
       });
     }, Promise.resolve()).then(function(){ return found; });
@@ -3867,26 +3874,87 @@ function pickFromList(opts){
    Held ones open in SharePoint, where the photos and the folder are. */
 /* One vocabulary for baton state, used by the browse list, the take-over list
    and the SharePoint columns, so the colour somebody learns in one place means
-   the same in the others. */
+   the same in the others.
+
+   CUSTODY COMES FROM THE COLUMN, NOT FROM THE FILE — OI-12. This asked "is there
+   a file in current/?", which is a different question from "who has this?", and
+   answering the second with the first was wrong in both directions.
+
+   The handover uploads into current/ and archives only the file it replaces, and
+   a takeover reads that file without moving it, because current/ changes only at
+   a deliberate handover (D39). So a file is present in every state the app can
+   produce: current/ is never empty, `held` was unreachable, and — the part that
+   mattered — a record already on somebody's device read as WAITING and was
+   OFFERED to the next person. That is the fork the baton rule exists to prevent,
+   and the comment above browseAllInspections() had said so all along.
+
+   So: `current/` says what the live record IS. `BatonStatus` says who has
+   custody of it, and it is written at exactly the moments custody changes (D55),
+   which is what makes it the right instrument. The file corroborates rather than
+   decides, and where the two cannot both be true that is SAID rather than
+   resolved silently — a folder whose column and file disagree is exactly the
+   folder somebody needs to look at.
+
+   The column can be stale in a way a file cannot: setFields() failures are
+   swallowed by design (OI-3), so a takeover whose column write failed still
+   reads waiting. That is not a regression — it is what every folder did before —
+   but the column is load-bearing now, which raises what OI-3 costs. The device
+   holding the record is never misled either way: it knows locally. */
+function holderOf(entry){
+  return ((entry.folder && entry.folder.fields) || {}).BatonHolder || '';
+}
+
 function batonState(entry){
   var f = (entry.folder && entry.folder.fields) || {};
+  var status = String(f.BatonStatus || '').trim();
+  var holder = f.BatonHolder || '';
+
+  /* Somebody has it. Recovered is a holder too: an administrator took it off a
+     device that could not hand it on (D59), and they hold it until they hand it
+     over normally. */
+  if(status === BATON_HELD || status === BATON_RECOVERED){
+    return {key: 'held', label: 'IN PROGRESS', cls: 'bs-held',
+            who: (holder ? 'held by ' + holder : 'held \u2014 holder not recorded') +
+                 (status === BATON_RECOVERED ? ', recovered' : '')};
+  }
+
+  /* The column says it is waiting and there is nothing to pick up. Nothing the
+     app does can produce this: the handover uploads BEFORE it archives, so
+     current/ holds one file or two, never none (D36). It means the file was
+     moved or removed in SharePoint by hand. Say that, rather than inferring a
+     holder nobody appointed — reading it as "somebody has it" sends people
+     looking for a colleague who was never involved. */
+  if(status === BATON_WAITING && !entry.file){
+    return {key: 'missing', label: 'NO FILE IN CURRENT/', cls: 'bs-missing',
+            who: (holder ? 'last handed over by ' + holder + '. ' : '') +
+                 'Nothing is waiting in current/ \u2014 it was moved or removed in SharePoint'};
+  }
+
   if(entry.file){
     return {key: 'waiting', label: 'WAITING', cls: 'bs-waiting',
-            who: f.BatonHolder ? 'last held by ' + f.BatonHolder : ''};
+            who: holder ? 'last held by ' + holder : ''};
   }
-  /* An empty current/ was read as "somebody has it". It is not the same thing.
-     A folder exists as soon as the first PHOTO uploads, so an inspection that
-     has never been handed over has an empty current/ too - and reporting that
-     as held sends people looking for a colleague who was never involved.
 
-     The holder column tells them apart: it is written at both ends of a
-     handover, so its absence means no handover has ever happened here. */
-  if(!f.BatonHolder){
+  /* No file and no baton column at all. A folder exists as soon as the first
+     PHOTO uploads, so an inspection that has never been handed over looks
+     exactly like this, and reporting it as held sends people looking for a
+     colleague who was never involved. A holder recorded with no status predates
+     the status column being written at both ends; "somebody has it" is still
+     the honest reading of it. */
+  if(!holder){
     return {key: 'none', label: 'NOT HANDED OVER', cls: 'bs-none',
             who: 'photos uploaded, but the record has never been sent'};
   }
   return {key: 'held', label: 'IN PROGRESS', cls: 'bs-held',
-          who: 'held by ' + f.BatonHolder};
+          who: 'held by ' + holder};
+}
+
+/* Can this be picked up? Asked by the take-over list, which decides what to
+   OFFER, and by the browse list, which decides what to offer about one folder.
+   Written once because two spellings of one rule drift, and the last time they
+   drifted the answer was "yes" about a record already on somebody's device. */
+function batonAvailable(entry){
+  return batonState(entry).key === 'waiting';
 }
 
 /* Asking the holder to hand it on.
@@ -3966,27 +4034,49 @@ function isAdmin(){
 
    So: restricted to an administrator, and it says so in the library. The
    original holder's name is kept alongside the recoverer's, because "who had it
-   before this was taken off them" is the first question anybody will ask. */
-function forceHandover(entry){
+   before this was taken off them" is the first question anybody will ask.
+
+   Reachable from two states, and they are not the same story (OI-12). `held` is
+   the one it was built for: somebody has the record and cannot hand it on.
+   `missing` is the file that should be in current/ having been moved or removed
+   in SharePoint, with nobody claiming it — the record cannot be picked up the
+   ordinary way there either, and recovering the newest copy still in the folder
+   is the same remedy. The dialog says which, because "currently held by" is a
+   lie about somebody who handed the record over properly. */
+function forceHandover(entry, state){
   var folderName = entry.folder.name;
   var f = entry.folder.fields || {};
-  var them = f.BatonHolder || 'an unknown holder';
+  var st = state || batonState(entry);
+  var gone = st.key === 'missing';
+  var them = f.BatonHolder || (gone ? 'nobody recorded' : 'an unknown holder');
   var me = userName() || 'an administrator';
+  /* Said once, so the audit entry, the library column and the dialog cannot
+     drift apart. "Recovered from Mike" is wrong when Mike handed the record over
+     properly and the file was removed from current/ afterwards. */
+  var from = gone && !f.BatonHolder
+               ? 'after the record went missing from current/'
+               : 'from ' + them;
 
   return showDialog({
     title: 'Force a handover',
-    note: 'For a device that is lost, broken, or belongs to somebody who has ' +
-          'left. It takes the most recent copy in SharePoint and marks the ' +
+    note: (gone
+            ? 'There is nothing in current/ to take over: the record was moved ' +
+              'or removed in SharePoint. '
+            : 'For a device that is lost, broken, or belongs to somebody who ' +
+              'has left. ') +
+          'It takes the most recent copy in SharePoint and marks the ' +
           'library so everyone can see what happened.',
     lines: [
       {k: 'Inspection', v: folderName},
-      {k: 'Currently held by', v: them},
+      {k: gone ? 'Last handed over by' : 'Currently held by', v: them},
       {k: 'Recovering as', v: me}
     ],
     choices: [
       {title: 'Stop', sub: 'Nothing is changed.', value: 'stop'},
       {title: 'Force the handover',
-       sub: 'Anything ' + them + ' has done since their last backup is not here.',
+       sub: gone
+              ? 'The newest copy in wip/ or archive/ becomes the live record.'
+              : 'Anything ' + them + ' has done since their last backup is not here.',
        value: 'go'}
     ],
     cancel: null
@@ -4014,15 +4104,15 @@ function forceHandover(entry){
         rec.handedOverTo = null;
         rec.audit = (rec.audit || []).concat([{
           at: new Date().toISOString(), by: me, stage: rec.stage || 'office',
-          action: 'Handover forced by ' + me + ', recovered from ' + them +
+          action: 'Handover forced by ' + me + ', recovered ' + from +
                   ' (' + found.where + ')'
         }]);
         return new Promise(function(res){
           importRecord(rec, function(){
             importDraftMedia(payload, function(n){
               dsTransport.setFields(folderName, spFields(rec, {
-                status: 'Recovered',
-                holder: me + ', recovered from ' + them
+                status: BATON_RECOVERED,
+                holder: me + ', recovered ' + from
               })).catch(function(){});
               renderHome();
               setSync('Handover forced.', 'ok');
@@ -4032,7 +4122,8 @@ function forceHandover(entry){
                       'see it was taken rather than handed on. Hand it over ' +
                       'normally when you are done and it returns to the usual flow.',
                 lines: [
-                  {k: 'Recovered from', v: them},
+                  {k: gone && !f.BatonHolder ? 'Recovered' : 'Recovered from',
+                   v: gone && !f.BatonHolder ? 'after the record went missing from current/' : them},
                   {k: 'Source', v: found.where === 'wip'
                       ? 'their automatic backup — ' + found.file.name
                       : 'the last handover in archive/ — ' + found.file.name},
@@ -4121,26 +4212,37 @@ function browseAllInspections(){
         title: chosen.folder.name,
         note: b.who || '',
         lines: [{k: 'Baton', v: b.label}],
-        choices: (chosen.file
+        /* Offered on CUSTODY, not on whether a file is sitting in current/.
+           A takeover leaves that file where it is (D39), so a record already on
+           somebody's device was offered to the next person as though it were
+           waiting — two people picking up one job, which is the fork the baton
+           rule exists to prevent, and which the comment above this function
+           already said must not happen. OI-12. */
+        choices: (batonAvailable(chosen)
                     ? [{title: 'Take it over',
                         sub: 'Bring it onto this device. You become the holder.',
                         value: 'take'}]
                     : [{title: 'Ask for the baton',
-                        sub: b.key === 'held'
-                               ? 'Send ' + (chosen.folder.fields || {}).BatonHolder +
+                        sub: b.key === 'held' && holderOf(chosen)
+                               ? 'Send ' + holderOf(chosen) +
                                  ' a message asking them to hand it on.'
                                : 'Send a message asking whoever has it to hand it on.',
                         value: 'ask'}]
-                      /* Only shown to an administrator, and only when somebody
-                         actually holds it. Offering it on a job nobody has would
-                         be an invitation to use it as a shortcut. */
-                      .concat(isAdmin() && b.key === 'held'
+                      /* Only shown to an administrator, and only where the record
+                         cannot be picked up the ordinary way: somebody holds it,
+                         or the file that should be in current/ is gone. Offering
+                         it on one that is simply waiting would be an invitation
+                         to use it as a shortcut. */
+                      .concat(isAdmin() && (b.key === 'held' || b.key === 'missing')
                         ? [{title: 'Force the handover',
-                            sub: 'Administrator only. For a lost or broken device, ' +
-                                 'or somebody who has left.',
+                            sub: b.key === 'missing'
+                                   ? 'Administrator only. Recovers the most recent copy ' +
+                                     'still in the folder.'
+                                   : 'Administrator only. For a lost or broken device, ' +
+                                     'or somebody who has left.',
                             value: 'force'}]
                         : [])).concat([
-          {title: 'View it', sub: chosen.file
+          {title: 'View it', sub: b.key === 'waiting'
               ? 'Read the version waiting, without taking it.'
               : 'Read the last version that was handed over. Nothing is changed.',
            value: 'view'},
@@ -4150,8 +4252,8 @@ function browseAllInspections(){
       }).then(function(what){
         if(what === 'take') return takeOverChosen(chosen.folder.name, chosen.file);
         if(what === 'ask') return requestBaton(chosen);
-        if(what === 'force') return forceHandover(chosen);
-        if(what === 'view') return viewInspectionReadOnly(chosen.folder.name);
+        if(what === 'force') return forceHandover(chosen, b);
+        if(what === 'view') return viewInspectionReadOnly(chosen.folder.name, b);
         if(what === 'folder' && chosen.folder.webUrl){
           window.open(chosen.folder.webUrl, '_blank', 'noopener');
         }
@@ -4169,8 +4271,23 @@ function importFromSharePoint(){
   }
   setSync('Looking for inspections in SharePoint\u2026', 'busy');
   scanInspectionFolders('current')
-    .then(function(found){
-      if(!found.length) throw new Error('No inspections are waiting in a current/ folder.');
+    .then(function(all){
+      /* A file in current/ is not the same as a record nobody has. The handover
+         leaves one there and a takeover does not move it (D39), so listing on
+         file presence alone offered records that were already on somebody's
+         device. This list is what is AVAILABLE, and available is custody. OI-12. */
+      var found = all.filter(function(x){
+        return batonAvailable({folder: {fields: x.fields}, file: x.file});
+      });
+      if(!found.length){
+        var busy = all.length - found.length;
+        throw new Error(busy
+          ? 'Nothing is waiting to be picked up. ' + busy + ' ' +
+            (busy === 1 ? 'inspection is' : 'inspections are') + ' held on ' +
+            'somebody\u2019s device \u2014 browse the library to see who has each one, ' +
+            'and ask them to hand it on.'
+          : 'No inspections are waiting in a current/ folder.');
+      }
       setSync('');
       return pickFromList({
         title: 'Take over an inspection',
@@ -4207,14 +4324,21 @@ function importFromSharePoint(){
 }
 
 /* Read a record without taking it. Downloads the draft that is in current/, or
-   the most recent one filed in archive/ when somebody holds it, and renders it
-   into the form with everything disabled.
+   the most recent one filed in archive/ when there is nothing there, and renders
+   it into the form with everything disabled.
 
-   The archive fallback is the point: an inspection somebody is working on has an
-   empty current/, and "you cannot look at it because a colleague has it" is not
-   an answer anybody would accept. The archived copy is what they last sent, which
-   is exactly the thing a reviewer wants to read. */
-function viewInspectionReadOnly(folderName){
+   The archive fallback is the point: "you cannot look at it because a colleague
+   has it" is not an answer anybody would accept, and the archived copy is what
+   they last sent, which is exactly what a reviewer wants to read.
+
+   It was written believing that an inspection somebody is working on has an
+   empty current/. It does not (OI-12): the file stays where the handover put it,
+   so the fallback fires far more rarely than intended. That costs nothing — the
+   file in current/ IS the version the holder took. What it did cost was the
+   banner, which announced that copy as "waiting in current/, ready to be picked
+   up" while somebody was working on it. The state is passed in so the banner can
+   say which of the two it is. */
+function viewInspectionReadOnly(folderName, state){
   setSync('Looking for the latest version…', 'busy');
   return dsTransport.list(folderName + '/current')
     .then(function(files){
@@ -4236,7 +4360,7 @@ function viewInspectionReadOnly(folderName){
       }).then(function(text){
         var payload = JSON.parse(text);
         if(!payload.inspection) throw new Error('That file is not an inspection record.');
-        showRecordReadOnly(payload, folderName, found);
+        showRecordReadOnly(payload, folderName, found, state);
       });
     })
     .catch(function(e){
@@ -4244,7 +4368,7 @@ function viewInspectionReadOnly(folderName){
     });
 }
 
-function showRecordReadOnly(payload, folderName, found){
+function showRecordReadOnly(payload, folderName, found, state){
   setSync('');
   viewOnly = true;
   cur = ensureSchema(payload.inspection);
@@ -4276,9 +4400,23 @@ function showRecordReadOnly(payload, folderName, found){
   t.textContent = 'VIEW ONLY — nothing you change here is saved';
   var sub = document.createElement('div');
   sub.className = 'vb-s';
+  /* Never "ready to be picked up" about a record somebody is holding. A screen
+     that contradicts the badge on the list it was opened from teaches people to
+     trust neither (D44). */
+  var busy = state && state.key === 'held';
+  /* The archive fallback used to be reached only when somebody held the record,
+     so it said so. It is now also how a folder with nothing in current/ is read,
+     and there nobody holds anything. */
+  var gone = state && state.key === 'missing';
   sub.textContent = (found.where === 'archive'
-      ? 'The last version handed over, from archive/. Somebody holds this inspection now.'
-      : 'The version waiting in current/, ready to be picked up.') +
+      ? (gone
+          ? 'The last version handed over, from archive/. There is nothing in ' +
+            'current/ for this inspection.'
+          : 'The last version handed over, from archive/. Somebody holds this inspection now.')
+      : busy
+        ? 'The last version handed over, from current/. Somebody holds this ' +
+          'inspection now, so it is not waiting to be picked up.'
+        : 'The version waiting in current/, ready to be picked up.') +
     '  ·  ' + found.file.name;
   var out = document.createElement('button');
   out.type = 'button'; out.className = 'btn vb-close';
@@ -4704,8 +4842,12 @@ function metaFor(rec){
    Two columns carry it: a status anyone can sort and colour on, and a name.
    Written at both ends of the handover, because that is exactly when it
    changes. */
-var BATON_WAITING = 'Waiting';
-var BATON_HELD    = 'In progress';
+var BATON_WAITING   = 'Waiting';
+var BATON_HELD      = 'In progress';
+/* Written only by a forced handover (D59). It is a HELD state, not a fourth kind
+   of waiting: an administrator has the record until they hand it on normally.
+   Named here because batonState() now compares against it. */
+var BATON_RECOVERED = 'Recovered';
 
 function spFields(job, baton){
   var f = {

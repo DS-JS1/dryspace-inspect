@@ -1520,10 +1520,15 @@ function run(W){
        'the home screen offers it');
     /* Take-over must keep listing only what is available: an inspection on
        somebody's device is not waiting, and offering it invites two people to
-       pick up the same job. */
+       pick up the same job. It scanned current/ and stopped there, which is not
+       the same test - a takeover leaves the file in current/ (D39), so every
+       held record was listed as available. OI-12. */
     var src = W.document.documentElement.outerHTML;
     ok(/scanInspectionFolders\('current'\)/.test(src),
-       'take-over still lists only inspections with a file waiting in current/');
+       'take-over still starts from what is in current/');
+    ok(/scanInspectionFolders\('current'\)[\s\S]{0,1200}?batonAvailable\(/.test(src),
+       'and then offers only what nobody holds',
+       'the take-over list offers records already on somebody else’s device');
   });
 
   /* v1.4.0 patch - the library columns are the index (D23) and said nothing
@@ -1587,6 +1592,112 @@ function run(W){
     var held = W.batonState({file: null, folder: {fields: {BatonHolder: 'Mike'}}});
     eq(held.label, 'IN PROGRESS', 'a holder on record means somebody has it');
     ok(held.cls !== never.cls, 'and the two are coloured differently');
+  });
+
+  /* v1.4.0 - OI-12. Custody comes from the column, not from the file.
+
+     batonState() asked "is there a file in current/?", which is a different
+     question from "who has this?". The handover uploads into current/ and
+     archives only the file it replaces, and a takeover reads that file without
+     moving it (D39), so a file is present in every state the app can produce:
+     current/ is never empty, `held` was unreachable, and a record already on
+     somebody's device read as WAITING and was offered to the next person. */
+  test('custody is read from the column, not inferred from the file', function(){
+    if(typeof W.batonState !== 'function') return;
+
+    function st(status, holder, file){
+      return W.batonState({file: file ? {name: 'DS_Draft.json'} : null,
+                           folder: {fields: {BatonStatus: status, BatonHolder: holder}}});
+    }
+
+    /* THE CASE THAT WAS WRONG. After a takeover the file stays in current/ and
+       the column says In progress. This used to read WAITING. */
+    var taken = st(W.BATON_HELD, 'Mike', true);
+    eq(taken.label, 'IN PROGRESS',
+       'a record taken over is held, even though its file is still in current/');
+    ok(/held by Mike/.test(taken.who), 'and names who has it: ' + taken.who);
+
+    var handed = st(W.BATON_WAITING, 'Jamie Stone', true);
+    eq(handed.label, 'WAITING', 'a record just handed over is waiting');
+    ok(/last held by Jamie Stone/.test(handed.who),
+       'and says who sent it, which is who to ask about it');
+
+    /* Recovered is a holder, not a fourth kind of waiting: an administrator has
+       it until they hand it on normally (D59). */
+    var rec = st('Recovered', 'Jamie Stone, recovered from Mike', true);
+    eq(rec.label, 'IN PROGRESS', 'a recovered record is held by whoever recovered it');
+    ok(/recovered/.test(rec.who), 'and says so: ' + rec.who);
+
+    /* The state forced handover is FOR, and it is reachable now: somebody has
+       the record and nobody can get it back the ordinary way. */
+    var held = st(W.BATON_HELD, 'Mike', false);
+    eq(held.label, 'IN PROGRESS', 'held with nothing in current/ is still held');
+  });
+
+  /* v1.4.0 - OI-12. The disagreement is surfaced, not resolved silently: a
+     folder whose column and file cannot both be true is exactly the folder
+     somebody needs to look at. Nothing the app does can produce this, because
+     the handover uploads before it archives (D36), so it means the file was
+     moved or removed in SharePoint by hand. */
+  test('a column that says waiting with nothing to pick up is an alarm', function(){
+    if(typeof W.batonState !== 'function') return;
+    var gone = W.batonState({file: null,
+                             folder: {fields: {BatonStatus: W.BATON_WAITING,
+                                               BatonHolder: 'Jamie Stone'}}});
+    eq(gone.key, 'missing', 'it is its own state, not a guess at a holder');
+    eq(gone.label, 'NO FILE IN CURRENT/', 'and says what is actually true');
+    ok(/moved or removed/.test(gone.who), 'naming what happened: ' + gone.who);
+
+    var held = W.batonState({file: null, folder: {fields: {BatonStatus: W.BATON_HELD,
+                                                          BatonHolder: 'Mike'}}});
+    ok(gone.cls !== held.cls, 'and it is not coloured as though somebody has it');
+
+    /* An unmarked folder is not this. Photos create the folder, so an inspection
+       never handed over has an empty current/ and no column at all. */
+    var never = W.batonState({file: null, folder: {fields: {}}});
+    eq(never.label, 'NOT HANDED OVER', 'an unmarked folder is not an alarm');
+  });
+
+  /* v1.4.0 - OI-12. The fork the baton rule exists to prevent. Two people
+     picking up one job was one tap away, from both lists, for as long as
+     availability was read from the file. */
+  test('a record somebody holds is not offered to the next person', function(){
+    ok(typeof W.batonAvailable === 'function',
+       'batonAvailable() defined - one answer, so the two lists cannot drift');
+    if(typeof W.batonAvailable !== 'function') return;
+
+    function avail(status, file){
+      return W.batonAvailable({file: file ? {name: 'DS_Draft.json'} : null,
+                               folder: {fields: {BatonStatus: status,
+                                                 BatonHolder: 'Mike'}}});
+    }
+    ok(avail(W.BATON_WAITING, true) === true, 'a record waiting can be taken over');
+    ok(avail(W.BATON_HELD, true) === false,
+       'one somebody holds cannot be, though its file is still in current/',
+       'a held record is offered to the next person - the fork the baton rule prevents');
+    ok(avail('Recovered', true) === false, 'nor one an administrator has recovered');
+    ok(avail(W.BATON_WAITING, false) === false, 'nor one with nothing to pick up');
+
+    /* A folder written before the status column existed still works: with no
+       column at all the file is all there is to go on. */
+    ok(W.batonAvailable({file: {name: 'DS_Draft.json'}, folder: {fields: {}}}) === true,
+       'a folder with no baton column falls back to the file');
+  });
+
+  /* v1.4.0 - OI-12. Forced handover is now reachable by an ordinary route, so
+     the gate does not have to be widened to reach it. It is offered in the two
+     states where the record cannot be picked up the ordinary way, and in neither
+     of the two where it can. */
+  test('forcing a handover is offered where the record cannot be picked up', function(){
+    var src = W.document.documentElement.outerHTML;
+    var gate = src.match(/isAdmin\(\) && \([^)]*\)/);
+    ok(!!gate, 'the force gate is an isAdmin() test on the baton state');
+    if(!gate) return;
+    ok(/'held'/.test(gate[0]), 'offered when somebody holds it: ' + gate[0]);
+    ok(/'missing'/.test(gate[0]),
+       'and when the file that should be in current/ is gone');
+    ok(!/'waiting'/.test(gate[0]),
+       'never on one that is simply waiting, which would make it a shortcut');
   });
 
   /* v1.4.0 patch - reviewing a record must not make this device its holder. */

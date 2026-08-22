@@ -152,6 +152,12 @@ Two things must be in place before photo upload or handover will work:
 > refused because the index could not be written. If the library columns look
 > empty after a handover, check their spelling first — `03` §10 explains why.
 
+> **`BatonStatus` is not decoration — changed in v1.4.** The app reads it back to
+> work out whether a record is waiting or somebody is holding it, so a library
+> missing that column, or with it misspelled, leaves every folder falling back to
+> "is there a file in `current/`?" — which reports held records as waiting and
+> offers them to the next person. Get the spelling right. Decision log **D60**.
+
 ---
 
 ## Part C — Installing on each device
