@@ -59,12 +59,12 @@ touches `main`'s root, and none of it is a release.
 
 #### First attempt, 22 August 2026 — stopped at step 1, and the checklist was wrong
 
-**Step 1 as first written could not have worked, and step 1 is now blocked on a
-decision.** Opening the beta after the live app does not upgrade anything: the two
-use different databases (decision log §4h), so the migration runs against an empty
-store and reports success having migrated nothing. **See OI-10, which now carries
-the correction and three ways forward.** Do not attempt step 1 until one is
-chosen; steps 2–6 do not depend on it and can be run now.
+**Step 1 as first written could not have worked.** Opening the beta after the live
+app does not upgrade anything: the two use different databases (decision log
+§4h), so the migration runs against an empty store and reports success having
+migrated nothing. **Resolved 22 August 2026** by adding `/rehearsal/` — a v1.4
+copy on a non-beta path, which therefore opens the real `ds-inspections`. Step 1
+below is the corrected procedure; OI-10 carries the reasoning.
 
 **The live app hung, and that is expected — do not chase it.** The owner created a
 record in the **live** app, added a photo, tapped **Upload now**, and the app stuck
@@ -97,7 +97,7 @@ alone and let it go.
 
 | # | For | On | What to do |
 |---|---|---|---|
-| 1 | **OI-10** | — | **BLOCKED, and not on the phone.** The rehearsal as scripted tests nothing; OI-10 now carries why and three ways forward. Pick one first. Steps 2–6 do not need it |
+| 1 | **OI-10** | live → **rehearsal** | The upgrade rehearsal, on the corrected procedure — **not** the beta, which migrates nothing. **`ds-inspections` must be at version 1 before you start:** open `/beta/diagnostics.html` §8c, and if it lists `ds-inspections` at version **2**, delete it there and rebuild the record. Then: live app → new inspection → **two** photographs, one over 4 MB — **do not tap Upload now** — then open `/rehearsal/`. Confirm from `/rehearsal/diagnostics.html` §6 and §8, not by eye: both photographs read back, `bytes` holds them, the media records carry no blobs, the record reads `schema: 4`, nothing marked *needs retaking*. **One-way:** afterwards the live v1.3.0 app cannot open the database until §8c clears it |
 | 2 | **OI-13** | beta | **The fork warning — the one that matters most.** Make a record **in the beta** with a photograph (it no longer has to come from step 1). *Share draft (offline fallback)* to get a `DS_Draft` file out, then change something in the record so the copy on the device is the newer one, then import that file back. **Screenshot the dialog.** It must show all three choices, and the last one — *Cancel this import / Nothing on this device changes* — must be readable without the box being cut |
 | 3 | **OI-13** | beta | **The handover confirmation**, the message photographed truncating. Hand that record over through SharePoint. **Screenshot it.** It must show *"Delete your copy from this device once they confirm they have it."* in full — that sentence is the whole point of the item |
 | 4 | **OI-14** | beta | Open the record and tap the **"N logged changes"** count in the status bar. The entries open, newest first, each carrying what happened, when, and who. Scroll to the oldest and back |
@@ -197,7 +197,7 @@ The migration only runs where v1.4 opens `ds-inspections`, and `isBetaBuild()` i
 true for `/beta/` **and nothing else**. So any non-beta path serves a v1.4 that
 upgrades the real database. Three ways forward, none of them free:
 
-1. **A throwaway `/rehearsal/` copy of v1.4 on `main`** — same shape as `/beta/`,
+1. **CHOSEN, 22 August 2026. A throwaway `/rehearsal/` copy of v1.4 on `main`** — same shape as `/beta/`,
    root untouched, releases nothing. The one honest rehearsal available before
    release, because it upgrades the real database exactly as the release will.
    **It is one-way on that handset:** once `ds-inspections` reaches version 2 the

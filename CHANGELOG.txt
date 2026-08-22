@@ -1,6 +1,23 @@
 Dryspace Site Inspection App — Changelog
 ========================================
 
+/REHEARSAL/ CHOSEN AND ADDED - 22 August 2026 - OI-10 step 1 is runnable again
+- Option 1 taken. A throwaway v1.4 copy at /rehearsal/ on main. isBetaBuild() is
+  true for /beta/ and nothing else, so any other path opens the REAL
+  ds-inspections and the migration genuinely runs.
+- NO sw.js in it, deliberately. The service worker's activate handler deletes
+  every cache on the origin that is not its own, so a rehearsal build carrying
+  one would wipe the live app's cache - on the very handset the test needs the
+  live app on. It also removes the cache-first staleness that has twice graded
+  stale code. Registration failure is caught and only warns. Side effect: the
+  "Check for app update" button is inert on this build.
+- ONE-WAY on the handset that opens it: once ds-inspections reaches version 2,
+  v1.3.0 cannot open it again (4h). Diagnostics 8c is the way back.
+- Do not sign in from it - spRedirectUri() returns the LIVE redirect URI, which
+  Entra matches by exact string. The rehearsal needs no network.
+- Root untouched, nothing tagged, v1.3.0 still live. Delete /rehearsal/ once
+  OI-10 is answered.
+
 OI-16 RUN 1 - 22 August 2026 - stopped at step 1, and step 1 was wrong
 - The batch was attempted and got no further than its first row. Two faults, one
   of them in the checklist written hours earlier.
