@@ -151,6 +151,12 @@ These exist because breaking one of them lost, or nearly lost, real data.
 - **git internals live outside this folder** at `C:\Users\jamie\dev\.git-dryspace-inspect`,
   because this folder is inside a OneDrive-synced SharePoint library and syncing
   `.git` corrupts it. The `.git` entry here is a pointer file — do not delete it.
+- **GitHub Pages intermittently ignores a push.** Twice on 22 Aug 2026 a push
+  landed on `main` with no `pages-build-deployment` run, so the site kept
+  serving the previous commit and a new path 404'd. Nothing is wrong with the
+  repo or the Pages settings. **Check what is SERVED, not what is pushed**
+  (`curl` the file, or the build number in the footer); if it is stale, push an
+  empty commit and it deploys in about twenty seconds.
 - **Nothing is deployed until it is pushed.** `main` on GitHub is what staff run.
   Pushing to `main` *is* the release. Do not push without being asked.
 - **Australian English** throughout — metres, organised, colour, labour.
