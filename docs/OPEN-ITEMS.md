@@ -96,6 +96,32 @@ nothing is marked *needs retaking*. Confirmed from diagnostics §6 and §8 rathe
 than by eye, and appended to the bug-test file.
 
 
+### OI-12 · Is the `held` state reachable without editing SharePoint by hand?
+**Status:** open — **answer it while running OI-1** · **Tier:** unknown until answered
+**Detail:** `index.html:3719` `batonState()`, `index.html:3335` the handover's move
+
+"Force the handover" is gated on `isAdmin() && batonState === 'held'`, and `held`
+needs `current/` **empty** with `BatonHolder` **set**.
+
+But the handover uploads the new record into `current/` and moves only the
+*previously held* file to `archive/`, so `current/` ends every handover holding
+exactly one file. Taking over reads that file without moving it. **On that
+reading, no ordinary sequence ever empties `current/`** — and if that is right,
+the button cannot be reached in real use by anyone, which is a fault in the
+feature rather than in the test.
+
+This was raised as run 1's Finding 1 and recorded as **WRONG**. That verdict is
+not safe: the confirming check moved the file out by hand and got `none` rather
+than `held`, which looked like a refutation but was really fault 1 — the columns
+were not being read at all, so `BatonHolder` was invisible and every folder fell
+to `none`. With that fixed, the question is open again and has never been
+answered on its own terms.
+
+**Done means:** either a normal sequence is found that empties `current/` and
+reaches `held` — recorded with the steps — or it is established that none exists,
+in which case this becomes a design decision about how an administrator is ever
+meant to reach a stranded record.
+
 ### OI-9 · `dbAll()` can return `[]` from a store that is not empty
 **Status:** open — **guarded, not cured** · **Tier:** unknown
 **Detail:** decision log §4g
@@ -185,7 +211,7 @@ agreed destination.
 
 | ID | Item | Closed | By what |
 |---|---|---|---|
-| OI-C12 | The beta and the live app shared one database, so opening the beta broke the live app and removed the rollback | 22 Aug 2026 | The beta now uses `ds-inspections-beta`. Fixed while it cost nothing; the same collision would have returned at v1.5-beta against v1.4-live with staff photos on the line. Decision log §4h |
+| OI-C12 | The beta and the live app shared one database, so opening the beta broke the live app and removed the rollback | 22 Aug 2026 | The beta now uses `ds-inspections-beta`. **Confirmed closed on the device:** clearing the leftover `ds-inspections` through diagnostics §8c brought the live app back — its list and storage line returned. Decision log §4h |
 | OI-C11 | The orphan-bytes assertion failed ~5 runs in 8 | 22 Aug 2026 | Not a harness race after all — `dbAll()` was returning `[]` from a non-empty store (OI-9). Checks lifted out of `later()` and sequenced after boot, with per-run keys. **20 consecutive runs 554/554**, 16 under load, 6 from a cleared store |
 | OI-C10 | `sweepOrphanBytes()` returned `0` both when it failed and when it found nothing | 22 Aug 2026 | Returns `SWEEP_FAILED` (-1) on failure; the boot caller warns rather than reporting a count |
 | OI-C1 | The app could not read the library columns back, so "Force the handover" could never be offered | 22 Aug 2026 | `$expand=listItem($expand=fields)`. Proved on device before changing: 0 of 3 folders under the old form, 3 of 3 under the documented one. `f19fec2` |

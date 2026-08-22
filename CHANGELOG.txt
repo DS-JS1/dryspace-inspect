@@ -1,6 +1,36 @@
 Dryspace Site Inspection App — Changelog
 ========================================
 
+OI-11 CONFIRMED CLOSED ON THE DEVICE - 22 August 2026
+- Clearing the leftover ds-inspections through the new diagnostics 8c brought the
+  live app back: its inspection list and its storage line both returned. That is
+  the proof the shared database was what had been stopping it, and it confirms
+  the separation fix end to end on real hardware.
+- Worth recording how it was missed twice: the Settings route failed silently
+  because ds-js1.github.io sits behind SHOW ALL SITES, and the beta looked clean
+  throughout - not because anything had been cleared, but because the rename had
+  pointed it at a brand new database. Two coincidences that each looked like
+  success. The tell was the sign-in surviving: the token lives in localStorage on
+  that origin, so still being signed in meant nothing had been deleted.
+
+OI-12 RAISED - 22 August 2026 - is 'held' reachable without editing SharePoint?
+- Found while preparing to run the forced-handover test, by reading the flow
+  rather than by running it.
+- "Force the handover" needs batonState 'held', which needs current/ EMPTY with
+  BatonHolder SET. But the handover uploads the new record INTO current/ and
+  moves only the previously held file to archive/, so current/ ends every
+  handover holding exactly one file. Taking over reads that file without moving
+  it. On that reading no ordinary sequence ever empties current/ - and if that is
+  right, the button cannot be reached in real use by anybody, which is a fault in
+  the FEATURE rather than in the test.
+- This was run 1's Finding 1 and was recorded as WRONG. That verdict is not safe.
+  The confirming check moved the file out by hand and got 'none' rather than
+  'held', which looked like a refutation - but that was fault 1: the columns were
+  not being read at all, so BatonHolder was invisible and every folder fell to
+  'none' regardless. With fault 1 fixed the question is open again and has never
+  been answered on its own terms.
+- Not a blocker on its own; it is the question the OI-1 run should answer.
+
 DIAGNOSTICS 8c - 22 August 2026 - clearing a database no build points at any more
 - Test-only. diagnostics.html. No app file, no CACHE_VERSION change.
 - Separating the beta's database closed the trap going forward and did NOTHING for
