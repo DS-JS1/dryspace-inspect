@@ -290,6 +290,54 @@ it was pointed at a device that had actually migrated.
 report the photographs readable from the bytes store, with sizes matching
 `origSize`. Then OI-10 can be judged on evidence.
 
+### OI-18 · The printed guides are stale, and nothing will say so before release
+**Status:** open — **do this at the v1.4.0 release, before pushing to root** · **Tier:** part of the release, not a change
+**Detail:** `05_Release Protocol` §4a and §2 · `tools/make_guides.py` · raised 22 Aug 2026
+
+**Two of the four sources changed on 22 August and neither PDF was regenerated:**
+
+| Source | What changed | Its PDF |
+|---|---|---|
+| `02_Iteration Guide.md` | gained the OI-17 rule — a storage change is not finished until `diagnostics.html` is updated in the same commit | `Guides/02_Iteration Guide_v1.4.0.pdf` — **stale** |
+| `05_Release Protocol.md` | gained the Pages deploy confirmation at the head of §5 | `Guides/05_Release Protocol_v1.4.0.pdf` — **stale** |
+
+So the printed guides and their sources now disagree, on exactly the two
+documents somebody would reach for while doing a release.
+
+**Nothing will catch this.** The staleness signal is the version in the PDF's
+filename — the app says v1.4, a PDF saying v1.3 is visibly old, *"no process, no
+discipline, no memory required"*. That works **across** versions. It does nothing
+**within** one: `APP_VER` stays `1.4.0` while fixes fold into an unreleased
+version, so the markdown can change any number of times and the filename never
+moves. `tests.html` checks the PDF **exists for the current version**, not that
+it matches its source, so it stays green throughout.
+
+Worth being exact, because two documents overstate it: `05_Release Protocol` §4a
+says *"a release cannot pass while the guides are stale"* and `Guides/README.txt`
+says the same. **What is actually enforced is existence, not freshness.** Within
+an unreleased version, freshness is on a person.
+
+**It is one command, not manual printing.** `05_Release Protocol` §4a's
+*"Generating them"* still says open the markdown and Print → Save as PDF; that
+predates `tools/make_guides.py`, which reads `APP_VER` from `index.html` so the
+filenames always match what `tests.html` looks for. `reportlab` is installed
+(5.0.0), so:
+
+```
+python tools\make_guides.py
+```
+
+**Regenerate ALL four, not only `02`**, and check first whether the other three
+sources also moved since their PDFs were built — this item was raised about one
+document but the gap applies to every one of them.
+
+**Done means:** at the v1.4.0 release and before `main`'s root is touched, the
+four PDFs in `Guides/` are regenerated from their current markdown, `tests.html`
+passes, and `05_Release Protocol` §4a's *"Generating them"* is corrected to name
+the script rather than the browser. **Or** a recorded decision that the
+existence check is enough and freshness stays a human step, with the two
+overstatements above corrected so the documents stop claiming otherwise.
+
 ### OI-12 · How does a folder reach `held`? Not confirmed either way
 **Status:** open · **Tier:** unknown until answered
 **The cheap half is OI-16, step 5** — one tap settles whether the library/app

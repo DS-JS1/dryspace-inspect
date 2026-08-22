@@ -151,12 +151,25 @@ These exist because breaking one of them lost, or nearly lost, real data.
 - **git internals live outside this folder** at `C:\Users\jamie\dev\.git-dryspace-inspect`,
   because this folder is inside a OneDrive-synced SharePoint library and syncing
   `.git` corrupts it. The `.git` entry here is a pointer file — do not delete it.
-- **GitHub Pages intermittently ignores a push.** Twice on 22 Aug 2026 a push
-  landed on `main` with no `pages-build-deployment` run, so the site kept
-  serving the previous commit and a new path 404'd. Nothing is wrong with the
-  repo or the Pages settings. **Check what is SERVED, not what is pushed**
-  (`curl` the file, or the build number in the footer); if it is stale, push an
-  empty commit and it deploys in about twenty seconds.
+- **GitHub Pages intermittently ignores a push — ALWAYS confirm the deploy.**
+  Twice on 22 Aug 2026 a push landed on `main` with no `pages-build-deployment`
+  run: the site kept serving the previous commit and a new path 404'd, with
+  nothing wrong in the repo or the Pages settings. **A successful push is not a
+  deploy.** After every push to `main`, confirm what is actually SERVED:
+
+  ```bash
+  curl -s "https://ds-js1.github.io/dryspace-inspect/beta/sw.js?cb=$(date +%s)" | grep CACHE_VERSION
+  ```
+
+  The build number it prints must be the one you just pushed. If it is stale,
+  the run list is at
+  **https://github.com/DS-JS1/dryspace-inspect/actions** (look for
+  *pages-build-deployment*; if the newest run predates your push, the trigger
+  was missed). The fix is an empty commit — it deploys in about twenty seconds:
+
+  ```bash
+  git commit --allow-empty -m "Re-trigger the Pages build" && git push origin main
+  ```
 - **Nothing is deployed until it is pushed.** `main` on GitHub is what staff run.
   Pushing to `main` *is* the release. Do not push without being asked.
 - **Australian English** throughout — metres, organised, colour, labour.

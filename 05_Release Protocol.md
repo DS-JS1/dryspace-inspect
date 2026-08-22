@@ -147,6 +147,31 @@ wrong one.
 
 ## 5. Release sequence
 
+> **A push is not a deploy — confirm every one.** GitHub Pages intermittently
+> does not fire a `pages-build-deployment` run, and gives no error when it
+> happens: `git push` succeeds, GitHub shows the commit, and the site keeps
+> serving the previous one. Seen twice on 22 August 2026, once leaving a new
+> path 404ing for the best part of an hour while the repository and the Pages
+> settings were both correct.
+>
+> **After every push, check what is SERVED rather than what was pushed:**
+>
+> ```bash
+> curl -s "https://ds-js1.github.io/dryspace-inspect/sw.js?cb=$(date +%s)" | grep CACHE_VERSION
+> ```
+>
+> If the number is not the one you just pushed, open
+> **https://github.com/DS-JS1/dryspace-inspect/actions** and look for
+> *pages-build-deployment*. A newest run older than your push means the trigger
+> was missed — not a failure you can debug. Re-trigger with an empty commit:
+>
+> ```bash
+> git commit --allow-empty -m "Re-trigger the Pages build" && git push origin main
+> ```
+>
+> It deploys in about twenty seconds. For `/beta/` or `/rehearsal/`, check that
+> path's own `sw.js` or a string you know is new.
+
 1. [ ] Tests pass — zero failures
 2. [ ] Version stamps all agree
 3. [ ] Documents for this tier updated (§2), PDFs regenerated
