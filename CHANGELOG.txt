@@ -1,6 +1,50 @@
 Dryspace Site Inspection App — Changelog
 ========================================
 
+OI-10 RUN 2 - 22 August 2026 - the migration PASSED and the diagnostic lied
+- The rehearsal ran. /rehearsal/ upgraded the real ds-inspections from version 1
+  to 2 and the bytes store came out holding 3 rows, 18.2 MB of originals -
+  5,715,296 + 6,672,000 + 6,672,000 = 19,059,296 bytes, the three photographs
+  exactly. No orphans either direction. No record carries "the stored file was
+  lost by the browser", none has retryable=no, so no record took
+  migrateMediaBytes()'s failure path.
+
+- AND THE PAGE REPORTED "3 of 3 unreadable - HYPOTHESIS 2 CONFIRMED" WITH
+  bytes=MISSING ON EVERY RECORD. OI-17 raised. Both panels judged whether a photo
+  still existed by reading rec.original / rec.blob - the PRE-v1.4 fields, which
+  migrateMediaBytes() DELETES once the bytes are safely in their own store.
+- So the healthier the device, the louder the alarm: a clean migration was
+  GUARANTEED to report total data loss. This is the instrument OI-10's exit
+  criterion names ("confirmed from diagnostics 6 and 8 rather than by eye"), so
+  it would have condemned a working migration or sent somebody hunting a fault
+  that never existed.
+- Same lesson the decision log already carries in other words: a diagnostic
+  pointed at the wrong store reports an empty device with total confidence.
+
+- FIXED. checkBlobs() now goes through bytesFor() - the call the upload path
+  itself makes - so it checks what actually ships, and rebuilding the Blob from
+  the store proves the round-trip rather than the presence of a field. Both state
+  panels read the bytes store alongside media and label the source, (record) or
+  (store), so a migration is visible rather than inferred.
+- One ordering bug caught while writing it: requests in a single IndexedDB
+  transaction complete in the order issued, so the bytes request has to be made
+  BEFORE the media one or media's onsuccess runs with no bytes result to read.
+- Proved locally against both shapes before redeploying. A migrated record reads
+  "readable from the bytes store". A v1.3-shape record reads bytes=NNN(record)
+  AS FOUND and NNN(store) NOW - the migration happening in view, between the two
+  halves of the same panel.
+
+- THE GENERAL LESSON, worth more than the fix: a diagnostic must be updated in
+  the same change as the storage layout it inspects. This one was written against
+  v1.3's layout and survived the v1.4 rewrite untouched. Nothing failed until it
+  was pointed at a device that had actually migrated - which is to say, until the
+  first time it mattered.
+
+- STILL OWED on OI-10: a re-run on the corrected page, plus the schema: 4 reading
+  the old output never showed. The evidence says the migration worked; it has not
+  yet been read off an instrument that can be trusted.
+- Tests 590/590. Root untouched, v1.3.0 still live, nothing tagged.
+
 /REHEARSAL/ CHOSEN AND ADDED - 22 August 2026 - OI-10 step 1 is runnable again
 - Option 1 taken. A throwaway v1.4 copy at /rehearsal/ on main. isBetaBuild() is
   true for /beta/ and nothing else, so any other path opens the REAL

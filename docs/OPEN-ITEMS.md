@@ -113,6 +113,11 @@ than the fault being fixed — a modal that traps somebody on a phone in a
 basement. The capture path was deliberately left on native dialogs for this
 reason, so nothing at capture time can be affected either way.
 
+**Run 2 outcome (step 1):** the migration passed, but `diagnostics.html` said it
+had failed — see **OI-17**. The page is fixed; step 1 needs one re-run on the
+corrected page to be judged, and that re-run is the whole of what OI-10 still
+owes.
+
 **Housekeeping:** the first attempt's diagnostic left
 `_diagnostics/diag_2026-08-22T05-43-40_IMG_9632.jpeg` (6.36 MB) in the library.
 Delete it when convenient; nothing references it.
@@ -191,6 +196,36 @@ behaviour rather than a side effect"* — but nobody came back and corrected the
 steps. The decision and the procedure it invalidated sat three screens apart in
 the same register for a day.
 
+#### RUN 2, 22 August 2026 — the migration PASSED, and the diagnostic said it failed
+
+**The upgrade ran and carried everything.** `/rehearsal/` upgraded the real
+`ds-inspections` from version 1 to 2, and the `bytes` store came out holding
+**3 rows, 18.2 MB of originals** — which is 5,715,296 + 6,672,000 + 6,672,000 =
+19,059,296 bytes, the three photographs exactly. No orphans in either direction.
+No record carries *"the stored file was lost by the browser"*, and none has
+`retryable=no`, so **no record took `migrateMediaBytes()`'s failure path**.
+
+**But the page reported `3 of 3 unreadable — HYPOTHESIS 2 CONFIRMED` and
+`bytes=MISSING` on every record.** That was the diagnostic being wrong, not the
+data. Both panels read `rec.original` / `rec.blob` — the **pre-v1.4** fields —
+and a successful migration **deletes** them. So the healthier the device, the
+louder the alarm: a clean migration was guaranteed to report total data loss.
+
+Fixed the same day. `checkBlobs()` now goes through `bytesFor()`, which is what
+the upload path itself calls, and rebuilding the Blob from the store proves the
+round-trip rather than just the presence of a field. The state panel reads the
+`bytes` store alongside `media` and says where each file lives —
+`bytes=5715296(store)` or `(record)`. Proved locally against both shapes before
+redeploying: a migrated record reads *readable from the bytes store*, and a
+v1.3-shape record reads `(record)` before boot and `(store)` after, which is the
+migration happening in view.
+
+**What is still owed on this item:** a re-run on the corrected page, and the one
+reading the old output never showed — `schema: 4` on the record. The evidence so
+far says the migration worked; it has not yet been *read off an instrument that
+can be trusted*, and this project has been caught believing a confident
+diagnostic before.
+
 #### What it actually takes
 
 The migration only runs where v1.4 opens `ds-inspections`, and `isBetaBuild()` is
@@ -214,10 +249,46 @@ upgrades the real database. Three ways forward, none of them free:
 phone, is carried through an upgrade that genuinely runs — both photographs read
 back, the `bytes` store holds them, the media records no longer carry blobs, the
 record reads `schema: 4`, and nothing is marked *needs retaking* — confirmed from
-diagnostics §6 and §8 rather than by eye, and appended to the bug-test file. **Or**
+diagnostics §6 and §8 **on the corrected page (OI-17)** rather than by eye, and
+appended to the bug-test file. **Or**
 option 2 or 3 above is chosen and recorded in the decision log with its reasoning.
 An upgrade that migrated nothing does not close this, however green it looks.
 
+
+### OI-17 · `diagnostics.html` reported total data loss on a healthy device
+**Status:** **fixed 22 Aug 2026, awaiting confirmation on the phone** · **Tier:** patch — a diagnostic, not the app
+**Detail:** `diagnostics.html` §2 `checkBlobs()`, §state `collectStoredState()` ·
+found by running OI-10's rehearsal
+
+Two panels judged whether a photograph still existed by reading `rec.original`
+/ `rec.blob`. Those are the **pre-v1.4** fields, and `migrateMediaBytes()`
+**deletes them** once the bytes are safely in the `bytes` store. So on any
+correctly migrated device both panels reported the worst thing they can say:
+*"there is no file to upload"*, *"3 of 3 unreadable — HYPOTHESIS 2 CONFIRMED"*,
+and `bytes=MISSING` on every record.
+
+**Why this is worse than a wrong number.** This page is the instrument OI-10's
+exit criterion names — *"confirmed from diagnostics §6 and §8 rather than by
+eye"*. A tool that reports catastrophe on a healthy device is not a false alarm
+you learn to ignore; it is one that would have condemned a working migration, or
+sent somebody hunting a fault that was never there. The decision log already
+carries the same lesson in different words: *a diagnostic pointed at the wrong
+store reports an empty device with total confidence.*
+
+**Fixed:** `checkBlobs()` goes through `bytesFor()` — the call the upload path
+itself makes — so it checks what actually ships, and rebuilding the Blob from
+the store proves the round-trip. The state panels read the `bytes` store
+alongside `media` and label the source, `(record)` or `(store)`, so a migration
+is visible rather than inferred. Verified locally against both record shapes.
+
+**The general lesson, worth more than the fix:** a diagnostic must be updated in
+the same change as the storage layout it inspects. This one was written against
+v1.3's layout and survived the v1.4 rewrite untouched, and nothing failed until
+it was pointed at a device that had actually migrated.
+
+**Done means:** re-run on the phone against the migrated record and the panels
+report the photographs readable from the bytes store, with sizes matching
+`origSize`. Then OI-10 can be judged on evidence.
 
 ### OI-12 · How does a folder reach `held`? Not confirmed either way
 **Status:** open · **Tier:** unknown until answered
