@@ -1,6 +1,44 @@
 Dryspace Site Inspection App — Changelog
 ========================================
 
+SESSIONS A AND B BRIEFED - 22 August 2026 - and a fault found while briefing B
+- docs/HANDOFF-session-A-dialogs-and-audit.md (OI-13, OI-14, medium effort) and
+  docs/HANDOFF-session-B-the-held-state.md (OI-12, high effort). B was written
+  ahead of A finishing, on the owner's instruction, while the baton flow was
+  still loaded - a cold session would have re-derived it expensively.
+- SESSION A's headline changed while it was being written. The report was about
+  bold text on the handover message; the worse case is the FORK WARNING at
+  index.html:4251 and 4265, where "OK = replace / Cancel = show other options" is
+  the LAST line and therefore the line iOS cuts. A native confirm() offers only
+  OK and Cancel, so a truncated fork warning strips the button semantics from a
+  destructive choice. Lost guidance is bad; lost button meanings on a choice that
+  can overwrite newer work is worse.
+- SESSION B's headline is a contradiction inside the protocol, not a bug.
+  batonState() treats an empty current/ with a holder set as 'held' - somebody is
+  working on it. The handover code calls an empty current/ "a state the protocol
+  has no procedure for, and which reads as lost data", and D39 records the
+  promise that "current/ changes only at a deliberate handover". If current/ only
+  changes at a handover, and every handover puts a file there, current/ is never
+  empty after the first one - so 'held' is unreachable BY DESIGN rather than by
+  accident. It was written against a folder model that does not exist.
+- Four options are laid out with what each costs, including that the intuitive
+  one - move the file on takeover - contradicts D39 and must reopen it explicitly
+  rather than work around it. The leading candidate is to make batonState() read
+  the column, which closes the library/app divergence by construction; its
+  weakness is that column writes are swallowed (OI-3, still undecided).
+- OI-15 RAISED, found while checking B's citations: THE DECISION LOG REUSES D34
+  AND D35 FOR TWO DECISIONS EACH. D34 is both "filing-critical fields are checked
+  at the handover" and "the record travels through SharePoint"; D35 is both "a
+  test build lives at /beta/" and "the record carries a baton pointer".
+- It has already propagated. CLAUDE.md lines 49 and 50 use "D34-D38" and "D34-D35"
+  in adjacent sentences meaning DIFFERENT sets, and index.html:3378 cites "D35"
+  meaning the baton pointer. The decision log is this project's memory and an
+  ambiguous citation corrupts it quietly. Renumbering is not obviously safe
+  because the numbers are referenced from code comments, CLAUDE.md and the
+  changelog, so the options are recorded rather than a fix chosen.
+- Session B's brief now cites those decisions BY THEIR WORDS rather than by
+  number, which is the only unambiguous way to do it until OI-15 is settled.
+
 CORRECTION - 22 August 2026 - the library/app divergence was NOT observed
 - Written up as "both were on screen at once". They were not. The phone capture
   and the laptop capture are twenty-five minutes apart with a takeover in

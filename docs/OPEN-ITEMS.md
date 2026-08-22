@@ -202,6 +202,31 @@ when, nor the source folder, nor anything else in the trail.
 anything — or a recorded decision that the count plus the library column is
 enough, and why.
 
+### OI-15 · The decision log reuses D34 and D35 for two decisions each
+**Status:** open · **Tier:** documentation
+**Detail:** `docs/DECISION-LOG.md` lines 130 and 133 (D34), 131 and 134 (D35)
+
+| Number | Both meanings |
+|---|---|
+| **D34** | *filing-critical fields are checked at the handover* · **and** *the record travels through SharePoint, not the share sheet* |
+| **D35** | *a test build lives at `/beta/` on the same site* · **and** *the record carries a baton pointer* |
+
+**It has already propagated.** `CLAUDE.md` lines 49 and 50 use "D34–D38" and
+"D34–D35" in adjacent sentences meaning **different sets**, and
+`index.html:3378` cites "D35" meaning the baton pointer. The decision log is this
+project's memory; a citation that resolves to two different decisions corrupts it
+quietly, and every future handoff that cites a number inherits the ambiguity.
+
+**Renumbering is not obviously safe** — the numbers are referenced from code
+comments, `CLAUDE.md` and the changelog, so a renumber breaks live references
+unless they all move together. Whoever takes this should decide between
+disambiguating in place (D34a/D34b), renumbering the later pair with every
+reference updated in the same commit, or dropping numbers in favour of titles.
+
+**Done means:** any citation of D34 or D35 resolves to exactly one decision, and
+every existing reference — `CLAUDE.md`, `index.html`, `CHANGELOG.txt`, the
+handoffs — points where it means to.
+
 ### OI-9 · `dbAll()` can return `[]` from a store that is not empty
 **Status:** open — **guarded, not cured** · **Tier:** unknown
 **Detail:** decision log §4g
