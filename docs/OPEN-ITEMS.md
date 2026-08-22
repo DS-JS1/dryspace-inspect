@@ -128,15 +128,22 @@ change to the gate at all. That is a reading, not a decision.
 the taking device.** Moving it out of `current/` first would put a record's only
 copy in flight, which is the non-negotiable this project exists around.
 
-**Corroborated 22 August 2026, and it has a visible cost.** Taking over writes
-`BatonStatus = In progress` to the column (`index.html:4175`) but does not move
-the file out of `current/`. So after a takeover **the library and the app say
-different things about the same folder** — SharePoint shows *In progress* while
-the app's browse screen shows *WAITING*, because `batonState()` reads the file's
-presence rather than the column. Both were on screen at once on 22 August. Anyone
-reading the library to find out who has a record is being told something the app
-disagrees with, and that is the same root cause: the takeover does not move the
-file.
+**A related divergence, argued from the code rather than observed.** Taking over
+writes `BatonStatus = In progress` to the column (`index.html:4175`) and does not
+move the file out of `current/`. `batonState()` returns `waiting` whenever a file
+is present, without consulting the column. So after any takeover the library
+should read *In progress* while the app reads *WAITING*, and anyone checking
+SharePoint to find out who holds a record gets an answer the app disagrees with.
+
+**The screenshots do NOT show this, and they were briefly written up as though
+they did.** The phone and the laptop captures are twenty-five minutes apart, with
+a takeover in between, so they show two different moments rather than one
+disagreement — the owner said so and was right. The divergence above stands on the
+code alone and has never been observed.
+
+**Cheap to settle:** browse the library in the app now, without touching
+anything. If a folder shows *WAITING* while SharePoint shows *In progress* for
+the same folder at the same time, it is real.
 
 **Done means:** either a normal sequence is demonstrated that empties `current/`
 and reaches `held`, written down with the steps — or it is established that none

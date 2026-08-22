@@ -1,6 +1,20 @@
 Dryspace Site Inspection App — Changelog
 ========================================
 
+CORRECTION - 22 August 2026 - the library/app divergence was NOT observed
+- Written up as "both were on screen at once". They were not. The phone capture
+  and the laptop capture are twenty-five minutes apart with a takeover in
+  between, so they show two moments, not one disagreement. The owner spotted it.
+- The underlying divergence still stands, but on the CODE alone: the takeover
+  writes BatonStatus = "In progress" (index.html:4175) and does not move the file
+  out of current/, while batonState() returns 'waiting' whenever a file is
+  present without consulting the column. It has never been observed and should
+  not have been written down as though it had.
+- Settling it costs one tap: browse in the app and compare with SharePoint at the
+  same moment.
+- Second time in this session a conclusion was drawn ahead of the evidence, the
+  first being OI-12. Both were caught by the owner rather than by the process.
+
 FAULT 1'S FIX PROVEN IN THE WILD - 22 August 2026 - all three baton states render
 - The browse screen on the device now shows all three states side by side, with
   the columns read correctly. This is the $expand fix doing its job in normal use
