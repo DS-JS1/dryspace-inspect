@@ -1,0 +1,1847 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Dryspace Inspection App — upload diagnostics</title>
+<style>
+:root{color-scheme:light dark}
+*{box-sizing:border-box}
+body{margin:0;padding:16px;font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+     max-width:760px;margin:0 auto;background:#fff;color:#1b1b1b}
+@media (prefers-color-scheme:dark){body{background:#151515;color:#eee}}
+h1{font-size:19px;margin:0 0 4px}
+h2{font-size:15px;margin:22px 0 6px;padding-bottom:4px;border-bottom:1px solid #8884}
+p.lede{margin:0 0 14px;font-size:13px;opacity:.75}
+.row{display:flex;gap:10px;align-items:baseline;padding:5px 0;border-bottom:1px solid #8882;font-size:13px}
+.row .k{flex:1;min-width:0}
+.row .v{flex:0 0 auto;text-align:right;font-variant-numeric:tabular-nums;max-width:58%;word-break:break-word}
+.ok .v{color:#1a7f37;font-weight:600}
+.bad .v{color:#b3261e;font-weight:600}
+.warn .v{color:#8a5a00;font-weight:600}
+button{font:inherit;padding:10px 15px;border-radius:9px;border:1px solid #8886;background:#f4f4f5;
+       color:inherit;margin:4px 6px 4px 0;cursor:pointer}
+button.primary{background:#0b57d0;border-color:#0b57d0;color:#fff}
+button.danger{background:#b3261e;border-color:#b3261e;color:#fff}
+button:disabled{opacity:.5}
+@media (prefers-color-scheme:dark){button{background:#2a2a2a}}
+.note{font-size:12px;opacity:.75;margin:8px 0 0}
+pre{font-size:11px;background:#8881;padding:10px;border-radius:8px;overflow:auto;max-height:340px;
+    white-space:pre-wrap;word-break:break-word}
+iframe{display:none}
+label.file{display:inline-block}
+input[type=file]{font:inherit;font-size:13px;margin:6px 0}
+input[type=text]{font:inherit;font-size:13px;padding:9px 10px;border-radius:9px;
+     border:1px solid #8886;background:#fff;color:inherit;width:100%;max-width:430px;margin:6px 0}
+@media (prefers-color-scheme:dark){input[type=text]{background:#1e1e1e}}
+</style>
+</head>
+<body>
+
+<h1>Upload diagnostics</h1>
+<p class="lede">
+  Run this <strong>on the device that fails</strong>. Sections 1–6 answer the
+  four hypotheses in <code>docs/v1.4-plan.md</code> §3 in order and tell you which
+  one is actually true. Sections 7 and 8 answer the two faults the baton test
+  found on 21 August 2026 — the library columns the app cannot read, and the
+  storage that is not being reclaimed. Nothing on this page writes to the app,
+  the database, or the record.
+</p>
+
+<p class="note" style="border:2px solid #b3261e;border-radius:8px;padding:10px">
+  <strong>It must be opened from the app's own web address</strong> — the same
+  <code>https://…</code> URL you open the inspection app from. Not from
+  SharePoint, not from a file on the device, and nothing to do with an email
+  address.
+  <br><br>
+  It has to share an origin with the app because it loads the app in a frame,
+  reads the same stored sign-in, and opens the same database. Served from
+  anywhere else, none of those resolve and the page cannot do its job.
+</p>
+
+<p class="note" style="border:1px solid #8886;border-radius:8px;padding:10px">
+  <strong>One side effect worth knowing.</strong> This page loads the app with
+  <code>?nosw=1</code> so it cannot test a stale cached build — which
+  <em>unregisters the offline service worker for this whole site</em>. When you
+  have finished, open the app normally once and let it load; it re-registers
+  itself. Do not leave a field device in this state, because until you do, the
+  app will not work without signal.
+  <br><br>
+  <strong>This page can be served stale to itself.</strong> The service worker
+  caches whatever it is asked for, including this file, and it ignores the query
+  string — so <code>?v=2</code> will not force a fresh copy. If the sections below
+  stop at 6, you are reading an old copy: the load you just did unregistered the
+  worker, so simply open this page once more and section 7 will appear.
+</p>
+
+<div id="boot" class="note" style="white-space:pre-line">Loading the app…</div>
+
+<div id="panels" hidden>
+
+  <h2>1 · Environment</h2>
+  <div id="env"></div>
+
+  <h2>2 · Stored photos — are they still readable?</h2>
+  <p class="note">
+    Hypothesis 2. Reads every original already on this device. A blob that
+    stored fine and cannot be read back is Safari losing it, and would stall
+    inside <code>fetch</code> where nothing is watching.
+  </p>
+  <button id="btn-blobs">Check stored photos</button>
+  <div id="blobs"></div>
+
+  <h2>3 · Sign-in and token refresh</h2>
+  <p class="note">
+    Hypothesis 3. “Force a refresh” discards the access token but keeps the
+    refresh token, so the next call must go through the refresh path — the one
+    that is untested in a standalone PWA.
+  </p>
+  <button id="btn-token">Time getToken()</button>
+  <button id="btn-refresh">Force a refresh</button>
+  <div id="token"></div>
+
+  <h2>4 · Can this device reach the library?</h2>
+  <button id="btn-drive">Resolve the drive</button>
+  <div id="drive"></div>
+
+  <h2>5 · The chunked upload — hypothesis 1</h2>
+  <p class="note">
+    The decisive test. Anything over 4&nbsp;MB goes through
+    <code>createUploadSession</code>, and that path has only ever run against a
+    fake transport.
+    <br><br>
+    <strong>Pick something over 5&nbsp;MB — a short video is ideal.</strong> Chunks
+    are 5&nbsp;MiB, so a file under that is sent as a single chunk and never
+    exercises the part where a session can stall between chunks. A 10–20 second
+    phone video is 20–50&nbsp;MB and gives four to ten chunks, which is the real
+    test. A typical still photo is 2–4&nbsp;MB and will take the simple path
+    instead, proving nothing about this hypothesis.
+    <br><br>
+    Leave it empty to use a synthetic 5&nbsp;MB file, which reaches the session
+    path but only just.
+  </p>
+  <label class="file"><input type="file" id="pick" accept="image/*,video/*"></label><br>
+  <button id="btn-upload" class="primary">Run the upload test</button>
+  <div id="upload"></div>
+  <p class="note">
+    Uploads to a <code>_diagnostics/</code> folder in the Site Inspections
+    library. <strong>Nothing is deleted</strong> — the app never deletes from
+    SharePoint, and staff accounts may be <em>Contribute&nbsp;-&nbsp;No&nbsp;Delete</em>.
+    Tidy the folder up yourself afterwards.
+  </p>
+
+  <h2>6 &middot; What the app has actually stored</h2>
+  <p class="note">
+    The panel on the home screen draws what it thinks is happening. This reads the
+    database directly and reports what is really there — one row per photo, with
+    the state the upload queue sees. If the screen and this disagree, the screen is
+    wrong. Nothing here changes anything.
+    <br><br>Two readings are shown. Loading this page boots the app in a hidden
+    frame, and the app's start-up recovery moves anything left in
+    <code>uploading</code> back to the queue — so the state worth seeing is gone
+    by the time you tap. The first reading is taken before that happens.
+  </p>
+  <button id="btn-state">Read the stored state</button>
+  <div id="state"></div>
+
+  <h2>7 &middot; Can the app read the library columns?</h2>
+  <p class="note">
+    The baton lives in two library columns — <code>BatonStatus</code> and
+    <code>BatonHolder</code>. On 21 August 2026 the library showed both set on a
+    folder while the app, reading that same folder at that same moment, saw
+    neither. <strong>That was proved here on 22 August and fixed</strong>: the
+    listing asked for <code>$select</code> on a nested navigation property, which
+    names it without populating it, so Graph returned a <code>listItem</code>
+    carrying nothing but an etag.
+    <br><br>
+    The section now earns its keep as a <strong>regression check</strong>. Three
+    readings of the <em>same</em> library root: the app's own listing code, which
+    cannot drift from what the app really does; the old broken form, kept as a
+    control that should still come back empty; and the documented form. A healthy
+    result is the app and the documented form agreeing, with the control blind.
+    <br><br>
+    Only <strong>top-level</strong> folders carry the baton, so the library root is
+    what gets listed — the same listing the take-over picker uses. Name a folder
+    below and its raw response is printed in full; leave it empty and the first
+    folder found is used. <strong>Name one you know has a holder set</strong>, or a
+    blank column proves nothing.
+    <br><br>
+    Read-only. It lists and it prints. It writes nothing.
+  </p>
+  <input type="text" id="colfolder" placeholder="folder to print in full, e.g. INS - 2201 - Frinight TestClient">
+  <br>
+  <button id="btn-cols" class="primary">Compare the queries</button>
+  <div id="cols"></div>
+  <pre id="colsraw">Nothing yet.</pre>
+
+  <h2>8 &middot; Where has the storage gone?</h2>
+  <p class="note">
+    A device reporting 140 MB in use with no inspections on it is either holding
+    something it should have released, or the figure does not mean what it looks
+    like it means. This measures every store directly instead of guessing.
+    <br><br>
+    <strong>Read the caveats before drawing a conclusion.</strong> The headline
+    figure covers the <em>whole origin</em>, which hosts the live app at the root
+    and the beta together, so some of it may not belong to the build under test —
+    the cache rows below name which build each cache came from. A browser is also
+    entitled to hold on to deleted data for a while before reclaiming it, and
+    cross-origin cached files are padded in the quota accounting and measure as
+    zero here. An unattributed remainder is a lead, not a verdict.
+    <br><br>
+    <strong>The cache figures are captured before this page boots the app</strong>,
+    because booting it carries <code>?nosw=1</code>, and that deletes every cache on
+    the origin — the offline copies of both the live app and the beta. That is the
+    existing behaviour of the flag, not something this section does, but it means
+    the caches can only be counted once per visit and they are counted for you on
+    the way in. If a reading looks wrong, reload the page and take it again rather
+    than tapping twice.
+    <br><br>
+    Read-only apart from that: this section deletes nothing, sweeps nothing and
+    tidies nothing.
+  </p>
+  <button id="btn-storage" class="primary">Measure everything</button>
+  <div id="storage"></div>
+
+  <p class="note" style="border:2px solid #b3261e;border-radius:8px;padding:10px;margin-top:18px">
+    <strong>Delete the database — empty devices only.</strong>
+    On 22 August 2026 this device reported ~140 MB held while every store was
+    empty, and iOS Settings agreed, so the space is real rather than a misread
+    figure. The leading explanation is that WebKit keeps IndexedDB in a file that
+    does not shrink when records are deleted — the container stays big after the
+    contents go. Deleting the whole DATABASE removes the file rather than emptying
+    it, so if that is the explanation, this reclaims the space and the figure
+    falls. If it does not fall, the explanation is wrong and the space is
+    somewhere else.
+    <br><br>
+    <strong>This destroys every inspection, photo and byte record on the device.</strong>
+    It therefore refuses to run unless all three stores are already empty, and it
+    counts them itself at the moment you tap rather than trusting a reading from
+    earlier. It also closes the app running in the frame above, so reload this
+    page afterwards to use the other sections.
+    <br><br>
+    Nothing in SharePoint is touched.
+  </p>
+  <button id="btn-dropdb" class="danger">Delete the database</button>
+  <div id="dropdb"></div>
+
+  <p class="note" style="border:2px solid #b3261e;border-radius:8px;padding:10px;margin-top:18px">
+    <strong>Databases this build does not use.</strong> The button above touches only
+    the one <em>this</em> build opens. Until 22 August 2026 the live app and the beta
+    shared a single database, so a device that opened the beta was left holding one
+    the live app could no longer open — and it fails silently, drawing its shell with
+    no list and no storage line, which reads as a working app. Separating them fixed
+    it going forward and did nothing for a handset already in that state, because the
+    leftover became a database nothing on this page pointed at.
+    <br><br>
+    This lists every database on the origin and offers to delete the ones that belong
+    to another build. <strong>Same guard</strong>: it counts every store first and
+    refuses anything that is not already empty.
+  </p>
+  <button id="btn-scandbs">Find other databases</button>
+  <div id="otherdbs"></div>
+
+  <h2>Request trace</h2>
+  <p class="note">Every Graph request this page made, in order, with timings.</p>
+  <button id="btn-copy">Copy everything</button>
+  <pre id="trace">Nothing yet.</pre>
+</div>
+
+<iframe id="app" title="app under diagnosis"></iframe>
+
+<script src="ds-media-sync.js"></script>
+<script src="ds-sharepoint.js"></script>
+<script src="ds-auth.js"></script>
+<script>
+'use strict';
+
+var W = null, CFG = null, auth = null, TRACE = [];
+
+/* Which database this page should be looking at. It has to be derived from the
+   path rather than read from the app, because the first read happens BEFORE the
+   app boots - and a diagnostic pointed at the wrong store is worse than none,
+   since it reports an empty device with total confidence. Mirrors DB_NAME in
+   index.html; the two must move together. */
+function dbName(){
+  return location.pathname.indexOf('/beta/') !== -1
+    ? 'ds-inspections-beta' : 'ds-inspections';
+}
+
+function el(id){ return document.getElementById(id); }
+function ms(n){ return Math.round(n) + ' ms'; }
+
+function line(host, key, value, cls){
+  var d = document.createElement('div');
+  d.className = 'row' + (cls ? ' ' + cls : '');
+  d.innerHTML = '<span class="k"></span><span class="v"></span>';
+  d.children[0].textContent = key;
+  d.children[1].textContent = value;
+  el(host).appendChild(d);
+  return d;
+}
+
+function clear(host){ el(host).innerHTML = ''; }
+
+function log(entry){
+  TRACE.push(entry);
+  el('trace').textContent = TRACE.map(function(t){ return t; }).join('\n');
+}
+
+/* Wraps fetch so every Graph request is timed and recorded. This is the trace
+   the app did not have, and its absence is what made the hang unreadable. */
+function tracingFetch(url, init){
+  var method = (init && init.method) || 'GET';
+  var short = String(url).replace('https://graph.microsoft.com/v1.0', '')
+                         .replace(/https:\/\/[^/]+/, '…')
+                         .slice(0, 110);
+  var t0 = performance.now();
+  return window.fetch(url, init).then(function(res){
+    log(ms(performance.now() - t0).padStart(9) + '  ' + method + ' ' + res.status + '  ' + short);
+    return res;
+  }, function(err){
+    log(ms(performance.now() - t0).padStart(9) + '  ' + method + ' ERR   ' + short +
+        '  — ' + ((err && err.message) || err));
+    throw err;
+  });
+}
+
+function makeAuth(){
+  return DSAuth.create({
+    clientId: CFG.clientId, tenantId: CFG.tenantId,
+    redirectUri: W.spRedirectUri(),
+    fetchImpl: tracingFetch
+  });
+}
+
+function makeTransport(){
+  return DSSharePoint.createTransport({
+    getToken: function(){ return auth.getToken(); },
+    hostname: CFG.hostname, sitePath: CFG.sitePath,
+    fetchImpl: tracingFetch,
+    folderOf: function(rec, meta){ return meta.folder; },
+    nameOf: function(rec, meta){ return meta.name; },
+    tagOf: function(){ return null; }        /* no library columns on a test file */
+  });
+}
+
+/* ---------- 1 · environment ---------- */
+function showEnv(){
+  clear('env');
+  var standalone = (window.navigator.standalone === true) ||
+                   (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+
+  line('env', 'App version', W.APP_VER || 'unknown');
+  line('env', 'Secure context (HTTPS)', window.isSecureContext ? 'yes' : 'NO',
+       window.isSecureContext ? 'ok' : 'bad');
+  line('env', 'crypto.subtle available',
+       (window.crypto && window.crypto.subtle) ? 'yes' : 'NO — hypothesis 4',
+       (window.crypto && window.crypto.subtle) ? 'ok' : 'bad');
+  line('env', 'Running as an installed app', standalone ? 'yes — hypothesis 3 applies' : 'no, in the browser',
+       standalone ? 'warn' : '');
+  line('env', 'AbortController (request deadlines)',
+       typeof AbortController === 'function' ? 'yes' : 'NO — uploads cannot time out',
+       typeof AbortController === 'function' ? 'ok' : 'bad');
+  line('env', 'Blob.arrayBuffer()', Blob.prototype.arrayBuffer ? 'yes' : 'no — using FileReader');
+  line('env', 'Online', navigator.onLine === false ? 'NO' : 'yes',
+       navigator.onLine === false ? 'bad' : 'ok');
+  line('env', 'Browser', navigator.userAgent.slice(0, 96));
+
+  if(navigator.storage && navigator.storage.estimate){
+    navigator.storage.estimate().then(function(e){
+      var pct = e.quota ? Math.round((e.usage / e.quota) * 100) : 0;
+      line('env', 'Storage used',
+           (e.usage / 1048576).toFixed(1) + ' MB of ' + (e.quota / 1048576).toFixed(0) + ' MB (' + pct + '%)',
+           pct > 85 ? 'warn' : 'ok');
+    });
+  }
+  if(navigator.storage && navigator.storage.persisted){
+    navigator.storage.persisted().then(function(p){
+      line('env', 'Storage is persistent', p ? 'yes' : 'no — the browser may evict data',
+           p ? 'ok' : 'warn');
+    });
+  }
+}
+
+/* ---------- 2 · stored blobs (hypothesis 2) ---------- */
+function checkBlobs(){
+  clear('blobs');
+  el('btn-blobs').disabled = true;
+  line('blobs', 'Reading…', '');
+
+  W.dbAll('media').then(function(all){
+    clear('blobs');
+    line('blobs', 'Photos and files on this device', String(all.length));
+    if(!all.length){
+      line('blobs', 'Nothing to check', 'take a photo in the app first', 'warn');
+      el('btn-blobs').disabled = false;
+      return;
+    }
+    var bad = 0, done = 0;
+    return all.reduce(function(chain, rec){
+      return chain.then(function(){
+        var blob = DSMedia.originalOf(rec);
+        var t0 = performance.now();
+        return DSMedia.verifyReadable(blob, rec.origSize, {timeoutMs: 20000})
+          .then(function(){
+            done++;
+            line('blobs', (rec.name || rec.mid) + ' — ' +
+                 ((blob.size / 1048576).toFixed(1)) + ' MB', 'readable, ' + ms(performance.now() - t0), 'ok');
+          }, function(e){
+            bad++;
+            line('blobs', (rec.name || rec.mid), (e && e.message) || String(e), 'bad');
+          });
+      });
+    }, Promise.resolve()).then(function(){
+      line('blobs', 'Result',
+           bad ? bad + ' of ' + all.length + ' unreadable — HYPOTHESIS 2 CONFIRMED'
+               : 'all ' + done + ' readable — hypothesis 2 ruled out',
+           bad ? 'bad' : 'ok');
+      el('btn-blobs').disabled = false;
+    });
+  }).catch(function(e){
+    line('blobs', 'Could not read the database', (e && e.message) || String(e), 'bad');
+    el('btn-blobs').disabled = false;
+  });
+}
+
+/* ---------- 3 · token (hypothesis 3) ---------- */
+function timeToken(){
+  clear('token');
+  if(!auth.isSignedIn()){
+    line('token', 'Signed in', 'NO — sign in on the main app first, then come back', 'bad');
+    return;
+  }
+  var acc = auth.account() || {};
+  line('token', 'Signed in as', acc.name || acc.username || 'unknown', 'ok');
+  var t0 = performance.now();
+  el('btn-token').disabled = true;
+  auth.getToken().then(function(tok){
+    line('token', 'getToken()', 'succeeded in ' + ms(performance.now() - t0), 'ok');
+    line('token', 'Token length', String(tok.length) + ' characters');
+    el('btn-token').disabled = false;
+  }, function(e){
+    line('token', 'getToken() FAILED after ' + ms(performance.now() - t0),
+         (e && e.message) || String(e), 'bad');
+    if(e && e.timedOut){
+      line('token', 'Diagnosis',
+           'the sign-in server never answered — HYPOTHESIS 3 CONFIRMED', 'bad');
+    }
+    el('btn-token').disabled = false;
+  });
+}
+
+/* Discards the access token but keeps the refresh token, so the next getToken()
+   must take the refresh path — the one iOS has never been proven on. */
+function forceRefresh(){
+  clear('token');
+  var KEY = 'ds-auth-' + CFG.clientId;
+  var cur = null;
+  try { cur = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch(e){}
+  if(!cur || !cur.refreshToken){
+    line('token', 'Cannot force a refresh', 'not signed in on this device', 'bad');
+    return;
+  }
+  cur.accessToken = null;
+  cur.expiresAt = 0;
+  localStorage.setItem(KEY, JSON.stringify(cur));
+  line('token', 'Access token discarded', 'refresh token kept', 'ok');
+  auth = makeAuth();                      /* re-read from storage */
+  timeToken();
+}
+
+/* ---------- 4 · reachability ---------- */
+function checkDrive(){
+  clear('drive');
+  if(!auth.isSignedIn()){
+    line('drive', 'Cannot run', 'not signed in — sign in on the main app first', 'bad');
+    return;
+  }
+  el('btn-drive').disabled = true;
+  var t = makeTransport();
+  var t0 = performance.now();
+  t.resolveDrive().then(function(id){
+    line('drive', 'Document library resolved', ms(performance.now() - t0), 'ok');
+    line('drive', 'Drive id', String(id).slice(0, 40) + '…');
+    el('btn-drive').disabled = false;
+  }, function(e){
+    line('drive', 'FAILED after ' + ms(performance.now() - t0), (e && e.message) || String(e), 'bad');
+    if(e && e.timedOut) line('drive', 'Diagnosis', 'Graph never answered — a network or proxy problem', 'bad');
+    if(e && e.status === 403) line('drive', 'Diagnosis', 'signed in, but not permitted on this site', 'bad');
+    el('btn-drive').disabled = false;
+  });
+}
+
+/* ---------- 5 · the chunked upload (hypothesis 1) ---------- */
+function runUpload(){
+  clear('upload');
+  /* Never signed in is not a hypothesis, it is a missing precondition. Reporting
+     it as one would send someone hunting a fault that is not there. */
+  if(!auth.isSignedIn()){
+    line('upload', 'Cannot run', 'not signed in — sign in on the main app first, then come back', 'bad');
+    return;
+  }
+  el('btn-upload').disabled = true;
+
+  var picked = el('pick').files && el('pick').files[0];
+  var blob, label;
+  if(picked){
+    blob = picked;
+    label = picked.name + ' (' + (picked.size / 1048576).toFixed(2) + ' MB, ' + (picked.type || 'unknown type') + ')';
+  } else {
+    /* Just over the 4 MB threshold, so it is guaranteed to take the session
+       path rather than the simple PUT that already works. */
+    blob = new Blob([new Uint8Array(5 * 1024 * 1024)], {type: 'image/jpeg'});
+    label = 'synthetic 5.00 MB file';
+  }
+  line('upload', 'File under test', label);
+  /* This was declared below its own uses. var hoists the name but not the
+     value, so it read as undefined and the page always announced "simple
+     PUT - under 4 MB", in red, while actually running a chunked session.
+     A diagnostic that misreports which path it is testing is worse than
+     one that does not run: it sends the reader after the wrong fault. */
+  var usedSession = blob.size > DSSharePoint.SIMPLE_MAX;
+  line('upload', 'Path Graph will take',
+       usedSession
+         ? (blob.size > 5 * 1024 * 1024
+              ? 'chunked session, multiple chunks — the untested path, properly exercised'
+              : 'chunked session, a single chunk — better than nothing, but one chunk '
+                + 'cannot stall between chunks')
+         : 'simple PUT — under 4 MB. This does NOT test the chunked path.',
+       usedSession ? (blob.size > 5 * 1024 * 1024 ? 'ok' : 'warn') : 'bad');
+
+  var t = makeTransport();
+  var stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  var rec = {mid: 'diag', original: blob, origSize: blob.size};
+  var meta = {
+    folder: '_diagnostics',
+    name: 'diag_' + stamp + '_' + (picked ? picked.name : 'synthetic.jpg')
+  };
+
+  var t0 = performance.now(), lastAt = t0, chunk = 0;
+  var progressRow = line('upload', 'Progress', 'starting…');
+
+  /* Reading the file first, exactly as the queue now does — if this is where it
+     dies, the upload was never the problem. */
+  DSMedia.verifyReadable(blob, blob.size, {timeoutMs: 20000}).then(function(){
+    line('upload', 'File is readable', ms(performance.now() - t0), 'ok');
+    return t.upload(rec, meta, function(frac){
+      chunk++;
+      var now = performance.now();
+      line('upload', 'Chunk ' + chunk + ' committed (' + Math.round(frac * 100) + '%)',
+           ms(now - lastAt), 'ok');
+      lastAt = now;
+      progressRow.children[1].textContent = Math.round(frac * 100) + '%';
+    });
+  }).then(function(remote){
+    line('upload', 'Upload finished', ms(performance.now() - t0), 'ok');
+    var v0 = performance.now();
+    return t.verify(remote).then(function(fresh){
+      var match = fresh.size === blob.size;
+      line('upload', 'Read back from SharePoint', ms(performance.now() - v0), 'ok');
+      line('upload', 'Stored size matches',
+           match ? fresh.size + ' bytes' : 'NO — stored ' + fresh.size + ', sent ' + blob.size,
+           match ? 'ok' : 'bad');
+      /* This line previously claimed the chunked path worked no matter which
+         path had run, which is how a 2.71 MB photo "ruled out" a hypothesis it
+         never touched. A verdict that does not check what it is reporting on is
+         worse than no verdict. */
+      var verdict, cls;
+      if(!match){
+        verdict = 'the file uploaded but was truncated';
+        cls = 'bad';
+      } else if(!usedSession){
+        verdict = 'the SIMPLE path works — but this file was under 4 MB, so the ' +
+                  'chunked path was NOT tested. Hypothesis 1 is still open.';
+        cls = 'warn';
+      } else if(chunk <= 1){
+        verdict = 'the chunked path works for a single-chunk file. Try something ' +
+                  'over 5 MB to exercise more than one chunk, which is where a ' +
+                  'session can stall.';
+        cls = 'warn';
+      } else {
+        verdict = 'the chunked path works across ' + chunk + ' chunks on this ' +
+                  'device — hypothesis 1 ruled out';
+        cls = 'ok';
+      }
+      line('upload', 'RESULT', verdict, cls);
+      line('upload', 'Left in SharePoint', '_diagnostics/' + meta.name, 'warn');
+    });
+  }).catch(function(e){
+    line('upload', 'FAILED after ' + ms(performance.now() - t0), (e && e.message) || String(e), 'bad');
+    if(e && e.unreadable){
+      line('upload', 'Diagnosis', 'the file could not be read on this device — hypothesis 2', 'bad');
+    } else if(e && e.stalled){
+      line('upload', 'Diagnosis',
+           'the session kept answering but stopped advancing — HYPOTHESIS 1 CONFIRMED', 'bad');
+    } else if(e && e.timedOut){
+      line('upload', 'Diagnosis',
+           'a request never answered — HYPOTHESIS 1, the chunked path hanging', 'bad');
+    } else if(e && e.status === 403){
+      line('upload', 'Diagnosis', 'signed in, but not permitted to write here', 'bad');
+    } else if(e && e.needsSignIn){
+      line('upload', 'Diagnosis',
+           'the refresh token was rejected mid-test, so the device is now signed out — hypothesis 3', 'bad');
+    } else {
+      line('upload', 'Diagnosis', 'read the trace below — this is a new failure', 'bad');
+    }
+  }).then(function(){
+    el('btn-upload').disabled = false;
+  });
+}
+
+/* ---------- 6 · what is actually in the database ----------
+   Two rounds were lost reading the home screen's status panel as though it were
+   the truth. It is a rendering of the truth, and a rendering can be stale, can
+   fail to repaint, and can carry a step marker left over from an attempt that
+   has since moved on. This reads IndexedDB directly. Read-only, deliberately. */
+var STATE_SNAPSHOT = null;
+
+/* Read the media store and hand back plain rows. No writes, ever. */
+function collectStoredState(cb){
+  var open = indexedDB.open(dbName());
+  open.onerror = function(){ cb(null, String(open.error || 'unknown')); };
+  open.onsuccess = function(){
+    var db = open.result;
+    if(!db.objectStoreNames.contains('media')) return cb([], null);
+    var rq = db.transaction('media').objectStore('media').getAll();
+    rq.onerror = function(){ try { db.close(); } catch(e){} cb(null, String(rq.error || 'unknown')); };
+    rq.onsuccess = function(){ try { db.close(); } catch(e){} cb(rq.result || [], null); };
+  };
+}
+
+function snapshotStoredState(next){
+  var moved = false;
+  function go(){ if(!moved){ moved = true; next(); } }
+  /* Never let a storage problem stop the rest of the page loading. */
+  var bail = setTimeout(go, 3000);
+  try {
+    collectStoredState(function(rows, err){
+      clearTimeout(bail);
+      STATE_SNAPSHOT = err ? null : rows.map(function(r){
+        var orig = r.original || r.blob;
+        return {name: r.name || r.mid, up: (r && r.up) || 'local',
+                upTries: r.upTries || 0, upReadFails: r.upReadFails || 0,
+                upRetryable: r.upRetryable, upErr: r.upErr,
+                bytes: orig && orig.size !== undefined ? orig.size : null,
+                origSize: r.origSize, uploaded: !!(r.remote && r.remote.itemId)};
+      });
+      go();
+    });
+  } catch(e){ clearTimeout(bail); go(); }
+}
+
+function stateRows(host, rows, label){
+  line(host, label, String(rows.length));
+  var counts = {};
+  rows.forEach(function(r){ counts[r.up] = (counts[r.up] || 0) + 1; });
+  Object.keys(counts).forEach(function(k){
+    var bad = (k === 'uploading' && counts[k] > 1);
+    line(host, 'state: ' + k,
+         String(counts[k]) + (bad ? '   IMPOSSIBLE \u2014 the queue holds one file in flight' : ''),
+         bad ? 'bad' : 'ok');
+  });
+  rows.forEach(function(r){
+    line(host, r.name,
+         'state=' + r.up + '  tries=' + r.upTries + '  readFails=' + r.upReadFails +
+         '  retryable=' + (r.upRetryable === false ? 'no' : 'yes') +
+         '  bytes=' + (r.bytes === null ? 'MISSING' : r.bytes) +
+         '  origSize=' + (r.origSize === undefined ? '?' : r.origSize) +
+         (r.uploaded ? '  uploaded' : '') +
+         (r.upErr ? '  err=' + r.upErr : ''));
+  });
+}
+
+function readStoredState(){
+  clear('state');
+  el('btn-state').disabled = true;
+  function done(){ el('btn-state').disabled = false; }
+  if(STATE_SNAPSHOT){
+    stateRows('state', STATE_SNAPSHOT,
+              'AS FOUND when this page opened, before the app booted');
+    line('state', '', '');
+  }
+  var open = indexedDB.open(dbName());
+  open.onerror = function(){
+    line('state', 'Could not open the database', String(open.error || 'unknown'), 'bad');
+    done();
+  };
+  open.onsuccess = function(){
+    var db = open.result;
+    if(!db.objectStoreNames.contains('media')){
+      line('state', 'No media store', 'nothing has been stored yet', 'warn');
+      return done();
+    }
+    var rq = db.transaction('media').objectStore('media').getAll();
+    rq.onerror = function(){
+      line('state', 'Could not read media', String(rq.error || 'unknown'), 'bad');
+      done();
+    };
+    rq.onsuccess = function(){
+      var all = rq.result || [];
+      line('state', 'NOW (the app has booted, so recovery has already run)', String(all.length));
+      var counts = {};
+      all.forEach(function(r){
+        var st = (r && r.up) || 'local';
+        counts[st] = (counts[st] || 0) + 1;
+      });
+      Object.keys(counts).forEach(function(k){
+        /* More than one record in 'uploading' is impossible if the queue is
+           behaving: it holds exactly one file in flight at a time. */
+        var bad = (k === 'uploading' && counts[k] > 1);
+        line('state', 'state: ' + k,
+             String(counts[k]) + (bad ? '   IMPOSSIBLE — the queue holds one file in flight' : ''),
+             bad ? 'bad' : 'ok');
+      });
+      all.forEach(function(r){
+        var orig = r.original || r.blob;
+        line('state', (r.name || r.mid),
+             'state=' + ((r && r.up) || 'local') +
+             '  tries=' + (r.upTries || 0) +
+             '  readFails=' + (r.upReadFails || 0) +
+             '  retryable=' + (r.upRetryable === false ? 'no' : 'yes') +
+             '  bytes=' + (orig && orig.size !== undefined ? orig.size : 'MISSING') +
+             '  origSize=' + (r.origSize === undefined ? '?' : r.origSize) +
+             (r.remote && r.remote.itemId ? '  uploaded' : '') +
+             (r.upErr ? '  err=' + r.upErr : ''));
+      });
+      try { db.close(); } catch(e){}
+      done();
+    };
+  };
+}
+
+/* ---------- 8b · delete the database ----------
+   The decisive test for fault 2, and possibly its only cure.
+
+   iOS Settings and the page agree that ~140 MB is held on a device whose every
+   store is empty, so the space is real. The leading explanation is that WebKit
+   keeps IndexedDB in a file that does not shrink when records are deleted:
+   emptying the stores frees pages inside the file and leaves the file the size
+   it grew to. Deleting the DATABASE removes the file instead of emptying it.
+
+   If the figure falls, that is the explanation and this is the reclaim. If it
+   does not, the explanation is wrong and the space is somewhere else. Either
+   answer is worth having; a button that only confirms is not a test. */
+
+/* Counted at the moment of the tap, never from an earlier reading. A stale
+   measurement is exactly how a destructive control ends up destroying
+   something. */
+function countAllStores(name, onProgress){
+  return new Promise(function(res, rej){
+    var open = indexedDB.open(name);
+    var settled = false;
+    var t0 = Date.now();
+
+    /* 45 seconds, not 8. The first attempt on the real device gave up after
+       eight and reported a failure that was really impatience: this is the
+       phone whose IndexedDB may be holding 140 MB, and opening a file that big
+       is not instant. A diagnostic that times out before the thing it measures
+       has finished is measuring itself. */
+    var tick = setInterval(function(){
+      if(settled) return;
+      var s = Math.round((Date.now() - t0) / 1000);
+      if(onProgress) onProgress('still opening… ' + s + 's');
+    }, 3000);
+
+    function finish(fn, arg){
+      if(settled) return;
+      settled = true;
+      clearInterval(tick);
+      clearTimeout(bail);
+      fn(arg);
+    }
+
+    var bail = setTimeout(function(){
+      finish(rej, new Error('the database did not open within 45 seconds. On this ' +
+        'device that is itself a finding - an empty database should open at once. ' +
+        'Nothing has been deleted. See the fallback below.'));
+    }, 45000);
+
+    /* WebKit fires this when another connection is holding an upgrade open, and
+       without a handler the request simply never settles - which is exactly how
+       the 8-second version looked like a dead database rather than a busy one. */
+    open.onblocked = function(){
+      finish(rej, new Error('BLOCKED - something else holds the database open. ' +
+        'Close every other tab showing this app, then reload this page. ' +
+        'Nothing has been deleted.'));
+    };
+
+    /* Only reachable if the database is absent, in which case there is nothing
+       to reclaim and nothing to delete. Worth saying rather than silently
+       creating an empty one and deleting it again. */
+    open.onupgradeneeded = function(){
+      if(onProgress) onProgress('the database did not exist - creating it to read it');
+    };
+
+    open.onerror = function(){ finish(rej, open.error || new Error('could not open')); };
+    open.onsuccess = function(){
+      if(settled){ try { open.result.close(); } catch(e){} return; }
+      settled = true;
+      clearInterval(tick);
+      clearTimeout(bail);
+      var db = open.result;
+      var names = Array.prototype.slice.call(db.objectStoreNames);
+      if(!names.length){ try { db.close(); } catch(e){} return res({}); }
+      var counts = {};
+      names.reduce(function(chain, n){
+        return chain.then(function(){
+          return new Promise(function(ok){
+            var rq = db.transaction(n).objectStore(n).count();
+            rq.onsuccess = function(){ counts[n] = rq.result; ok(); };
+            rq.onerror   = function(){ counts[n] = -1; ok(); };
+          });
+        });
+      }, Promise.resolve()).then(function(){
+        try { db.close(); } catch(e){}
+        res(counts);
+      });
+    };
+  });
+}
+
+/* The app caches its connection in a module-local `_db` and exposes no way to
+   close it, so the only reliable way to release it is to destroy the context
+   holding it. Removing the frame does that. Without this, deleteDatabase()
+   fires onblocked and waits for ever. */
+function closeTheApp(){
+  var f = el('app');
+  if(f){
+    try { f.src = 'about:blank'; } catch(e){}
+    try { f.parentNode && f.parentNode.removeChild(f); } catch(e){}
+  }
+  W = null;
+}
+
+function dropDatabase(){
+  clear('dropdb');
+  el('btn-dropdb').disabled = true;
+  function done(){ el('btn-dropdb').disabled = false; }
+
+  var beforeUsage = null;
+  var progress = line('dropdb', 'Opening the database', 'a moment…');
+
+  guardEmpty(dbName(), 'dropdb', function(msg){
+    progress.children[1].textContent = msg;
+  }).then(function(){
+    progress.children[1].textContent = 'opened';
+    return (navigator.storage && navigator.storage.estimate)
+      ? navigator.storage.estimate() : Promise.resolve(null);
+  }).then(function(est){
+    beforeUsage = est ? (est.usage || 0) : null;
+    if(beforeUsage !== null) line('dropdb', 'Storage before', mb(beforeUsage));
+
+    var ok = window.confirm(
+      'Delete ' + dbName() + ' on this device?\n\n' +
+      'Every store is empty, so no inspection, photo or byte record will be ' +
+      'lost. Nothing in SharePoint is touched.\n\n' +
+      'This closes the app running on this page. Reload afterwards.');
+    if(!ok){
+      line('dropdb', 'Cancelled', 'nothing was deleted', 'ok');
+      throw {handled: true};
+    }
+
+    closeTheApp();
+    line('dropdb', 'App frame closed', 'its database connection is released');
+    /* A beat for the frame's teardown to land before asking for the delete, so
+       the common case does not go down the blocked path. */
+    return new Promise(function(r){ setTimeout(r, 400); });
+  }).then(function(){
+    return deleteDatabaseNamed(dbName(), 'dropdb');
+  }).then(function(){
+    line('dropdb', 'Database deleted', dbName() + ' is gone', 'ok');
+    /* The figure updates lazily, so give it a moment rather than reporting the
+       first number that comes back as though it were final. */
+    return new Promise(function(r){ setTimeout(r, 1500); });
+  }).then(function(){
+    return (navigator.storage && navigator.storage.estimate)
+      ? navigator.storage.estimate() : Promise.resolve(null);
+  }).then(function(est){
+    if(!est || beforeUsage === null){
+      line('dropdb', 'No figure to compare', 'measure by hand instead', 'warn');
+      return;
+    }
+    var after = est.usage || 0;
+    var freed = beforeUsage - after;
+    line('dropdb', 'Storage after', mb(after));
+    line('dropdb', 'Reclaimed', mb(freed), freed > 20 * 1048576 ? 'ok' : 'warn');
+
+    /* There was nothing here to reclaim, so this run cannot say where the space
+       had been. Reporting "the file was NOT where the space was" from an already
+       empty device is a verdict drawn from no evidence — which is exactly what
+       happened on 22 August at 1:24am. */
+    if(beforeUsage < 20 * 1048576){
+      line('dropdb', 'RESULT',
+           'INCONCLUSIVE. Only ' + mb(beforeUsage) + ' was in use before this ran, ' +
+           'so there was nothing to reclaim and this run proves nothing about where ' +
+           'the space had been. If a previous delete reported a timeout, it may well ' +
+           'have completed afterwards once the tab holding the database closed — a ' +
+           'delete that times out here is abandoned by this page, not cancelled in ' +
+           'the browser.', 'warn');
+    } else if(freed > 20 * 1048576){
+      line('dropdb', 'RESULT',
+           'the space came back, so it was the database file holding it — records ' +
+           'were deleted, the file that held them was not.', 'ok');
+    } else {
+      line('dropdb', 'RESULT',
+           'the figure barely moved, so the database file was NOT where the space ' +
+           'was. Check iOS Settings, Safari, Advanced, Website Data before ' +
+           'concluding anything, because this figure updates lazily.', 'bad');
+    }
+    line('dropdb', 'Now reload this page',
+         'the app frame was closed, so the other sections need a fresh load', 'warn');
+  }).catch(function(e){
+    reportDropFailure(e, 'dropdb');
+  }).then(done);
+}
+
+/* Counts every store and REFUSES if any of them holds anything. Shared by the
+   button above and the legacy list below, because a destructive control that
+   trusts a reading taken earlier is how the wrong device gets wiped — and
+   because two copies of this guard is one copy too many. */
+function guardEmpty(name, host, onProgress){
+  return countAllStores(name, onProgress).then(function(counts){
+    var names = Object.keys(counts);
+    var occupied = names.filter(function(n){ return counts[n] > 0; });
+
+    names.forEach(function(n){
+      line(host, 'store: ' + n,
+           (counts[n] < 0 ? 'could not be counted' : counts[n] + ' rows'),
+           counts[n] > 0 ? 'bad' : 'ok');
+    });
+
+    if(occupied.length){
+      line(host, 'REFUSED',
+           'this database is not empty — ' +
+           occupied.map(function(n){ return counts[n] + ' in ' + n; }).join(', ') +
+           '. Nothing has been deleted.', 'bad');
+      throw {handled: true};
+    }
+    if(names.some(function(n){ return counts[n] < 0; })){
+      line(host, 'REFUSED',
+           'a store could not be counted, so emptiness cannot be established. ' +
+           'Nothing has been deleted.', 'bad');
+      throw {handled: true};
+    }
+    if(!names.length){
+      line(host, 'No object stores', 'nothing in it to lose', 'ok');
+    } else {
+      line(host, 'Every store is empty', 'safe to delete', 'ok');
+    }
+    return counts;
+  });
+}
+
+/* The delete request itself. Everything hard-won about it lives here once:
+   WebKit does not reliably fire onblocked for a delete, so a held connection
+   looks like nothing happening at all; onblocked when it DOES fire is not
+   fatal, because the delete proceeds the moment the holders let go; and the
+   deadline is the only thing entitled to give up. */
+function deleteDatabaseNamed(name, host){
+  return new Promise(function(res, rej){
+    var rq = indexedDB.deleteDatabase(name);
+    var settled = false;
+    var bail = setTimeout(function(){
+      if(settled) return;
+      settled = true;
+      rej(new Error('the delete of ' + name + ' neither finished nor reported being ' +
+                    'blocked within 45 seconds. Something still holds it open and ' +
+                    'WebKit is not saying so. The usual cause is an app open in ' +
+                    'another Safari tab — close that tab, not just this page, then ' +
+                    'reload and try again.'));
+    }, 45000);
+    rq.onsuccess = function(){ if(!settled){ settled = true; clearTimeout(bail); res(true); } };
+    rq.onerror   = function(){ if(!settled){ settled = true; clearTimeout(bail); rej(rq.error || new Error('delete failed')); } };
+    rq.onblocked = function(){
+      if(settled) return;
+      line(host, 'Waiting', 'something still holds ' + name + ' open — giving it time', 'warn');
+    };
+  });
+}
+
+function reportDropFailure(e, host){
+  if(e && e.handled) return;
+  line(host, 'FAILED', (e && e.message) || String(e), 'bad');
+  line(host, 'Nothing has been deleted',
+       'this refuses to act on a database it cannot read, which is the point of it');
+  /* The route that needs no part of this page. A bigger hammer — it takes the
+     sign-in and both apps' offline copies — but it costs nothing on a device
+     with no inspections on it. */
+  line(host, 'Fallback, outside this page',
+       'Settings → Safari → Advanced → Website Data → SHOW ALL SITES → ' +
+       'ds-js1.github.io → swipe → Delete. Show All Sites is the step that gets ' +
+       'missed: without it the entry you want may not be listed at all.', 'warn');
+}
+
+/* ---------- 8c · databases this build does not use ----------
+
+   The button above deletes only the database THIS build opens. Until 22 August
+   2026 the live app and the beta shared one, and a device that opened the beta
+   was left holding a database the live app could no longer open — it fails
+   silently, drawing its shell with no list and no storage line, which reads as
+   a working app.
+
+   Separating them fixed it going forward and did nothing for a handset already
+   in that state: the leftover became a database nothing on this page pointed
+   at, and therefore nothing on this page could clear. This is that gap closed. */
+function scanOtherDatabases(){
+  clear('otherdbs');
+  el('btn-scandbs').disabled = true;
+  function done(){ el('btn-scandbs').disabled = false; }
+
+  if(typeof indexedDB.databases !== 'function'){
+    line('otherdbs', 'Cannot list databases',
+         'this browser will not enumerate them. Use the Settings fallback: ' +
+         'Settings → Safari → Advanced → Website Data → Show All Sites.', 'warn');
+    return done();
+  }
+
+  indexedDB.databases().then(function(list){
+    list = (list || []).filter(function(d){ return d && d.name; });
+    line('otherdbs', 'Databases on this origin', String(list.length));
+
+    var others = list.filter(function(d){ return d.name !== dbName(); });
+    list.forEach(function(d){
+      var mine = d.name === dbName();
+      line('otherdbs', d.name,
+           'version ' + (d.version === undefined ? '?' : d.version) +
+           (mine ? '   — used by THIS build, use the button above' : ''),
+           mine ? 'ok' : 'warn');
+    });
+
+    if(!others.length){
+      line('otherdbs', 'Nothing to clean up',
+           'no database here belongs to another build', 'ok');
+      return;
+    }
+
+    others.forEach(function(d){
+      var row = document.createElement('div');
+      row.className = 'row';
+      var btn = document.createElement('button');
+      btn.className = 'danger';
+      btn.textContent = 'Delete ' + d.name;
+      btn.onclick = function(){ btn.disabled = true; dropOther(d.name); };
+      var k = document.createElement('span');
+      k.className = 'k';
+      k.textContent = 'Left over from another build';
+      row.appendChild(k);
+      row.appendChild(btn);
+      el('otherdbs').appendChild(row);
+    });
+  }, function(e){
+    line('otherdbs', 'Could not list databases', (e && e.message) || String(e), 'bad');
+  }).then(done);
+}
+
+function dropOther(name){
+  line('otherdbs', '', '');
+  line('otherdbs', 'Checking ' + name, 'counting its stores…');
+
+  guardEmpty(name, 'otherdbs').then(function(){
+    var ok = window.confirm(
+      'Delete ' + name + '?\n\n' +
+      'It belongs to another build, and every store in it is empty. Nothing in ' +
+      'SharePoint is touched, and the database this page uses is not affected.');
+    if(!ok){
+      line('otherdbs', 'Cancelled', 'nothing was deleted', 'ok');
+      throw {handled: true};
+    }
+    return deleteDatabaseNamed(name, 'otherdbs');
+  }).then(function(){
+    line('otherdbs', 'Deleted', name + ' is gone', 'ok');
+    line('otherdbs', 'Now check the other app',
+         'open it and confirm it draws its list and its storage line. That is what ' +
+         'proves the leftover was what had been stopping it.', 'warn');
+  }).catch(function(e){
+    reportDropFailure(e, 'otherdbs');
+  });
+}
+
+/* ---------- 7 · the library columns ----------
+   Fault 1 of docs/HANDOFF-baton-columns-not-read-and-storage.md. The library
+   showed BatonStatus and BatonHolder set; the app reading the same folder saw
+   neither, so "Force the handover" — gated on the held state, which needs
+   BatonHolder — could never be offered to anybody.
+
+   The handoff says PROVE IT BEFORE FIXING IT. This is the proof. */
+
+/* The form the app used until 22 August 2026, kept deliberately as a CONTROL.
+
+   It is not here for nostalgia. It is the thing that must keep failing: if this
+   ever starts returning fields, the control has stopped discriminating and a
+   pass from this section stops meaning anything. Graph confirmed the mechanism
+   on the device - under this form listItem came back holding nothing but an
+   etag, and under the documented form the same folder carried BatonHolder. */
+var Q_OLD      = '?select=id,name,size,eTag,lastModifiedDateTime,folder,file,webUrl' +
+                 '&expand=listItem($select=fields)&$top=200';
+
+/* The documented form, and since 22 August 2026 the one ds-sharepoint.js uses.
+   $expand on the nested navigation property, not $select. Reading 1 should now
+   match this; if it does not, the fix has been undone. */
+var Q_PROPOSED = '?$select=id,name,size,eTag,lastModifiedDateTime,folder,file,webUrl' +
+                 '&$expand=listItem($expand=fields)&$top=200';
+
+var BATON_COLS = ['BatonStatus', 'BatonHolder', 'Stage'];
+
+/* A raw Graph GET that keeps the body whether or not the call succeeded. The
+   error body is frequently the only thing that says WHY. */
+function graphGet(url){
+  return auth.getToken().then(function(tok){
+    return tracingFetch(url, {headers: {Authorization: 'Bearer ' + tok}});
+  }).then(function(res){
+    return res.text().then(function(body){
+      var data = null;
+      try { data = JSON.parse(body); } catch(e){}
+      if(!res.ok){
+        var err = new Error('Graph ' + res.status + ' — ' +
+                  ((data && data.error && data.error.message) || body.slice(0, 240)));
+        err.status = res.status;
+        err.body = body;
+        throw err;
+      }
+      return data;
+    });
+  });
+}
+
+/* Folders only. Files do not carry the baton, and counting them would dilute
+   the one number this section exists to produce. */
+function rawFolders(raw){
+  return ((raw && raw.value) || []).filter(function(it){ return !!it.folder; });
+}
+
+function withFieldsCount(folders){
+  return folders.filter(function(it){
+    return !!(it.listItem && it.listItem.fields);
+  }).length;
+}
+
+/* The folder whose raw response gets printed: the one that was asked for, or an
+   exact-then-partial name match, or failing that the first folder there is. */
+function pickFocus(folders, want){
+  if(!folders.length) return null;
+  if(want){
+    var w = want.toLowerCase();
+    var exact = folders.filter(function(it){ return String(it.name).toLowerCase() === w; })[0];
+    if(exact) return exact;
+    var part = folders.filter(function(it){ return String(it.name).toLowerCase().indexOf(w) !== -1; })[0];
+    if(part) return part;
+  }
+  return folders[0];
+}
+
+function colsOf(fields){
+  var f = fields || {};
+  return BATON_COLS.map(function(k){
+    var v = f[k];
+    return k + '=' + (v === undefined ? '(absent)' : (String(v) === '' ? '(empty)' : v));
+  }).join('  ');
+}
+
+var COLS_LIST_CAP = 12;
+
+function compareColumnQueries(){
+  clear('cols');
+  el('colsraw').textContent = '';
+  if(!auth.isSignedIn()){
+    line('cols', 'Cannot run', 'not signed in — sign in on the main app first, then come back', 'bad');
+    return;
+  }
+  el('btn-cols').disabled = true;
+
+  var want = (el('colfolder').value || '').trim();
+  var t = makeTransport();
+  var r = {};                       /* what each reading found */
+  var dump = [];                    /* raw JSON, printed at the end */
+
+  t.resolveDrive().then(function(id){
+    /* The library ROOT. Not a path — the take-over picker lists the root, and
+       the top-level folder is the only one that carries the baton. Same URL
+       shape ds-sharepoint.js uses for the pathless case. */
+    r.base = 'https://graph.microsoft.com/v1.0/drives/' + id + '/root/children';
+
+    /* ---- reading 1: the app exactly as it ships. Cannot drift. ---- */
+    return t.list('');
+  }).then(function(rows){
+    var folders = rows.filter(function(x){ return x.isFolder; });
+    var withF   = folders.filter(function(x){ return !!x.fields; });
+    r.appFolders = folders.length;
+    r.appWith    = withF.length;
+    line('cols', '1 · The app as it ships — folders in the library root', String(folders.length));
+    line('cols', '1 · …of those, arriving with their columns',
+         withF.length + ' of ' + folders.length,
+         withF.length ? 'ok' : 'bad');
+
+    /* ---- reading 2: the same query again, raw ---- */
+    return graphGet(r.base + Q_OLD);
+  }).then(function(raw){
+    var folders = rawFolders(raw);
+    r.shipFolders = folders.length;
+    r.shipWith    = withFieldsCount(folders);
+    r.shipFocus   = pickFocus(folders, want);
+    line('cols', '2 · The OLD form, raw (control) — folders returned', String(folders.length));
+    line('cols', '2 · …with a populated listItem.fields',
+         r.shipWith + ' of ' + folders.length + '   (nought is correct)',
+         r.shipWith ? 'warn' : 'ok');
+    if(raw && raw['@odata.nextLink']){
+      line('cols', '2 · More pages exist', 'only the first page was read — enough to decide this', 'warn');
+    }
+    dump.push('== 2 · OLD FORM (control) ==\n' + r.base + Q_OLD + '\n\n' +
+              (r.shipFocus ? JSON.stringify(r.shipFocus, null, 2) : '(no folders returned)'));
+
+    /* ---- reading 3: the documented form ---- */
+    return graphGet(r.base + Q_PROPOSED);
+  }).then(function(raw){
+    var folders = rawFolders(raw);
+    r.fixFolders = folders.length;
+    r.fixWith    = withFieldsCount(folders);
+    r.fixFocus   = pickFocus(folders, want);
+    line('cols', '3 · The documented form, raw — folders returned', String(folders.length));
+    line('cols', '3 · …with a populated listItem.fields',
+         r.fixWith + ' of ' + folders.length,
+         r.fixWith ? 'ok' : 'bad');
+    dump.push('== 3 · PROPOSED QUERY ==\n' + r.base + Q_PROPOSED + '\n\n' +
+              (r.fixFocus ? JSON.stringify(r.fixFocus, null, 2) : '(no folders returned)'));
+
+    /* The columns themselves, for as many folders as fit on a phone. This is
+       what somebody standing in front of the library can check by eye. */
+    line('cols', '', '');
+    folders.slice(0, COLS_LIST_CAP).forEach(function(it){
+      var f = it.listItem && it.listItem.fields;
+      line('cols', it.name, f ? colsOf(f) : 'no fields object at all', f ? '' : 'bad');
+    });
+    if(folders.length > COLS_LIST_CAP){
+      line('cols', '…and ' + (folders.length - COLS_LIST_CAP) + ' more', 'not listed, to keep this readable');
+    }
+
+    /* ---- is the control still a control? ---- */
+    line('cols', '', '');
+    if(r.shipWith > 0){
+      line('cols', 'WARNING — the old form returned columns',
+           'the control has stopped discriminating, so a pass here no longer ' +
+           'proves anything about the fix. Graph\u2019s behaviour has changed.', 'warn');
+    }
+
+    /* ---- the verdict ---- */
+    var blind = (r.appFolders > 0 && r.appWith === 0);
+    var verdict, cls;
+    if(!r.appFolders){
+      verdict = 'the library root has no folders, so there was nothing to read. ' +
+                'Nothing is proved either way — run this where inspections exist.';
+      cls = 'warn';
+    } else if(blind && r.fixWith > 0){
+      verdict = 'REGRESSION. The app receives no columns while the documented ' +
+                'form receives them from the same folders at the same moment — ' +
+                'which is exactly the 21 August fault, back again. Check the ' +
+                'listing query in ds-sharepoint.js still uses ' +
+                '$expand=listItem($expand=fields).';
+      cls = 'bad';
+    } else if(blind && r.fixWith === 0){
+      verdict = 'the app is blind to the columns — but so is the documented query, ' +
+                'so the query string is NOT the whole story. Check the columns ' +
+                'exist on the library and that this account can see them. ' +
+                'Do not change the query on this evidence.';
+      cls = 'warn';
+    } else if(r.appWith < r.appFolders){
+      verdict = 'the app reads columns from ' + r.appWith + ' of ' + r.appFolders +
+                ' folders. Partial, not blind — so the query works, and the folders ' +
+                'without columns were never tagged. That is a different fault.';
+      cls = 'warn';
+    } else if(r.shipWith > 0){
+      verdict = 'the app reads the columns from every folder, but so does the ' +
+                'control, so this run cannot tell a working fix from a Graph that ' +
+                'no longer cares which form is used. Healthy, but unproven.';
+      cls = 'warn';
+    } else {
+      verdict = 'HEALTHY. The app reads the columns from every folder, and the ' +
+                'old form still returns none from those same folders — so the fix ' +
+                'is in place and doing the work.';
+      cls = 'ok';
+    }
+    line('cols', 'VERDICT', verdict, cls);
+
+    if(want && r.fixFocus && String(r.fixFocus.name).toLowerCase().indexOf(want.toLowerCase()) === -1){
+      line('cols', 'Note', '"' + want + '" was not found — printed "' + r.fixFocus.name + '" instead', 'warn');
+    }
+    el('colsraw').textContent = dump.join('\n\n');
+  }).catch(function(e){
+    line('cols', 'FAILED', (e && e.message) || String(e), 'bad');
+    if(e && e.status === 403){
+      line('cols', 'Diagnosis', 'signed in, but not permitted to read this library', 'bad');
+    } else if(e && e.status === 400){
+      line('cols', 'Diagnosis',
+           'Graph rejected the query outright. That is itself an answer — read the body below.', 'bad');
+    }
+    if(e && e.body) el('colsraw').textContent = e.body;
+  }).then(function(){
+    el('btn-cols').disabled = false;
+  });
+}
+
+/* ---------- 8 · where the storage has gone ----------
+   Fault 2 of docs/HANDOFF-baton-columns-not-read-and-storage.md. A device
+   reporting 140.5 MB in use while showing "No inspections yet".
+
+   Before this existed the page read only the media store, so it could report
+   which photos were stranded but had nothing whatever to say about where the
+   space went. Attribution first: blaming the sweep before knowing whether the
+   bytes are even in this app's database is how a session gets spent on the
+   wrong layer. Read-only throughout — this page does not sweep, tidy or delete. */
+
+function mb(n){
+  if(n === null || n === undefined || isNaN(n)) return '?';
+  return (n / 1048576).toFixed(1) + ' MB';
+}
+
+/* An approximate size for anything IndexedDB will hand back. Exact where it
+   matters — an ArrayBuffer IS the photograph and its byteLength is the truth.
+   Everything else is small enough that an estimate cannot mislead. */
+function approxBytes(v, depth){
+  depth = depth || 0;
+  if(v === null || v === undefined) return 0;
+  if(depth > 8) return 0;                       /* cycles, and silly nesting */
+  var t = typeof v;
+  if(t === 'string')  return v.length * 2;
+  if(t === 'number')  return 8;
+  if(t === 'boolean') return 4;
+  if(v instanceof ArrayBuffer) return v.byteLength;
+  if(ArrayBuffer.isView(v)) return v.byteLength;
+  if(typeof Blob !== 'undefined' && v instanceof Blob) return v.size;
+  if(v instanceof Date) return 8;
+  if(Array.isArray(v)){
+    var n = 0;
+    for(var i = 0; i < v.length; i++) n += approxBytes(v[i], depth + 1);
+    return n;
+  }
+  if(t === 'object'){
+    var s = 0;
+    for(var k in v){
+      if(Object.prototype.hasOwnProperty.call(v, k)) s += k.length * 2 + approxBytes(v[k], depth + 1);
+    }
+    return s;
+  }
+  return 0;
+}
+
+/* A cursor, not getAll(). The bytes store holds whole photographs and videos,
+   and getAll() would pull every one of them into memory at once on the device
+   least able to afford it. Running the phone out of memory inside the page that
+   exists to diagnose running the phone out of space would be a poor joke —
+   and the app's own sweepOrphanBytes() does exactly that at index.html:4573,
+   which is worth a look once this has produced its numbers. */
+function walkStore(db, name, onRow){
+  return new Promise(function(res, rej){
+    var rq;
+    try { rq = db.transaction(name).objectStore(name).openCursor(); }
+    catch(e){ return rej(e); }
+    rq.onerror = function(){ rej(rq.error || new Error('cursor failed')); };
+    rq.onsuccess = function(){
+      var c = rq.result;
+      if(!c) return res();
+      try { onRow(c.value, c.key); } catch(e){}
+      c.continue();
+    };
+  });
+}
+
+var CACHE_SCAN_CAP = 400;
+var ORPHAN_LIST_CAP = 12;
+
+/* Taken BEFORE the app boots, and this is not a nicety.
+
+   Loading the app in the frame carries ?nosw=1, and index.html:4984 answers that
+   flag by unregistering every service worker AND DELETING EVERY CACHE on the
+   origin. So by the time anybody taps "Measure everything", the caches this
+   section exists to attribute have already been destroyed by the act of opening
+   the page, and the storage figure has moved because deleting them freed space.
+
+   The first version of this section measured after boot and confidently reported
+   nought caches on a device that had two. Section 6 learned the same lesson about
+   the media store one fault earlier; this is that lesson applied to the caches. */
+var CACHE_SNAPSHOT = null;      /* [{name, entries, bytes|null}] */
+var ESTIMATE_SNAPSHOT = null;   /* {usage, quota, details} */
+
+/* Names and counts first, sizes second. If the deadline bites we still want the
+   names, because "is there a cache here belonging to another build" is the
+   question that matters most and it is answered by the name alone. */
+function collectCaches(deadline){
+  if(!(window.caches && caches.keys)) return Promise.resolve(null);
+  var stop = false;
+  setTimeout(function(){ stop = true; }, deadline || 6000);
+
+  return caches.keys().then(function(keys){
+    keys = keys || [];
+    return keys.reduce(function(chain, name){
+      return chain.then(function(acc){
+        return caches.open(name).then(function(c){
+          return c.keys().then(function(reqs){
+            reqs = reqs || [];
+            var row = {name: name, entries: reqs.length, bytes: stop ? null : 0};
+            if(stop) { acc.push(row); return acc; }
+            var take = reqs.slice(0, CACHE_SCAN_CAP);
+            row.capped = reqs.length > CACHE_SCAN_CAP;
+            return take.reduce(function(inner, rq){
+              return inner.then(function(){
+                if(stop){ row.bytes = null; return null; }
+                return c.match(rq).then(function(resp){
+                  if(!resp) return null;
+                  var len = resp.headers.get('content-length');
+                  if(len && !isNaN(+len)){ row.bytes += +len; return null; }
+                  return resp.blob().then(function(b){ row.bytes += b.size; }, function(){});
+                }, function(){});
+              });
+            }, Promise.resolve()).then(function(){ acc.push(row); return acc; });
+          });
+        }, function(){
+          acc.push({name: name, entries: null, bytes: null});
+          return acc;
+        });
+      });
+    }, Promise.resolve([]));
+  }, function(){ return null; });
+}
+
+/* Both snapshots, with their own deadline, so a slow or broken cache store can
+   never stop the page loading. Everything here is read-only. */
+function snapshotOrigin(next){
+  var moved = false;
+  function go(){ if(!moved){ moved = true; next(); } }
+  var bail = setTimeout(go, 7000);
+
+  var est = (navigator.storage && navigator.storage.estimate)
+    ? navigator.storage.estimate().then(function(e){
+        ESTIMATE_SNAPSHOT = {usage: e.usage || 0, quota: e.quota || 0,
+                             details: e.usageDetails || null};
+      }, function(){})
+    : Promise.resolve();
+
+  est.then(function(){ return collectCaches(5000); })
+     .then(function(rows){ CACHE_SNAPSHOT = rows; })
+     .catch(function(){})
+     .then(function(){ clearTimeout(bail); go(); });
+}
+
+function measureStorage(){
+  clear('storage');
+  el('btn-storage').disabled = true;
+
+  var total = {usage: 0, quota: 0, idb: 0, cache: 0, local: 0, detailed: false};
+
+  /* ---- what the browser says, for the whole origin ---- */
+  function stepEstimate(){
+    if(!(navigator.storage && navigator.storage.estimate)){
+      line('storage', 'Browser storage estimate', 'not available here', 'warn');
+      return Promise.resolve();
+    }
+    /* The snapshot, not a fresh reading. A fresh one is taken after this page
+       has already deleted the caches, and would understate the figure that is
+       actually under investigation. */
+    var snap = ESTIMATE_SNAPSHOT;
+    return navigator.storage.estimate().then(function(live){
+      var e = snap || live;
+      total.usage = e.usage || 0;
+      total.quota = e.quota || 0;
+      var pct = e.quota ? Math.round((e.usage / e.quota) * 100) : 0;
+      line('storage', 'WHOLE ORIGIN — in use AS FOUND, before this page booted',
+           mb(e.usage) + ' of ' + mb(e.quota) + ' (' + pct + '%)', pct > 85 ? 'warn' : '');
+      if(snap){
+        line('storage', '  · and now, after this page cleared the caches',
+             mb(live.usage) + '   (the drop is this page\u2019s own doing, not a leak)');
+      } else {
+        line('storage', '  · snapshot unavailable',
+             'this is a reading taken AFTER the caches were cleared, so it understates ' +
+             'what was there. Reopen the page and let it settle before tapping.', 'warn');
+      }
+      line('storage', 'Origin measured', location.origin);
+      var d = e.details || e.usageDetails;
+      if(d && Object.keys(d).length){
+        total.detailed = true;
+        total.saysCache = d.caches || 0;
+        total.saysIdb   = d.indexedDB || 0;
+        Object.keys(d).forEach(function(k){ line('storage', '  · ' + k, mb(d[k])); });
+      } else {
+        line('storage', '  · the browser offers no breakdown by kind',
+             'so the rows below measure it directly', 'warn');
+      }
+    }, function(){
+      line('storage', 'Browser storage estimate', 'failed', 'warn');
+    });
+  }
+
+  /* Every database on the origin, not just this app's. The live v1.3 app and
+     the beta share this origin, and a database belonging to the other one is a
+     perfectly good explanation for space this app cannot account for. */
+  function stepDatabases(){
+    if(typeof indexedDB.databases !== 'function'){
+      line('storage', 'Databases on this origin', 'this browser will not list them', 'warn');
+      return Promise.resolve();
+    }
+    return indexedDB.databases().then(function(list){
+      list = list || [];
+      line('storage', 'Databases on this origin', String(list.length));
+      list.forEach(function(d){
+        line('storage', '  · ' + (d.name || '(unnamed)'), 'version ' + (d.version === undefined ? '?' : d.version),
+             d.name === dbName() ? '' : 'warn');
+      });
+    }, function(){
+      line('storage', 'Databases on this origin', 'could not be listed', 'warn');
+      return null;
+    });
+  }
+
+  /* ---- every store in this app's database, counted and weighed ---- */
+  function stepStores(){
+    return new Promise(function(res){
+      var open = indexedDB.open(dbName());
+      var bail = setTimeout(function(){
+        line('storage', dbName(), 'did not open within 8 seconds — another tab may hold it', 'bad');
+        res();
+      }, 8000);
+      open.onerror = function(){
+        clearTimeout(bail);
+        line('storage', 'Could not open ds-inspections', String(open.error || 'unknown'), 'bad');
+        res();
+      };
+      open.onsuccess = function(){
+        clearTimeout(bail);
+        var db = open.result;
+        var names = Array.prototype.slice.call(db.objectStoreNames);
+        var inspIds = {}, media = {}, byteRows = [];
+        var chain = Promise.resolve();
+
+        line('storage', '', '');
+        line('storage', 'DATABASE ds-inspections — version ' + db.version,
+             names.length + ' stores');
+
+        names.forEach(function(n){
+          chain = chain.then(function(){
+            var rows = 0, bytes = 0, orig = 0, rep = 0;
+            return walkStore(db, n, function(v){
+              rows++;
+              bytes += approxBytes(v);
+              if(n === 'bytes'){
+                byteRows.push(v && v.mid);
+                orig += approxBytes(v && v.original);
+                rep  += approxBytes(v && v.report);
+              } else if(n === 'media'){
+                if(v && v.mid) media[v.mid] = {iid: (v.iid || null), name: (v.name || v.mid)};
+              } else if(n === 'inspections'){
+                if(v && v.id) inspIds[v.id] = true;
+              }
+            }).then(function(){
+              total.idb += bytes;
+              line('storage', 'store: ' + n, rows + ' rows · ' + mb(bytes));
+              if(n === 'bytes' && rows){
+                line('storage', '  · originals', mb(orig));
+                line('storage', '  · reports', mb(rep));
+              }
+            }, function(e){
+              line('storage', 'store: ' + n, 'could not be read — ' + ((e && e.message) || e), 'bad');
+            });
+          });
+        });
+
+        chain.then(function(){
+          try { db.close(); } catch(e){}
+          /* The lead from the handoff: six media records on a device carrying a
+             single two-photo inspection. A media record whose inspection is gone
+             is nobody's job to clear — sweepOrphanBytes() reclaims bytes whose
+             MEDIA record has gone, which is the next link down the chain. */
+          var inspCount   = Object.keys(inspIds).length;
+          var mids        = Object.keys(media);
+          var orphanMedia = mids.filter(function(m){
+            var iid = media[m].iid;
+            return !iid || !inspIds[iid];
+          });
+          var orphanBytes = byteRows.filter(function(m){ return !m || !media[m]; });
+
+          line('storage', '', '');
+          line('storage', 'Inspections on this device', String(inspCount));
+          line('storage', 'Media records', String(mids.length));
+          line('storage', 'Media records whose inspection is gone',
+               String(orphanMedia.length) +
+               (orphanMedia.length ? '   nothing reclaims these' : ''),
+               orphanMedia.length ? 'bad' : 'ok');
+          line('storage', 'Byte records whose media record is gone',
+               String(orphanBytes.length) +
+               (orphanBytes.length ? '   sweepOrphanBytes() should reclaim these' : ''),
+               orphanBytes.length ? 'warn' : 'ok');
+
+          orphanMedia.slice(0, ORPHAN_LIST_CAP).forEach(function(m){
+            line('storage', '  orphan media: ' + media[m].name,
+                 'iid=' + (media[m].iid || '(none)'), 'bad');
+          });
+          if(orphanMedia.length > ORPHAN_LIST_CAP){
+            line('storage', '  …and ' + (orphanMedia.length - ORPHAN_LIST_CAP) + ' more', '');
+          }
+          res();
+        });
+      };
+    });
+  }
+
+  /* ---- the caches, and which build each one belongs to ---- */
+  function stepCaches(){
+    if(!(window.caches && caches.keys)){
+      line('storage', 'Caches', 'not available here', 'warn');
+      return Promise.resolve();
+    }
+    var current = null;
+    /* Read the live CACHE_VERSION out of sw.js rather than repeating it here.
+       A second copy of a version string is a second thing to forget to bump,
+       and this page must never be the reason a stale build looks current. */
+    return window.fetch('sw.js?diag=' + Date.now(), {cache: 'no-store'})
+      .then(function(r){ return r.ok ? r.text() : ''; }, function(){ return ''; })
+      .then(function(src){
+        var m = src.match(/CACHE_VERSION\s*=\s*'([^']+)'/);
+        current = m ? m[1] : null;
+        line('storage', '', '');
+        line('storage', 'Current CACHE_VERSION, read from sw.js',
+             current || 'could not be read', current ? '' : 'warn');
+        return caches.keys();
+      })
+      .then(function(){
+        var rows = CACHE_SNAPSHOT;
+        if(!rows){
+          line('storage', 'Caches AS FOUND', 'could not be captured before boot', 'bad');
+          return null;
+        }
+        line('storage', 'Caches AS FOUND, before this page cleared them', String(rows.length));
+        rows.forEach(function(r){
+          var stale = !!(current && r.name !== current);
+          total.cache += (r.bytes || 0);
+          line('storage', 'cache: ' + r.name,
+               (r.entries === null ? '?' : r.entries) + ' entries · ' +
+               (r.bytes === null ? 'size not measured in time' : mb(r.bytes)) +
+               (r.capped ? '   (first ' + CACHE_SCAN_CAP + ' measured)' : '') +
+               (stale ? '   NOT THE CURRENT BUILD' : ''),
+               stale ? 'warn' : 'ok');
+        });
+        if(!rows.length){
+          line('storage', '  · nothing was cached',
+               'no offline copy of either app was on this device when the page opened');
+        }
+        /* Proof the wipe happened, so nobody reads the empty cache store later
+           and concludes the device never had one. */
+        return caches.keys().then(function(now){
+          line('storage', '  · caches remaining now', String((now || []).length) +
+               ' — this page deleted them via ?nosw=1, which is expected');
+        }, function(){ return null; });
+      })
+      .then(function(){
+        line('storage', '  · note',
+             'cross-origin cached files measure as zero here and are padded in the ' +
+             'browser’s own accounting, so a cache can cost more than it reports');
+      }, function(e){
+        line('storage', 'Caches', 'could not be read — ' + ((e && e.message) || e), 'bad');
+      });
+  }
+
+  function stepLocal(){
+    try {
+      var n = 0, count = 0;
+      for(var i = 0; i < localStorage.length; i++){
+        var k = localStorage.key(i);
+        n += (k.length + (localStorage.getItem(k) || '').length) * 2;
+        count++;
+      }
+      total.local = n;
+      line('storage', 'localStorage', count + ' keys · ' + mb(n));
+    } catch(e){
+      line('storage', 'localStorage', 'could not be read', 'warn');
+    }
+    return Promise.resolve();
+  }
+
+  /* ---- what is left over, which is the whole point ---- */
+  function stepResidual(){
+    var measured = total.idb + total.cache + total.local;
+    line('storage', '', '');
+    line('storage', 'Measured: database + caches + localStorage', mb(measured));
+    if(total.detailed){
+      /* Where the browser will break its own figure down, set the two side by
+         side per kind. A matching total can still be two errors cancelling
+         each other out, and this page gets one run on the device that failed. */
+      line('storage', '  · caches — browser says / measured here',
+           mb(total.saysCache) + ' / ' + mb(total.cache));
+      line('storage', '  · database — browser says / measured here',
+           mb(total.saysIdb) + ' / ' + mb(total.idb));
+      line('storage', '  · why they differ',
+           'the browser counts what a store costs on disk, including padding for ' +
+           'cross-origin files and space it has not reclaimed yet. These rows count ' +
+           'what is actually in it. It can land either side: LARGER when space is ' +
+           'held but not in use, SMALLER when the figure has not caught up with a ' +
+           'recent write. Neither is a fault on its own — the gap is what to explain.');
+    }
+    if(!total.usage){
+      line('storage', 'Nothing to compare it against', 'the browser gave no figure', 'warn');
+      return;
+    }
+    var left = total.usage - measured;
+    var MARGIN = 20 * 1048576;
+    var verdict, cls;
+    if(left > MARGIN){
+      verdict = 'something is holding space these rows do not account for. Take it ' +
+                'in this order, and stop at the first one that explains it: a cache ' +
+                'belonging to another build (see the cache rows — this origin serves ' +
+                'the live app and the beta together), a database this page did not ' +
+                'open (see the database list), or a figure that is simply stale — ' +
+                'the browser is entitled to keep reporting space it has already ' +
+                'freed. Measure again in a minute and then again after reopening ' +
+                'the browser: a figure that falls on its own was never a leak. ' +
+                'Do not change app code until one of these is shown to be it.';
+      cls = 'bad';
+    } else if(left < -MARGIN){
+      verdict = 'more was measured than the browser admits to using, so its figure ' +
+                'is behind what is really stored — it updates lazily, and it has ' +
+                'just been caught doing so. Trust the store rows above, not the ' +
+                'headline. Worth holding on to: the same laziness in the other ' +
+                'direction reports space that has already been freed, which is one ' +
+                'of the things that could make an empty device look full.';
+      cls = 'warn';
+    } else {
+      verdict = 'the rows above account for what the browser reports, so the space ' +
+                'is where these numbers say it is';
+      cls = 'ok';
+    }
+    line('storage', 'Unattributed — reported minus measured', mb(left),
+         cls === 'ok' ? 'ok' : cls);
+    line('storage', 'What that means', verdict, cls);
+  }
+
+  stepEstimate()
+    .then(stepDatabases)
+    .then(stepStores)
+    .then(stepCaches)
+    .then(stepLocal)
+    .then(stepResidual)
+    .catch(function(e){
+      line('storage', 'FAILED', (e && e.message) || String(e), 'bad');
+    })
+    .then(function(){
+      el('btn-storage').disabled = false;
+    });
+}
+
+/* ---------- copy everything ---------- */
+function copyAll(){
+  var text = ['Dryspace upload diagnostics', new Date().toISOString(),
+              navigator.userAgent, ''].join('\n');
+  ['env', 'blobs', 'token', 'drive', 'upload', 'state', 'cols', 'storage', 'dropdb', 'otherdbs'].forEach(function(id){
+    var t = el(id).innerText.trim();
+    if(t) text += '\n== ' + id + ' ==\n' + t + '\n';
+  });
+  /* The raw Graph responses go in whole. They are the evidence section 7
+     exists to produce, and a summary of evidence is not evidence. */
+  var raw = el('colsraw').textContent.trim();
+  if(raw && raw !== 'Nothing yet.') text += '\n== raw graph responses ==\n' + raw + '\n';
+  text += '\n== request trace ==\n' + el('trace').textContent;
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(function(){
+      el('btn-copy').textContent = 'Copied';
+      setTimeout(function(){ el('btn-copy').textContent = 'Copy everything'; }, 2000);
+    }, function(){ window.prompt('Copy this:', text); });
+  } else {
+    window.prompt('Copy this:', text);
+  }
+}
+
+/* ---------- boot ---------- */
+/* The app is loaded in an iframe rather than its configuration being copied
+   here, for the same reason the test suite does it (decision D22): a copy
+   drifts, and a diagnostic that tests a stale copy of the truth is worse than
+   no diagnostic at all. */
+(function boot(){
+  var f = el('app');
+  var settled = false;
+
+  function fail(msg){
+    if(settled) return;
+    settled = true;
+    var b = el('boot');
+    b.style.border = '2px solid #b3261e';
+    b.style.borderRadius = '8px';
+    b.style.padding = '10px';
+    b.innerHTML = '';
+    b.appendChild(document.createTextNode(msg));
+  }
+
+  /* A page written to find operations that never finish should not itself hang
+     on one. Loading the app can fail in ways that fire neither load nor error —
+     served as a download, blocked by a policy, or answered by something that is
+     not the app — and without this the page sits on "Loading the app..." for
+     ever, which is precisely the failure it exists to diagnose. */
+  var BOOT_MS = 15000;
+  setTimeout(function(){
+    fail('The app did not load within ' + (BOOT_MS / 1000) + ' seconds.\n\n' +
+         'The usual cause is opening this page from somewhere other than the ' +
+         'app\u2019s own web address \u2014 from SharePoint, from a downloaded copy, or ' +
+         'from a file:// path. It has to be served from the same https:// origin ' +
+         'as the app itself.\n\n' +
+         'This page is currently at: ' + location.origin + location.pathname);
+  }, BOOT_MS);
+
+  /* Fail fast on the case we can detect outright, rather than waiting. */
+  if(location.protocol === 'file:'){
+    fail('This page was opened as a file rather than served over the web.\n\n' +
+         'Open it from the app\u2019s own https:// address instead \u2014 sign-in, stored ' +
+         'photos and the app\u2019s database are all tied to that origin and none of ' +
+         'them are reachable from a file.');
+    return;
+  }
+
+  f.onload = function(){
+    setTimeout(function(){
+      W = f.contentWindow;
+      var reachable = false;
+      /* A cross-origin frame throws on property access rather than returning
+         undefined, so this has to be guarded. */
+      try { reachable = !!(W && W.SP_CONFIG && typeof W.dbAll === 'function'); }
+      catch(e){ reachable = false; }
+      if(!reachable){
+        fail('Something loaded in place of the app, but it is not the app.\n\n' +
+             'Check that this page sits in the same folder as index.html and is ' +
+             'opened from the app\u2019s own web address. This page is at: ' +
+             location.origin + location.pathname);
+        return;
+      }
+      if(settled) return;
+      settled = true;
+      CFG = W.SP_CONFIG;
+      auth = makeAuth();
+      el('boot').hidden = true;
+      el('panels').hidden = false;
+      showEnv();
+    }, 150);
+  };
+  f.onerror = function(){
+    fail('Could not load index.html.\n\nIt should sit in the same folder as this ' +
+         'page. This page is at: ' + location.origin + location.pathname);
+  };
+  /* Snapshot the media store BEFORE the app boots. Loading it in this frame
+     runs its start-up recovery, which moves anything left in 'uploading' back
+     to 'queued' — so the very state this page exists to capture is gone by
+     the time anybody taps the button. It happened on the first real use. */
+  /* Both snapshots before the frame is given a src. Loading the app deletes
+     every cache on the origin and moves the storage figure, so anything not
+     captured here is captured too late to mean anything. */
+  snapshotStoredState(function(){
+    snapshotOrigin(function(){
+      f.src = 'index.html?nosw=1&diag=' + Date.now();
+    });
+  });
+
+  el('btn-blobs').onclick = checkBlobs;
+  el('btn-token').onclick = timeToken;
+  el('btn-refresh').onclick = forceRefresh;
+  el('btn-drive').onclick = checkDrive;
+  el('btn-upload').onclick = runUpload;
+  el('btn-state').onclick = readStoredState;
+  el('btn-cols').onclick = compareColumnQueries;
+  el('btn-storage').onclick = measureStorage;
+  el('btn-dropdb').onclick = dropDatabase;
+  el('btn-scandbs').onclick = scanOtherDatabases;
+  el('btn-copy').onclick = copyAll;
+})();
+</script>
+</body>
+</html>

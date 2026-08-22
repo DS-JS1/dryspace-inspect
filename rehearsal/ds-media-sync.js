@@ -1,0 +1,695 @@
+/* Dryspace media sync — capture, naming, integrity and upload queueing.
+   ---------------------------------------------------------------------------
+   Deliberately standalone and free of any reference to the inspection form, so
+   the job-update and silica-worksheet PWAs can use it unchanged. Nothing here
+   touches the DOM or IndexedDB directly: the host app supplies storage and
+   transport, this module supplies the logic.
+
+   Phase A (this file): renditions, naming, hashing, state machine, queue.
+   Phase B (pending an Entra app registration): the Graph transport that plugs
+   into queue({transport}). The queue is written against an interface, not
+   against Graph, so that work is additive rather than a rewrite. */
+(function(global){
+'use strict';
+
+var DSMedia = {};
+
+/* ═══════════════ naming ═══════════════
+   SharePoint rejects a set of characters outright and silently mangles others.
+   Getting this wrong surfaces as an upload that fails only for certain
+   properties — the ones with a slash in the unit number, say — so it is worth
+   being strict here rather than discovering it in a basement. */
+
+var ILLEGAL = /["*:<>?\/\\|]/g;         /* rejected by SharePoint outright */
+var CTRL = /[\x00-\x1f\x7f]/g;
+/* Reserved device names, rejected as a whole segment on Windows-backed storage */
+var RESERVED = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])$/i;
+
+DSMedia.sanitiseSegment = function(s, maxLen){
+  var out = String(s == null ? '' : s)
+    .replace(CTRL, '')
+    .replace(ILLEGAL, ' ')
+    .replace(/[~$]/g, '')            /* a leading ~$ marks a temp file */
+    .replace(/_vti_/gi, 'vti')       /* reserved by SharePoint anywhere in a name */
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^\.+/, '')             /* cannot begin with a dot */
+    .replace(/[.\s]+$/, '');         /* cannot end with a dot or space */
+  if(RESERVED.test(out)) out = out + '_';
+  if(maxLen && out.length > maxLen){
+    out = out.slice(0, maxLen).replace(/[.\s]+$/, '');
+  }
+  return out;
+};
+
+/* Folder name is for humans browsing SharePoint, so it carries the address.
+   The FULL path is capped well under SharePoint's ~400 character limit. */
+DSMedia.folderName = function(job){
+  job = job || {};
+  var parts = [];
+  var no    = DSMedia.sanitiseSegment(job.inspNo || '', 40);
+  var who   = DSMedia.sanitiseSegment(job.client || '', 40);
+  var where = DSMedia.sanitiseSegment(job.address || '', 80);
+  if(no) parts.push(no);
+  if(who) parts.push(who);      /* the client name makes a folder findable by
+                                   the thing people actually remember */
+  if(where) parts.push(where);
+  return parts.join(' - ') || 'Unfiled';
+};
+
+/* A short, stable token identifying whose job this is, for filenames.
+   PINNED on first use, like the folder: photos uploaded before the office has
+   filled in the client name would otherwise be named differently from photos
+   uploaded afterwards, for the same job.
+
+   The client name is used rather than the address because it is a real field.
+   A suburb would have to be parsed out of a free-text address, and
+   "Unit 3/12 Marine Pde Kirra QLD 4225" has no reliable separator — guessing
+   there produces filenames containing "QLD 4225". */
+DSMedia.jobTag = function(job){
+  if(job && job.mediaTag !== undefined && job.mediaTag !== null) return job.mediaTag;
+  var t = DSMedia.sanitiseSegment(job && job.client || '', 24).replace(/\s+/g, '-');
+  if(job) job.mediaTag = t;
+  return t;
+};
+
+/* Filename carries the identifiers a person needs when the file has been
+   separated from its folder — downloaded, emailed, or sitting in Teams. The
+   folder still carries the full address; repeating that in every filename would
+   push long paths towards SharePoint's limit for no extra clarity. */
+DSMedia.fileName = function(job, mfid, seq, originalName, mime){
+  job = job || {};
+  var no = DSMedia.sanitiseSegment(job.inspNo || 'INS', 24) || 'INS';
+  var tag = DSMedia.jobTag(job);
+  var date = /^\d{4}-\d{2}-\d{2}$/.test(job.date || '') ? job.date : DSMedia.today();
+  var field = DSMedia.sanitiseSegment(String(mfid || 'media').replace(/^m\./, '').replace(/\./g, '-'), 48);
+  var n = String(seq == null ? 1 : seq);
+  while(n.length < 3) n = '0' + n;
+  var parts = [no];
+  if(tag) parts.push(tag);            /* omitted entirely when not yet known */
+  parts.push(date, field, n);
+  return parts.join('_') + '.' + DSMedia.extFor(originalName, mime);
+};
+
+DSMedia.extFor = function(name, mime){
+  var m = /\.([A-Za-z0-9]{1,5})$/.exec(String(name || ''));
+  if(m) return m[1].toLowerCase() === 'jpeg' ? 'jpg' : m[1].toLowerCase();
+  var t = String(mime || '').toLowerCase();
+  if(t.indexOf('image/jpeg') === 0) return 'jpg';
+  if(t.indexOf('image/png') === 0) return 'png';
+  if(t.indexOf('image/heic') === 0) return 'heic';
+  if(t.indexOf('video/quicktime') === 0) return 'mov';
+  if(t.indexOf('video/mp4') === 0) return 'mp4';
+  if(t.indexOf('application/pdf') === 0) return 'pdf';
+  var slash = t.indexOf('/');
+  return slash > -1 ? (t.slice(slash + 1).split(';')[0] || 'bin') : 'bin';
+};
+
+DSMedia.today = function(now){
+  var d = now ? new Date(now) : new Date();
+  var p = function(n){ return (n < 10 ? '0' : '') + n; };
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+};
+
+/* The folder is PINNED to the record the first time anything uploads. An
+   inspector correcting a typo in the address afterwards would otherwise split
+   one job's photos across two SharePoint folders, with nothing to indicate it
+   had happened. Readability at creation, stability forever after. */
+DSMedia.resolveFolder = function(job){
+  if(job && job.mediaFolder) return job.mediaFolder;
+  var f = DSMedia.folderName(job);
+  if(job) job.mediaFolder = f;
+  return f;
+};
+
+/* ═══════════════ integrity ═══════════════ */
+
+/* Above this, hashing would pull the whole file into memory at once. Web Crypto
+   has no streaming digest, so large video is recorded by size alone rather than
+   risking an out-of-memory failure on an iPad mid-inspection. */
+DSMedia.HASH_LIMIT = 64 * 1024 * 1024;
+
+DSMedia.sha256Hex = function(blob){
+  if(!blob) return Promise.resolve(null);
+  if(blob.size > DSMedia.HASH_LIMIT) return Promise.resolve(null);
+  if(!(global.crypto && global.crypto.subtle)) return Promise.resolve(null);
+  return blob.arrayBuffer().then(function(buf){
+    return global.crypto.subtle.digest('SHA-256', buf);
+  }).then(function(d){
+    var b = new Uint8Array(d), s = '';
+    for(var i = 0; i < b.length; i++) s += (b[i] < 16 ? '0' : '') + b[i].toString(16);
+    return s;
+  }).catch(function(){ return null; });
+};
+
+/* ═══════════════ renditions ═══════════════
+   Three copies per photo, each with a distinct job:
+     thumb    240px  — previews in the form
+     report  1600px  — embedded in the emailed report, keeps it deliverable
+     original       — untouched, the evidence copy that goes to SharePoint
+   Non-images (video, PDF) have no derivatives: the file itself is the original,
+   and duplicating it would double storage for nothing. */
+
+DSMedia.isImage = function(type){ return String(type || '').indexOf('image/') === 0; };
+
+/* v1.4.0 patch \u2014 take ownership of the bytes at capture.
+
+   A File from a camera input is a REFERENCE to a file the operating system
+   owns, not bytes this app holds. Storing it in IndexedDB stores the reference.
+   iOS reclaims that temporary file \u2014 on a reload, on a background, or under
+   storage pressure, and this device reports persistence as not granted \u2014 and
+   the record survives pointing at nothing. Reading it then throws "The object
+   can not be found here", which is what stranded a real inspection: the
+   evidence copy bound for SharePoint was gone while the compressed report copy,
+   made by canvas and therefore owned by the app, was perfectly fine.
+
+   Reading it once into an ArrayBuffer and rebuilding the Blob makes the app the
+   owner. No extra storage: the same bytes, held properly. The read already
+   happens for hashing and compression, so it costs one more pass, off the
+   capture path's critical section.
+
+   If the read fails the original File is kept rather than dropped. That is no
+   worse than today, and losing a photo to a defensive measure would be its own
+   kind of absurd. */
+DSMedia.materialise = function(file){
+  if(!file) return Promise.resolve(file);
+  var read;
+  if(typeof file.arrayBuffer === 'function'){
+    read = file.arrayBuffer();
+  } else if(typeof global.FileReader === 'function'){
+    read = new Promise(function(res, rej){
+      var fr = new global.FileReader();
+      fr.onload  = function(){ res(fr.result); };
+      fr.onerror = function(){ rej(fr.error || new Error('could not read the file')); };
+      fr.readAsArrayBuffer(file);
+    });
+  } else {
+    return Promise.resolve(file);
+  }
+  return read.then(function(buf){
+    return new global.Blob([buf], {type: file.type || 'application/octet-stream'});
+  }, function(){ return file; });
+};
+
+DSMedia.makeRenditions = function(file, compress){
+  return DSMedia.materialise(file).then(function(own){
+    return renditionsOf(own, file.type, compress);
+  });
+};
+
+function renditionsOf(file, declaredType, compress){
+  var isImg = DSMedia.isImage(declaredType || file.type);
+  if(!isImg){
+    return DSMedia.sha256Hex(file).then(function(h){
+      return {original: file, report: file, thumb: null, type: file.type,
+              reportSize: file.size, origSize: file.size, origHash: h, derived: false};
+    });
+  }
+  return compress(file, 1600, 0.72).then(function(report){
+    return compress(file, 240, 0.6).then(function(thumbBlob){
+      return DSMedia.blobToDataURL(thumbBlob).then(function(thumb){
+        return DSMedia.sha256Hex(file).then(function(h){
+          return {original: file, report: report, thumb: thumb, type: 'image/jpeg',
+                  reportSize: report.size, origSize: file.size, origHash: h, derived: true};
+        });
+      });
+    });
+  }).catch(function(){
+    /* Compression failed — HEIC on a browser that cannot decode it, most likely.
+       Keep the file rather than losing it; it simply travels undersized. */
+    return DSMedia.sha256Hex(file).then(function(h){
+      return {original: file, report: file, thumb: null, type: file.type,
+              reportSize: file.size, origSize: file.size, origHash: h, derived: false};
+    });
+  });
+}
+
+DSMedia.blobToDataURL = function(b){
+  return new Promise(function(res, rej){
+    var r = new FileReader();
+    r.onload = function(){ res(r.result); };
+    r.onerror = rej;
+    r.readAsDataURL(b);
+  });
+};
+
+/* The untouched copy, wherever it lives. Non-image records never carried a
+   separate original, so the stored blob IS the original for those. */
+DSMedia.originalOf = function(rec){ return (rec && (rec.original || rec.blob)) || null; };
+
+/* ═══════════════ is the stored file still readable? ═══════════════
+   Safari has a long history of blobs stored in IndexedDB becoming unreadable
+   after a reload — the record is intact, the blob object exists, and reading it
+   fails or never returns. Handing one of those to fetch() as a request body is
+   the worst case: a stall in the *request* body is invisible to any deadline
+   waiting on a *response*.
+
+   So the file is read before it is sent. One small slice is enough to prove the
+   handle is live, and it turns a silent hang into a named failure. Cheap: a
+   64 KB read against a 5 MB upload. */
+
+DSMedia.PREFLIGHT_BYTES = 64 * 1024;
+DSMedia.PREFLIGHT_TIMEOUT_MS = 15000;
+
+function unreadable(msg){
+  var e = new Error(msg);
+  e.unreadable = true;
+  /* Was flatly permanent, on the reasoning that no amount of retrying restores a
+     blob the browser has lost. A device disproved it: a photo failed the read,
+     and the very next attempt uploaded it. WebKit can report a blob as missing
+     transiently, so "unreadable" is not always "gone".
+
+     It is still permanent on the SECOND consecutive failure — see READ_ATTEMPTS.
+     One free retry costs a second; being wrong the other way costs somebody a
+     drive back to site to retake a photo that was there all along. */
+  e.status = 0;
+  return e;
+}
+
+/* How many times a file may fail the readability check before it is treated as
+   really gone rather than momentarily unavailable. */
+DSMedia.READ_ATTEMPTS = 2;
+
+function readSlice(blob){
+  if(blob.arrayBuffer) return blob.arrayBuffer();
+  /* Safari before 14 has no Blob.arrayBuffer(). */
+  return new Promise(function(resolve, reject){
+    var fr = new global.FileReader();
+    fr.onload = function(){ resolve(fr.result); };
+    fr.onerror = function(){ reject(fr.error || new Error('FileReader failed')); };
+    fr.readAsArrayBuffer(blob);
+  });
+}
+
+DSMedia.verifyReadable = function(blob, expectedSize, opts){
+  opts = opts || {};
+  var ms = opts.timeoutMs === undefined ? DSMedia.PREFLIGHT_TIMEOUT_MS : opts.timeoutMs;
+  if(!blob) return Promise.reject(unreadable('there is no file to upload'));
+  if(!blob.size) return Promise.reject(unreadable('the stored file is empty'));
+  if(expectedSize !== undefined && expectedSize !== null && blob.size !== expectedSize){
+    return Promise.reject(unreadable('the stored file is ' + blob.size +
+      ' bytes but the record expects ' + expectedSize +
+      ' — it did not survive being stored'));
+  }
+  var want = Math.min(opts.bytes || DSMedia.PREFLIGHT_BYTES, blob.size);
+  var job;
+  try { job = readSlice(blob.slice(0, want)); }
+  catch(e){ return Promise.reject(unreadable('the stored file could not be opened: ' + (e.message || e))); }
+
+  job = job.then(function(buf){
+    var got = buf && (buf.byteLength !== undefined ? buf.byteLength : buf.length);
+    if(got !== want) throw unreadable('the stored file read back ' + got + ' of ' + want + ' bytes');
+    return true;
+  }, function(e){
+    if(e && e.unreadable) throw e;
+    throw unreadable('the stored file could not be read back: ' + ((e && e.message) || e));
+  });
+
+  if(!ms) return job;
+  return new Promise(function(resolve, reject){
+    var t = global.setTimeout(function(){
+      /* A read that hangs is not proof the blob is dead — the device may simply
+         be busy — so this one is temporary, unlike the failures above. */
+      var slow = new Error('reading the stored file took longer than ' +
+                           Math.round(ms / 1000) + 's');
+      slow.timedOut = true;
+      slow.offline = true;
+      reject(slow);
+    }, ms);
+    job.then(function(v){ global.clearTimeout(t); resolve(v); },
+             function(e){ global.clearTimeout(t); reject(e); });
+  });
+};
+
+/* ═══════════════ upload state ═══════════════ */
+
+DSMedia.STATES = ['local', 'queued', 'uploading', 'uploaded', 'failed', 'purged'];
+
+var ALLOWED = {
+  local:     ['queued'],
+  queued:    ['uploading', 'local'],
+  uploading: ['uploaded', 'failed'],
+  failed:    ['queued', 'local'],
+  uploaded:  ['purged'],
+  purged:    []              /* terminal: the device copy is gone */
+};
+
+DSMedia.stateOf = function(rec){ return (rec && rec.up) || 'local'; };
+
+DSMedia.canTransition = function(from, to){
+  return !!(ALLOWED[from] && ALLOWED[from].indexOf(to) > -1);
+};
+
+DSMedia.setState = function(rec, to, extra){
+  var from = DSMedia.stateOf(rec);
+  if(from === to) return rec;
+  if(!DSMedia.canTransition(from, to)){
+    throw new Error('illegal media state change: ' + from + ' -> ' + to);
+  }
+  rec.up = to;
+  rec.upAt = (extra && extra.at) || Date.now();
+  if(to === 'failed') rec.upErr = (extra && extra.error) || 'unknown';
+  if(to === 'uploaded' || to === 'queued') rec.upErr = null;
+  return rec;
+};
+
+/* What a "Try again" control calls: clears the attempt count and the permanent
+   flag so a held-back record re-enters the queue. Deliberately explicit — an
+   upload that failed for a reason the queue cannot fix should not quietly
+   resume on its own. */
+DSMedia.requeue = function(rec){
+  if(DSMedia.stateOf(rec) === 'failed') DSMedia.setState(rec, 'queued');
+  rec.upTries = 0;
+  rec.upRetryable = true;
+  rec.upErr = null;
+  /* Somebody asking for it by hand deserves a clean slate, including the read
+     count: they may well have fixed whatever was wrong. */
+  rec.upReadFails = 0;
+  return rec;
+};
+
+/* B5 — an upload interrupted by the app being killed, backgrounded or reloaded
+   leaves its record in 'uploading' for good. Nothing counts it: the queue skips
+   it and pendingUploads() ignores it, so the file never uploads, the Upload now
+   button vanishes, and nothing on screen says why. That is a silent data-loss
+   path, and it is what stranded records in the field.
+
+   After a reload nothing can still be in flight, so every record found in
+   'uploading' was interrupted by definition and belongs back in the queue.
+
+   Deliberately NOT added to ALLOWED as 'uploading' -> 'queued'. That move must
+   stay illegal for the queue itself, where it would mean two attempts running
+   against one file. This is start-up recovery, and it says so by bypassing the
+   table rather than widening it. */
+DSMedia.recoverInterrupted = function(rec){
+  if(DSMedia.stateOf(rec) !== 'uploading') return false;
+  /* A file that has already burnt its attempts must not go back to a queue that
+     will refuse to drain it — that is the same invisibility by another route.
+     Surface it instead, where "Try again" can reach it. */
+  if((rec.upTries || 0) >= DSMedia.MAX_TRIES){
+    DSMedia.setState(rec, 'failed', {error: 'upload was interrupted repeatedly'});
+    rec.upRetryable = false;
+    return true;
+  }
+  rec.up = 'queued';
+  rec.upAt = Date.now();
+  rec.upErr = null;
+  rec.upRetryable = true;
+  /* upTries is preserved on purpose: a file that reliably kills the app must
+     not retry for ever. */
+  return true;
+};
+
+/* Only a verified remote copy makes a local original safe to remove. Size must
+   match exactly, and the check must come from a fresh read of the item rather
+   than the upload response, which can report success on a truncated write. */
+DSMedia.isPurgeable = function(rec, graceMs){
+  if(DSMedia.stateOf(rec) !== 'uploaded') return false;
+  var r = rec.remote;
+  if(!r || !r.itemId || !r.verifiedAt) return false;
+  if(r.size !== rec.origSize) return false;
+  if(graceMs && (Date.now() - r.verifiedAt) < graceMs) return false;
+  return true;
+};
+
+/* ═══════════════ upload queue ═══════════════
+   Serial by design. Several large photos uploading at once over a weak mobile
+   connection is slower overall than one at a time and far more likely to fail,
+   and a partially-uploaded set is harder to reason about than a shorter
+   completed one. */
+
+DSMedia.MAX_TRIES = 4;
+
+/* v1.4.0 patch \u2014 an attempt that stops making progress must say where it
+   stopped. Every individual step below is already bounded, and an upload still
+   hung: the transport was proven working on the same file and the same device
+   by the diagnostics page, so the fault is in driving it, not in it. A hang
+   with no evidence costs a round trip to the field every time. This turns one
+   into a named failure the first time it happens.
+   Generous on purpose: a 5 MB chunk took 8.4s on the device that failed, so
+   this must not fire on a slow link, only on a stopped one. */
+DSMedia.STALL_MS = 60000;
+
+DSMedia.backoffMs = function(tries){
+  var base = Math.min(30000, 1000 * Math.pow(2, Math.max(0, tries - 1)));
+  return base;
+};
+
+/* Distinguishes "try again later" from "this will never work". Retrying a 400
+   forever burns battery and hides the real problem. */
+DSMedia.isRetryable = function(err){
+  if(!err) return false;
+  if(err.offline) return true;
+  var s = err.status;
+  if(s === undefined || s === null) return true;   /* network failure */
+  if(s === 408 || s === 429) return true;
+  if(s >= 500) return true;
+  return false;
+};
+
+DSMedia.createQueue = function(opts){
+  opts = opts || {};
+  var transport = opts.transport;
+  var list = opts.list;                 /* () -> Promise<[rec]> */
+  var save = opts.save;                 /* (rec) -> Promise */
+  var meta = opts.meta || function(){ return {}; };
+  var onChange = opts.onChange || function(){};
+  /* B6 — per-file feedback. Without it a stalled upload is indistinguishable
+     from a slow one, which is how "Uploading…" came to mean nothing. */
+  var onProgress = opts.onProgress || function(){};
+  var isOnline = opts.isOnline || function(){ return global.navigator ? global.navigator.onLine !== false : true; };
+  var wait = opts.wait || function(ms){ return new Promise(function(r){ setTimeout(r, ms); }); };
+  /* Overridable so tests can drive the failure directly; on by default because
+     the whole point is that it always runs. */
+  var preflight = opts.preflight === false
+    ? function(){ return Promise.resolve(true); }
+    : (opts.preflight || function(blob, size){ return DSMedia.verifyReadable(blob, size); });
+  /* Which step an attempt is on, reported as it happens. "Uploading" on its own
+     is what made a stall unreadable; this is the same argument as B6, one level
+     finer. */
+  var onStep = opts.onStep || function(){};
+  /* Where the bytes come from. Photo bytes live in their own store now rather
+     than on the record, so fetching them is asynchronous. The default keeps
+     working for a record that still carries its own blob, which is what every
+     test and every pre-migration record does. */
+  var bytesOf = opts.bytesOf || function(rec){
+    return Promise.resolve(DSMedia.originalOf(rec));
+  };
+  var stallMs = opts.stallMs === undefined ? DSMedia.STALL_MS : opts.stallMs;
+  var now = opts.now || function(){ return Date.now(); };
+  var timer = opts.timer || {set: function(f, ms){ return setInterval(f, ms); },
+                             clear: function(h){ clearInterval(h); }};
+
+  var running = false, stopped = false, last = null, inFlight = null;
+
+  /* A permanently failed record (400, 403 — a bad name, a revoked token) is held
+     back rather than retried. Nothing about trying again changes the outcome, and
+     retrying it forever hides the real problem behind a spinner. It waits for
+     DSMedia.requeue(), which is what a "Try again" control calls. */
+  function pending(recs){
+    return recs.filter(function(r){
+      var s = DSMedia.stateOf(r);
+      if(s === 'queued') return true;
+      if(s === 'failed') return r.upRetryable !== false;
+      /* v1.4.0 patch — a record in 'uploading' that is NOT the file currently
+         in flight is stranded, by definition: this queue holds exactly one at a
+         time. Left out, such a record is invisible to everything until the next
+         page load, which is the same silent hole as B5 and cost three rounds of
+         diagnosis on a device: three photos each attempted once, each left in
+         'uploading', none carrying any recorded outcome, and the drain reporting
+         itself done with all three still sitting there.
+
+         Recovering here rather than only at start-up is the point. Start-up
+         recovery cannot help a device that is not restarted. */
+      if(s === 'uploading') return !inFlight || inFlight.mid !== r.mid;
+      return false;
+    });
+  }
+
+  /* Watches a marker the attempt updates as it moves. Rejecting is safe: the
+     catch below marks the record failed and retryable, so the file goes back in
+     line rather than being lost - and now carries a reason that names the step
+     it died on. */
+  function watchStall(mark){
+    if(!stallMs) return {promise: new Promise(function(){}), stop: function(){}};
+    var handle = null;
+    var promise = new Promise(function(_, rej){
+      handle = timer.set(function(){
+        var quiet = now() - mark.at;
+        if(quiet > stallMs){
+          timer.clear(handle);
+          rej(new Error('stopped at "' + mark.step + '" — no progress for ' +
+                        Math.round(quiet / 1000) + 's'));
+        }
+      }, Math.max(1000, Math.round(stallMs / 10)));
+    });
+    return {promise: promise, stop: function(){ if(handle !== null) timer.clear(handle); }};
+  }
+
+  function attempt(rec){
+    /* A previously failed record must be re-queued before it can go back in
+       flight — 'failed' -> 'uploading' is not a legal move, and jumping it threw
+       out of the loop, stranding the file after a single transient error. */
+    if(DSMedia.stateOf(rec) === 'failed') DSMedia.setState(rec, 'queued');
+    rec.upTries = (rec.upTries || 0) + 1;
+    DSMedia.setState(rec, 'uploading');
+    inFlight = rec;
+    onChange(rec);
+
+    var body = null;                 /* the bytes, held only for this attempt */
+    var mark = {step: 'recording the attempt', at: now()};
+    function step(name){ mark.step = name; mark.at = now(); onStep(rec, name); }
+    var guard = watchStall(mark);
+    step('recording the attempt');
+
+    var work = save(rec)
+      .then(function(){
+        /* Before the network, before the session: prove the file is still there
+           and still readable. A dead blob otherwise reaches fetch() as a request
+           body and stalls where nothing is watching. */
+        step('checking the file is readable');
+        return bytesOf(rec).then(function(blob){
+          body = blob;
+          return preflight(blob, rec.origSize);
+        });
+      })
+      .then(function(){
+        step('sending');
+        onProgress(rec, 0);
+        var m = meta(rec);
+        /* Handed over rather than left on the record: the record is written to
+           storage, and putting megabytes of image on it would store the very
+           thing this change moved out. */
+        m.blob = body;
+        return transport.upload(rec, m, function(frac){
+          /* Progress is what "no progress" means, so the marker moves here. */
+          mark.at = now();
+          onProgress(rec, frac);
+        });
+      })
+      .then(function(remote){
+        /* Never trust the upload response alone — read the item back. */
+        step('checking it arrived');
+        return transport.verify(remote).then(function(fresh){
+          var size = fresh && fresh.size;
+          if(size !== rec.origSize){
+            var e = new Error('size mismatch after upload: stored ' + size + ', expected ' + rec.origSize);
+            e.status = 0;
+            throw e;
+          }
+          rec.remote = {
+            driveId: remote.driveId || null,
+            itemId: remote.itemId,
+            webUrl: remote.webUrl || null,
+            path: remote.path || null,
+            size: size,
+            verifiedAt: Date.now()
+          };
+          DSMedia.setState(rec, 'uploaded');
+          rec.upErr = null;
+          rec.upReadFails = 0;
+          return save(rec).then(function(){ onChange(rec); return rec; });
+        });
+      })
+      .then(function(v){ guard.stop(); return v; }, function(e){ guard.stop(); throw e; });
+
+    return Promise.race([work, guard.promise])
+      .catch(function(err){
+        guard.stop();
+        DSMedia.setState(rec, 'failed', {error: (err && err.message) || String(err)});
+        /* A stall is worth another go: the step it names is a symptom, and the
+           next attempt may well get past it. */
+        if(err && err.unreadable){
+          /* Counted separately from upTries, which counts whole attempts. A
+             read that fails once and succeeds next time is a flaky read, not a
+             lost photo, and only the second consecutive failure settles it. */
+          rec.upReadFails = (rec.upReadFails || 0) + 1;
+          rec.upRetryable = rec.upReadFails < DSMedia.READ_ATTEMPTS;
+        } else {
+          rec.upReadFails = 0;
+          rec.upRetryable = DSMedia.isRetryable(err);
+        }
+        /* The outcome of an attempt must not be lost because it could not be
+           written down. If this save fails the record stays 'uploading' on
+           disk, which nothing counted before the stranded-record rule above.
+           Both reasons are carried, because "why did it fail" and "why could
+           we not say so" are different questions and a person needs each. */
+        return save(rec).catch(function(saveErr){
+          var note = ' (and the failure could not be saved: ' +
+                     ((saveErr && saveErr.message) || saveErr) + ')';
+          err.message = (err.message || String(err)) + note;
+          /* setState already wrote upErr from the original error, before this
+             save was even attempted, so the record has to be told separately.
+             In memory only, obviously: writing is the thing that just failed. */
+          rec.upErr = (rec.upErr || '') + note;
+        }).then(function(){ onChange(rec, err); throw err; });
+      });
+  }
+
+  function drain(){
+    if(running) return last;
+    running = true; stopped = false;
+    last = (function loop(){
+      if(stopped) return Promise.resolve('stopped');
+      if(!isOnline()) return Promise.resolve('offline');
+      return list().then(function(recs){
+        var todo = pending(recs).filter(function(r){
+          return (r.upTries || 0) < DSMedia.MAX_TRIES;
+        });
+        if(!todo.length) return 'done';
+        var rec = todo[0];
+        return attempt(rec).then(loop, function(){
+          if(!rec.upRetryable) return loop();          /* permanent — move on */
+          return wait(DSMedia.backoffMs(rec.upTries)).then(loop);
+        });
+      });
+    })().catch(function(e){
+      return 'error: ' + ((e && e.message) || e);
+    }).then(function(r){ running = false; inFlight = null; return r; });
+    return last;
+  }
+
+  return {
+    drain: drain,
+    stop: function(){ stopped = true; },
+    /* Which file is in flight right now — the question "Uploading…" refused
+       to answer. */
+    current: function(){ return inFlight; },
+    isRunning: function(){ return running; },
+    pending: function(){ return list().then(function(rs){ return pending(rs).length; }); }
+  };
+};
+
+/* ═══════════════ storage pressure ═══════════════
+   Originals are large and accumulate until they are uploaded and reclaimed.
+   Capture is NEVER blocked: an inspector standing in front of the evidence must
+   always be able to photograph it. Running out of space is recoverable; an
+   un-photographed defect is not. */
+
+DSMedia.LEVELS = {notice: 0.70, warn: 0.85, urgent: 0.95};
+
+DSMedia.pressure = function(usage, quota){
+  if(!quota) return {level: 'unknown', ratio: 0};
+  var ratio = usage / quota;
+  var level = 'ok';
+  if(ratio >= DSMedia.LEVELS.urgent) level = 'urgent';
+  else if(ratio >= DSMedia.LEVELS.warn) level = 'warn';
+  else if(ratio >= DSMedia.LEVELS.notice) level = 'notice';
+  return {level: level, ratio: ratio};
+};
+
+DSMedia.pressureMessage = function(p, reclaimableBytes, fmt){
+  fmt = fmt || function(n){ return Math.round(n / 1048576) + ' MB'; };
+  var free = reclaimableBytes ? ' ' + fmt(reclaimableBytes) + ' can be freed by uploading and reclaiming.' : '';
+  switch(p.level){
+    case 'urgent': return 'Device storage is almost full.' + free + ' Photos will still save, but upload soon.';
+    case 'warn':   return 'Device storage is filling up.' + free;
+    case 'notice': return reclaimableBytes ? 'Uploaded photos are using space.' + free : '';
+    default:       return '';
+  }
+};
+
+global.DSMedia = DSMedia;
+if(typeof module !== 'undefined' && module.exports) module.exports = DSMedia;
+
+})(typeof self !== 'undefined' ? self : this);
