@@ -378,17 +378,34 @@ function checkBlobs(){
     var bad = 0, done = 0;
     return all.reduce(function(chain, rec){
       return chain.then(function(){
-        var blob = DSMedia.originalOf(rec);
+        /* v1.4 — MUST go through bytesFor(), not originalOf().
+           originalOf() reads rec.original / rec.blob, which are the PRE-v1.4
+           fields, and a successful migration DELETES them. Checking them alone
+           made this panel report "there is no file to upload — HYPOTHESIS 2
+           CONFIRMED" on a perfectly healthy migrated device: the loudest
+           possible false alarm, on the one instrument used to decide whether
+           the migration ate somebody's photographs. bytesFor() is what the
+           upload path itself calls, so this now checks what actually ships,
+           and rebuilding the Blob from the store proves the round-trip. */
         var t0 = performance.now();
-        return DSMedia.verifyReadable(blob, rec.origSize, {timeoutMs: 20000})
-          .then(function(){
-            done++;
-            line('blobs', (rec.name || rec.mid) + ' — ' +
-                 ((blob.size / 1048576).toFixed(1)) + ' MB', 'readable, ' + ms(performance.now() - t0), 'ok');
-          }, function(e){
-            bad++;
-            line('blobs', (rec.name || rec.mid), (e && e.message) || String(e), 'bad');
-          });
+        return W.bytesFor(rec, 'original').then(function(blob){
+          var where = (rec.original || rec.blob) ? 'on the record (not yet migrated)'
+                                                 : 'from the bytes store';
+          return DSMedia.verifyReadable(blob, rec.origSize, {timeoutMs: 20000})
+            .then(function(){
+              done++;
+              line('blobs', (rec.name || rec.mid) + ' — ' +
+                   ((blob.size / 1048576).toFixed(1)) + ' MB',
+                   'readable ' + where + ', ' + ms(performance.now() - t0), 'ok');
+            }, function(e){
+              bad++;
+              line('blobs', (rec.name || rec.mid), (e && e.message) || String(e), 'bad');
+            });
+        }, function(e){
+          bad++;
+          line('blobs', (rec.name || rec.mid),
+               'could not reach the bytes store — ' + ((e && e.message) || e), 'bad');
+        });
       });
     }, Promise.resolve()).then(function(){
       line('blobs', 'Result',
@@ -595,16 +612,36 @@ function runUpload(){
    has since moved on. This reads IndexedDB directly. Read-only, deliberately. */
 var STATE_SNAPSHOT = null;
 
-/* Read the media store and hand back plain rows. No writes, ever. */
+/* Read the media store and hand back plain rows. No writes, ever.
+
+   v1.4 — reads the `bytes` store alongside it. This runs BEFORE the app boots,
+   so it cannot call bytesFor(); it does the same lookup by hand. Without it
+   every migrated record reported bytes=MISSING, because the migration deletes
+   rec.original / rec.blob once the bytes are safely in their own store. */
 function collectStoredState(cb){
   var open = indexedDB.open(dbName());
   open.onerror = function(){ cb(null, String(open.error || 'unknown')); };
   open.onsuccess = function(){
     var db = open.result;
     if(!db.objectStoreNames.contains('media')) return cb([], null);
-    var rq = db.transaction('media').objectStore('media').getAll();
-    rq.onerror = function(){ try { db.close(); } catch(e){} cb(null, String(rq.error || 'unknown')); };
-    rq.onsuccess = function(){ try { db.close(); } catch(e){} cb(rq.result || [], null); };
+    var hasBytes = db.objectStoreNames.contains('bytes');
+    var stores = hasBytes ? ['media', 'bytes'] : ['media'];
+    var t = db.transaction(stores);
+    var mrq = t.objectStore('media').getAll();
+    var brq = hasBytes ? t.objectStore('bytes').getAll() : null;
+    t.onerror = function(){ try { db.close(); } catch(e){} cb(null, String(t.error || 'unknown')); };
+    t.onabort = function(){ try { db.close(); } catch(e){} cb(null, String(t.error || 'aborted')); };
+    t.oncomplete = function(){
+      try { db.close(); } catch(e){}
+      var sizes = {};
+      ((brq && brq.result) || []).forEach(function(b){
+        if(!b || !b.mid) return;
+        var buf = b.original || b.report;
+        sizes[b.mid] = buf && buf.byteLength !== undefined ? buf.byteLength
+                     : (buf && buf.size !== undefined ? buf.size : 0);
+      });
+      cb({media: mrq.result || [], byteSizes: sizes, hasBytesStore: hasBytes}, null);
+    };
   };
 }
 
@@ -614,14 +651,17 @@ function snapshotStoredState(next){
   /* Never let a storage problem stop the rest of the page loading. */
   var bail = setTimeout(go, 3000);
   try {
-    collectStoredState(function(rows, err){
+    collectStoredState(function(res, err){
       clearTimeout(bail);
-      STATE_SNAPSHOT = err ? null : rows.map(function(r){
+      STATE_SNAPSHOT = err ? null : (res.media || []).map(function(r){
         var orig = r.original || r.blob;
+        var legacy = orig && orig.size !== undefined ? orig.size : null;
+        var stored = res.byteSizes.hasOwnProperty(r.mid) ? res.byteSizes[r.mid] : null;
         return {name: r.name || r.mid, up: (r && r.up) || 'local',
                 upTries: r.upTries || 0, upReadFails: r.upReadFails || 0,
                 upRetryable: r.upRetryable, upErr: r.upErr,
-                bytes: orig && orig.size !== undefined ? orig.size : null,
+                bytes: legacy !== null ? legacy : stored,
+                bytesWhere: legacy !== null ? 'record' : (stored !== null ? 'store' : null),
                 origSize: r.origSize, uploaded: !!(r.remote && r.remote.itemId)};
       });
       go();
@@ -643,7 +683,8 @@ function stateRows(host, rows, label){
     line(host, r.name,
          'state=' + r.up + '  tries=' + r.upTries + '  readFails=' + r.upReadFails +
          '  retryable=' + (r.upRetryable === false ? 'no' : 'yes') +
-         '  bytes=' + (r.bytes === null ? 'MISSING' : r.bytes) +
+         '  bytes=' + (r.bytes === null || r.bytes === undefined ? 'MISSING'
+                        : r.bytes + (r.bytesWhere ? '(' + r.bytesWhere + ')' : '')) +
          '  origSize=' + (r.origSize === undefined ? '?' : r.origSize) +
          (r.uploaded ? '  uploaded' : '') +
          (r.upErr ? '  err=' + r.upErr : ''));
@@ -670,12 +711,20 @@ function readStoredState(){
       line('state', 'No media store', 'nothing has been stored yet', 'warn');
       return done();
     }
-    var rq = db.transaction('media').objectStore('media').getAll();
+    var hasBytes = db.objectStoreNames.contains('bytes');
+    var t = db.transaction(hasBytes ? ['media', 'bytes'] : ['media']);
+    /* bytes FIRST: requests in one transaction complete in the order they were
+       issued, so asking for media first would run its onsuccess before the
+       bytes request had a result to read. */
+    var brq = hasBytes ? t.objectStore('bytes').getAll() : null;
+    var rq = t.objectStore('media').getAll();
+    var byteRows = null;
     rq.onerror = function(){
       line('state', 'Could not read media', String(rq.error || 'unknown'), 'bad');
       done();
     };
     rq.onsuccess = function(){
+      byteRows = (brq && brq.result) || [];
       var all = rq.result || [];
       line('state', 'NOW (the app has booted, so recovery has already run)', String(all.length));
       var counts = {};
@@ -691,14 +740,28 @@ function readStoredState(){
              String(counts[k]) + (bad ? '   IMPOSSIBLE — the queue holds one file in flight' : ''),
              bad ? 'bad' : 'ok');
       });
+      /* Same correction as the snapshot above: after migration the bytes live
+         in their own store and rec.original / rec.blob are gone, so reading
+         only those reported MISSING on every healthy record. */
+      var sizes = {};
+      (byteRows || []).forEach(function(b){
+        if(!b || !b.mid) return;
+        var buf = b.original || b.report;
+        sizes[b.mid] = buf && buf.byteLength !== undefined ? buf.byteLength
+                     : (buf && buf.size !== undefined ? buf.size : 0);
+      });
       all.forEach(function(r){
         var orig = r.original || r.blob;
+        var legacy = orig && orig.size !== undefined ? orig.size : null;
+        var stored = sizes.hasOwnProperty(r.mid) ? sizes[r.mid] : null;
+        var size = legacy !== null ? legacy : stored;
+        var where = legacy !== null ? '(record)' : (stored !== null ? '(store)' : '');
         line('state', (r.name || r.mid),
              'state=' + ((r && r.up) || 'local') +
              '  tries=' + (r.upTries || 0) +
              '  readFails=' + (r.upReadFails || 0) +
              '  retryable=' + (r.upRetryable === false ? 'no' : 'yes') +
-             '  bytes=' + (orig && orig.size !== undefined ? orig.size : 'MISSING') +
+             '  bytes=' + (size === null ? 'MISSING' : size + where) +
              '  origSize=' + (r.origSize === undefined ? '?' : r.origSize) +
              (r.remote && r.remote.itemId ? '  uploaded' : '') +
              (r.upErr ? '  err=' + r.upErr : ''));
