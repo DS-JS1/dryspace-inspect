@@ -583,7 +583,8 @@ handoffs — points where it means to.
 
 ### OI-9 · `dbAll()` can return `[]` from a store that is not empty
 **Status:** open — **guarded, not cured** · **Tier:** unknown
-**Detail:** decision log §4g
+**Detail:** `docs/HANDOFF-session-C-the-short-listing.md` — the brief, with the
+reproduction method and the timebox · decision log §4g
 
 Measured on Chromium under load: `dbAll('bytes')` returned `[]` while `dbGet`
 found every record and a fresh connection counted two by key. The point reads
