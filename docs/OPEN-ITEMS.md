@@ -41,8 +41,51 @@ of them stands between v1.4.0 and a release decision.
 
 ## 2. Open, not blocking
 
+### OI-16 · The device batch — five open items that only a phone can answer
+**Status:** open · **Tier:** a test run, not a change
+**Detail:** collects the device-only halves of **OI-10**, **OI-13**, **OI-14**,
+**OI-12** and **OI-5**. Raised 22 August 2026 at the close of Session A
+
+Five separate items are each blocked on the same scarce thing: a real iPhone,
+with real SharePoint behind it. Run separately they cost five trips; run in the
+order below they cost one, because each step leaves behind exactly what the next
+step needs — the upgrade rehearsal produces the record with photographs that the
+dialog checks then hand over.
+
+**This is a checklist, not a task.** It closes nothing by itself; it is the
+vehicle for closing the five. Strike it when they are struck.
+
+**Before starting:** `/beta/` must be carrying build **`v1.4.0-31`** or later, or
+steps 2–4 are testing the wrong code. The footer names the build. Nothing here
+touches `main`'s root, and none of it is a release.
+
+| # | For | On | What to do |
+|---|---|---|---|
+| 1 | **OI-10** | live → beta | The upgrade rehearsal. **Do this first — it needs a clean database, and everything after it wants the record it produces.** Delete the database (diagnostics §8b). Open the **live** app, create an inspection with two photographs, one over 4 MB. Then open the **beta** on the same device: that is the upgrade. Confirm from diagnostics §6 and §8 — not by eye — that both photographs read back, `bytes` holds them, the media records carry no blobs, the record reads `schema: 4`, and nothing is marked *needs retaking* |
+| 2 | **OI-13** | beta | **The fork warning — the one that matters most.** With the record from step 1 on the device: *Share draft (offline fallback)* to get a `DS_Draft` file out, then change something in the record so the copy on the device is the newer one, then import that file back. **Screenshot the dialog.** It must show all three choices, and the last one — *Cancel this import / Nothing on this device changes* — must be readable without the box being cut |
+| 3 | **OI-13** | beta | **The handover confirmation**, the message photographed truncating. Hand the record over through SharePoint. **Screenshot it.** It must show *"Delete your copy from this device once they confirm they have it."* in full — that sentence is the whole point of the item |
+| 4 | **OI-14** | beta | Open the record and tap the **"N logged changes"** count in the status bar. The entries open, newest first, each carrying what happened, when, and who. Scroll to the oldest and back |
+| 5 | **OI-12** | beta | **One tap, and it settles a question argued from code alone.** Browse the library in the app, and open the same folder in SharePoint **in the same few minutes**. If a folder reads *WAITING* in the app while the library column reads *In progress*, the divergence is real. Note both readings and the time |
+| 6 | **OI-5** | either | Take a photograph on the iPhone, select it through the app's file input, and inspect it for GPS EXIF. Decides whether the Google Photos Maps plan is achievable at all |
+
+**Steps 2 and 3 are the ones a desktop cannot stand in for.** A desktop browser
+does not truncate, so it will show these passing whether or not they are fixed.
+That is precisely how OI-13 survived a polish pass that had already named it.
+
+**If a dialog fails to close, stop and say so.** That is the one outcome worse
+than the fault being fixed — a modal that traps somebody on a phone in a
+basement. The capture path was deliberately left on native dialogs for this
+reason, so nothing at capture time can be affected either way.
+
+**Done means:** every row above is run and its result written into the item it
+belongs to, with the two screenshots attached for step 2 and step 3. Rows may be
+answered across more than one sitting; the batch is struck when the last one is
+answered, whether the answer was the hoped-for one or not.
+
 ### OI-10 · The v1.3 → v1.4 upgrade has never been rehearsed on a device
 **Status:** open — **re-graded 22 Aug 2026, no longer blocks release** · **Tier:** a test run
+**Run it as part of OI-16, step 1** — it must go first, and what it produces is
+what the later steps need
 **Detail:** `05_Release Protocol` §2, major tier · decision log §4g, §4h
 
 Three migrations run the first time a staff member updates, against their real
@@ -85,6 +128,8 @@ than by eye, and appended to the bug-test file.
 
 ### OI-12 · How does a folder reach `held`? Not confirmed either way
 **Status:** open · **Tier:** unknown until answered
+**The cheap half is OI-16, step 5** — one tap settles whether the library/app
+divergence is real. The design question stays here
 **Detail:** `index.html:3719` `batonState()`, `index.html:3335` the handover's move
 
 "Force the handover" is gated on `isAdmin() && batonState === 'held'`, and `held`
@@ -152,7 +197,8 @@ takeover, widening the gate, or accepting that the state is only ever reached by
 an administrator tidying SharePoint by hand.
 
 ### OI-13 · iOS truncates the native dialogs, so instructions staff need are never seen
-**Status:** open · **Tier:** minor — visible behaviour change
+**Status:** open — **built 22 Aug 2026, awaiting the device** · **Tier:** minor — visible behaviour change
+**Verify it as OI-16, steps 2 and 3** — the two screenshots are the evidence
 **Detail:** `docs/HANDOFF-session-A-dialogs-and-audit.md` — the brief, with the
 conversion order. `docs/HANDOFF-v1.4-polish.md` §6 raised the two-languages
 problem and was never actioned; the truncation was seen on a device 22 Aug 2026
@@ -175,12 +221,40 @@ native one cannot be trusted to show what it is given.
 without a device test.* A custom modal that fails to close is worse than an ugly
 native one that cannot.
 
+**BUILT 22 Aug 2026 — not verified, so not closed.** All seven dialogs in the
+brief's table were converted: the fork warning (both halves), the handover
+confirmation, the filing gate, the handover failure, recovered work in progress,
+asking for the baton, and delete-from-this-device. Every choice now carries its
+consequence **on the button**, so nothing depends on a trailing line surviving —
+which is the cure, where a shorter message would only have made truncation less
+likely.
+
+**The fix underneath is structural, and it is the part worth remembering.** The
+custom box could have truncated too: the message went into `.pick-note` inside
+`.pick-head`, and `.pick-list` was the only scrolling region in the box. A long
+message there would have been clipped exactly the way iOS clips `alert()`, and it
+would have looked fixed on every desktop. There is now one `.pick-scroll` holding
+the message, the facts, the filter and the choices, with only the title and
+footer fixed; `.pick-note` gained `white-space:pre-wrap`, without which every
+blank line collapsed and the paragraphing the wording relies on vanished.
+
+**The capture path was NOT touched** — saving files, removing a photo and sharing
+files are still native, and the single-line dialogs were left alone deliberately.
+**36** native calls remain, down from 40, and that number is not meant to reach
+zero. `tests.html` 590/590 over HTTP, including one test that asserts the note
+lives inside the scroll region rather than asserting the wording.
+
 **Done means:** the messages staff actually meet — handover, take-over, fork
 warning — display in full on an iPhone, verified on the device rather than in a
-desktop browser, which does not truncate and will not show the fault.
+desktop browser, which does not truncate and will not show the fault. **What
+remains is exactly that and nothing else:** refresh `/beta/`, and on the phone
+capture (a) the fork warning showing its last choice, and (b) the handover
+confirmation showing *"…once they confirm they have it"*. A desktop check is not
+evidence and must not be offered as any.
 
 ### OI-14 · The audit trail is recorded but cannot be read in the app
-**Status:** open · **Tier:** minor — new capability
+**Status:** open — **built 22 Aug 2026, awaiting the device** · **Tier:** minor — new capability
+**Verify it as OI-16, step 4**
 **Detail:** `docs/HANDOFF-session-A-dialogs-and-audit.md` §3 · `index.html:2072`
 `logAudit()`, `index.html:2095` the count, `index.html:2924` the export
 
@@ -198,9 +272,18 @@ recover it from"* is the first question anyone will ask, and the app's answer is
 a number. The library column carries the headline — *recovered from* — but not the
 when, nor the source folder, nor anything else in the trail.
 
+**BUILT 22 Aug 2026 — not verified, so not closed.** The count in the status bar
+is now a control (`button#sb-audit`) and opens the entries in the same box as
+every other dialog. Newest first, because the question that brings anybody here
+is *who has just taken this, and from where*. Rendered as a log rather than as
+`{k, v}` lines — the action leads and when/who/stage sits under it — because a
+timestamp in the existing 34% key column leaves the action a third of a phone's
+width. Read-only by construction: nothing is tappable and the way out says
+*Close*, not *Cancel*.
+
 **Done means:** the entries are readable on the device without exporting
 anything — or a recorded decision that the count plus the library column is
-enough, and why.
+enough, and why. **What remains:** open a record on the phone and tap the count.
 
 ### OI-15 · The decision log reuses D34 and D35 for two decisions each
 **Status:** open · **Tier:** documentation
@@ -264,6 +347,7 @@ it**; two handoffs have now asked for this to be decided rather than done.
 
 ### OI-5 · Does iOS preserve EXIF GPS through the Safari file picker?
 **Status:** open · **Tier:** unknown until answered
+**Run it as OI-16, step 6** — it needs the same device and nothing else
 **Detail:** decision log §5
 
 Decides whether the Google Photos Maps plan is achievable at all. Needs a real
@@ -308,7 +392,7 @@ agreed destination.
 - **Nothing is tagged.** The last release tag belongs to v1.3.
 - **`APP_VER` stays `1.4.0`** while it is unreleased; fixes fold into it.
   `CACHE_VERSION` still moves on every app-file change — currently
-  `ds-inspect-v1.4.0-29`.
+  `ds-inspect-v1.4.0-31`.
 
 ---
 
@@ -339,6 +423,7 @@ ones first:
 
 | Document | Status |
 |---|---|
+| `docs/HANDOFF-session-A-dialogs-and-audit.md` | **Live** — OI-13, OI-14. Built 22 Aug 2026; the device verification it asks for is OI-16 |
 | `docs/HANDOFF-22-august-baton-and-storage.md` | **Live** — OI-1, OI-2, OI-3 |
 | `docs/HANDOFF-orphan-bytes-race.md` | **Live** — OI-2, and OI-4 in its §6 |
 | `docs/HANDOFF-baton-columns-not-read-and-storage.md` | Superseded — history only |

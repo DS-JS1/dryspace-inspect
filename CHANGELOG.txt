@@ -1,6 +1,111 @@
 Dryspace Site Inspection App — Changelog
 ========================================
 
+SESSION A DONE IN CODE - 22 August 2026 - OI-13 and OI-14, minor, folded into 1.4.0
+- APP_VER stays 1.4.0 (unreleased, so this folds in). CACHE_VERSION 30 -> 31.
+  Nothing pushed to main's root, nothing tagged.
+- NOT YET CLOSED. Both items' exit criteria require a device, and a desktop
+  browser does not truncate, so a desktop check is not evidence and is not being
+  offered as any. The device list is at the end of this entry.
+
+- THE STRUCTURAL FIX CAME FIRST, and it is the part that would have been easy to
+  skip. showDialog()'s message went into .pick-note, which sat inside .pick-head,
+  which does not scroll: .pick-list was the only flex:1 overflow:auto region in
+  the box. Pouring a twelve-line handover message in there would have clipped it
+  exactly the way iOS clips alert() - the fault MOVED rather than got fixed, and
+  it would have looked fixed on every desktop. The box now has one .pick-scroll
+  holding the message, the facts, the filter and the choices; only the title and
+  the footer are fixed. .pick-note also gained white-space:pre-wrap, without
+  which every blank line in every converted message collapsed and the paragraphs
+  the wording depends on disappeared.
+
+- THE FORK WARNING (index.html importRecord, was 4251 and 4265). Done first
+  because it is the worst case, not the loudest. Two nested confirm() calls whose
+  last line - "OK = replace with the imported copy / Cancel = show other options"
+  - was the only thing saying what the buttons DID, on a choice that can
+  overwrite newer work. Now three named choices, each carrying its own
+  consequence on the button: "Replace with the imported copy / Discards the NEWER
+  copy on this device. The more recent work is lost.", "Keep both copies", and
+  "Cancel this import / Nothing on this device changes." Nothing depends on a
+  trailing line surviving, which is the actual cure - a shorter message would
+  only have made the truncation less likely, not impossible.
+- The fork stayed a TWO-STEP act. It was two confirms and it is two dialogs: the
+  cost of a wrong fork is paid later, by whoever quotes the version that drifted.
+- Split out as askImportChoice(name, newer, lines) so the wording is testable
+  without a database behind it.
+
+- THE HANDOVER CONFIRMATION (was 3349), the one the owner photographed ending
+  mid-sentence at "Delete your copy from". The half that was cut is the operative
+  half, so it LEADS now: "Tell the next person, with a link to the folder. /
+  Delete your copy from this device once they confirm they have it." The
+  filename, the path and archive/ moved out of the sentence and into laid-out
+  facts underneath.
+
+- ALSO CONVERTED, per the brief's table, all multi-line and all with meaning in
+  the last line: confirmFiling (the filing gate at handover, was 3211 - the blank
+  fields are now facts and both buttons name their outcome); the handover FAILURE
+  message (was 3358, carries the Handover Protocol §8 recovery instruction);
+  recovered work in progress (was 3543); asking for the baton (was 3786, where
+  the message IS the whole point of the screen); and delete from this device
+  (was 2656, where "This cannot be undone" was mid-message and OK/Cancel said
+  nothing about which one deleted - it is on the button now, and the destructive
+  choice is not the first one under the thumb).
+- confirmFiling returns a promise now, so handoverToSharePoint split at the gate:
+  everything after it moved into handoverToSharePointConfirmed(). Behaviour
+  unchanged; a complete record is still never interrupted.
+
+- NOT CONVERTED, deliberately. The capture path is untouched - saving files
+  (2538), removing a photo (2579) and sharing files (3108-3154) are still native,
+  because a custom modal that fails to close is worse than an ugly native one
+  that cannot, and capture is never blocked. Converting one of those without a
+  device test would have been the one way to make this session harmful. The
+  single-line ones ("Sign in to Microsoft first", "The request has been copied.")
+  are also untouched: they lose nothing as native dialogs and changing them is
+  churn that has to be re-tested for no gain. 36 native calls remain, down from
+  40, and that number is not meant to reach zero.
+
+- OI-14, THE AUDIT TRAIL. logAudit() has been recording everything all along and
+  the only way to read an entry was to export a backup and open the JSON, which
+  is not something anybody does standing in a driveway asking who took a record
+  off them. The "7 logged changes" count in the status bar is now a control
+  (button#sb-audit) and opens the entries in the same box.
+- Newest first, because the question that brings anyone here is "who has just
+  taken this, and from where" - a forced handover happens over somebody's head.
+- Rendered as a log, not as {k, v} lines: the action leads, and when/who/stage
+  sits under it in small type. A timestamp in the existing 34% key column leaves
+  the action a third of a phone's width and wrapping to four rows. New opts.entries
+  on showDialog, new .pick-ent CSS.
+- Read-only by construction: they are entries, not choices, so nothing is
+  tappable and the way out says Close rather than Cancel. pickFromList also
+  stopped saying "Nothing to choose from." in a dialog that was never offering
+  a choice.
+
+- TESTS 590/590, zero failures, served over HTTP, up from 557. The five
+  confirmFiling tests were rewritten - they stubbed W.confirm and read a boolean
+  return, and both of those are gone. All dialog-driving tests run in ONE
+  sequential chain started off a resolved promise: the box is a singleton in the
+  DOM, so two open at once collide on .pick-back, and every existing dialog test
+  finishes synchronously before that chain's first tick.
+- One test asserts the structural fix directly rather than the wording: the note
+  is inside .pick-scroll, the choices scroll with it, and the region's overflow-y
+  is auto. That is the assertion that would have caught the bug being moved.
+
+- OI-16 RAISED - THE DEVICE BATCH. Five open items (OI-10, OI-13, OI-14, OI-12,
+  OI-5) are each blocked on the same scarce thing: a real iPhone with real
+  SharePoint behind it. Run separately they cost five trips. Sequenced they cost
+  one, because each step leaves what the next needs - the upgrade rehearsal
+  produces the record with photographs that the dialog checks then hand over.
+- Order is not cosmetic. OI-10 must go first: it starts by deleting the database,
+  so running it after the others would throw away what they set up.
+- The batch closes nothing by itself and says so. It is the vehicle for closing
+  the five, and is struck when they are.
+
+- STILL OWED, AND ONLY A PHONE CAN PAY IT: the fork warning showing its last
+  choice, the handover confirmation showing "...once they confirm they have it",
+  and the audit trail opening from the count. Squeezing the box to 200px in a
+  desktop browser proved the scroller engages and the last choice stays
+  reachable, which is a property of the layout, not evidence about iOS.
+
 SESSIONS A AND B BRIEFED - 22 August 2026 - and a fault found while briefing B
 - docs/HANDOFF-session-A-dialogs-and-audit.md (OI-13, OI-14, medium effort) and
   docs/HANDOFF-session-B-the-held-state.md (OI-12, high effort). B was written

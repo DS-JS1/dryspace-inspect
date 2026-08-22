@@ -995,6 +995,53 @@ confidence.
 
 ---
 
+## 4i. A dialog's buttons must carry their own meaning — 22 August 2026
+
+**The decision:** where a message asks something, what each outcome DOES belongs
+on the button that does it, not in a line of the message. Lettered rather than
+numbered on purpose, because OI-15 has the D-numbers ambiguous and a new one
+would compound it.
+
+**What forced it.** OI-13 was reported as bold text on the handover confirmation.
+The worse case was the fork warning in `importRecord()`: two nested `confirm()`
+calls whose last line — *"OK = replace with the imported copy / Cancel = show
+other options"* — was the only thing saying what the buttons meant, on a choice
+that can overwrite newer work. iOS cuts the last line. So the reader could not
+know that Cancel led to more options rather than abandoning the import, and had
+no warning that OK might overwrite more recent work.
+
+**Why shortening the messages was rejected.** It was the obvious cheap fix and it
+does not hold. A native dialog decides for itself how much to show, at a size the
+app does not choose, on a screen the app does not know the height of. Shortening
+makes truncation less likely; it cannot make it impossible, and the failure is
+silent — the app believes it has given guidance it has not. Moving the meaning
+onto the buttons removes the dependency instead of narrowing it.
+
+**What it cost.** The fork warning went from two nested `confirm()` calls to three
+named choices — replace, keep both, cancel — each stating its consequence.
+Keeping both still asks a second time: it was a two-step act before and it stays
+one, because the cost of a wrong fork is paid later by whoever quotes the version
+that drifted. `confirmFiling()` became a promise, which split
+`handoverToSharePoint()` at the gate.
+
+**The trap this nearly walked into.** The custom box was not safe either. Its
+message went into `.pick-note`, inside a `.pick-head` that does not scroll, while
+`.pick-list` was the only scrolling region. Converting the long messages into it
+would have clipped them exactly the way iOS clips `alert()` — the fault moved,
+not fixed — and it would have looked right on every desktop, which is the same
+blindness that let OI-13 survive a polish pass that had already named it. The box
+now has one scroll region holding message, facts, filter and choices. The test
+that guards this asserts the STRUCTURE — the note is inside `.pick-scroll` — not
+the wording, because wording tests would have passed throughout.
+
+**What was deliberately not done.** The capture path keeps its native dialogs.
+A custom modal that fails to close is worse than an ugly native one that cannot,
+and capture is never blocked. Single-line dialogs keep theirs too: they lose
+nothing and converting them is churn to be re-tested for no gain. The app still
+speaks two visual languages and that is now a choice rather than an oversight.
+
+---
+
 ## 5. Open questions
 
 | Question | Blocking | Notes |
