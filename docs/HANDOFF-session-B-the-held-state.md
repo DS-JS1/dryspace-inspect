@@ -192,14 +192,51 @@ out what a move does to that comparison before choosing it. Note that
 
 ## 8. State at handover
 
+**Refreshed at the close of Session A, 22 August 2026.** The table below is the
+current state, not the one this brief was written against.
+
 | | |
 |---|---|
-| `v1.4` | `ccfed7b` — **Session A will move this** |
-| `main` | `0ee925e` — root untouched, **v1.3.0 still live** |
-| Beta | `https://ds-js1.github.io/dryspace-inspect/beta/`, build `v1.4.0-30` |
-| Tests | 557/557 |
+| `v1.4` | `SESSION_A_HEAD` |
+| `main` | `MAIN_HEAD` — root untouched, **v1.3.0 still live** |
+| Beta | `https://ds-js1.github.io/dryspace-inspect/beta/`, build `v1.4.0-31` |
+| Rehearsal | `https://ds-js1.github.io/dryspace-inspect/rehearsal/` — **new, and temporary** |
+| Tests | 597/597 |
 | Tag | none |
 | Release blockers | **none** |
 
 Forced handover itself is **proved working** — run on a device on 22 August,
 library showed `Recovered` in purple. Whatever is decided here, do not disturb it.
+
+### What changed since this brief was written
+
+None of it changes the question this session answers. It changes the ground you
+stand on while answering it.
+
+- **Session A closed nothing and proved two things.** OI-13 and OI-14 are built
+  but **not verified on a device**, so both are still open. Do not read the
+  changelog as though they were closed.
+- **`/rehearsal/` exists on `main` and is temporary.** A v1.4 copy on a non-beta
+  path, so it opens the **real** `ds-inspections` and the upgrade genuinely runs
+  (OI-10). **Delete it once OI-10 is answered.** It carries no `sw.js` on
+  purpose — a service worker's activate handler deletes every cache on the
+  origin, which would wipe the live app's.
+- **OI-16 is the device batch** — five items that each need the same phone,
+  sequenced so they cost one trip. OI-12's cheap half is **step 5**: browse in
+  the app and open SharePoint within the same few minutes. **That single tap is
+  §3 of this brief**, and it is now on a checklist rather than depending on
+  whoever picks this up remembering to do it first.
+- **OI-17 is new and worth two minutes of your time before you trust any
+  instrument.** `diagnostics.html` reported *"3 of 3 unreadable — HYPOTHESIS 2
+  CONFIRMED"* on a device whose migration had worked perfectly, because it read
+  the fields the migration deletes. Fixed. There is now a **non-negotiable in
+  `CLAUDE.md`** and a structural rule in `02_Iteration Guide` §3: a storage
+  change is not finished until `diagnostics.html` is updated in the same commit.
+  **This matters here** — option A moves a file between folders, and if you
+  change what the app stores about the baton, the diagnostic must follow in the
+  same commit.
+- **The live v1.3.0 app hangs on upload and that is expected.** It has no
+  bounded wait anywhere — no `onabort`, no `AbortController`, no DB deadline.
+  Both fixes are in v1.4 only. Do not chase it, and do not let it reopen B5.
+- **OI-15 still stands:** the decision log reuses D34 and D35. The citation table
+  in §5 quotes decisions **by their words** for that reason. Keep doing that.

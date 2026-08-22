@@ -1084,6 +1084,51 @@ speaks two visual languages and that is now a choice rather than an oversight.
 
 ---
 
+## 4j. A diagnostic is a second reader of the storage layout — 22 August 2026
+
+**The decision:** `diagnostics.html` is updated in the **same commit** as any
+change to where or how data is stored, and it reads through the app's own
+accessors wherever it can.
+
+**What forced it.** OI-10's rehearsal ran on a real iPhone and the page reported
+*"3 of 3 unreadable — HYPOTHESIS 2 CONFIRMED"* with `bytes=MISSING` on every
+record — on a device whose migration had worked perfectly. Both panels asked
+"does this photograph exist?" by reading `rec.original` / `rec.blob`, the
+pre-v1.4 fields, which `migrateMediaBytes()` **deletes** once the bytes are
+safely in their own store. The healthier the device, the louder the alarm.
+
+**Why this is a decision and not a bug fix.** The page is not a convenience; it
+is the instrument the exit criteria are written against — OI-10 says *"confirmed
+from diagnostics §6 and §8 rather than by eye"* precisely so that a person is not
+trusted to judge by looking. An instrument that reports catastrophe on a healthy
+device does not merely fail to help. It would have condemned a working
+migration, or sent somebody hunting a fault that never existed.
+
+**The same fault, three times, before anyone named it.** The beta's database
+name (§4h) had to be mirrored by hand; the photo bytes moved and the page did
+not follow; `schema` — the single number OI-10 exists to check — was never read
+at all, so that item's exit criterion could not be met by the instrument it
+names. Three different fields, one shape: **the app moved and its second reader
+did not.**
+
+**What it costs, and why it is still right.** The page must read raw, because
+its first read happens before the app boots — that is not negotiable and it is
+why the duplication exists at all. So the duplication is managed rather than
+removed: `checkBlobs()` now calls `bytesFor()`, the same call the upload path
+makes; `dbName()` mirrors `DB_NAME` and `SCHEMA_NOW` mirrors the top of
+`ensureSchema()`, and **`tests.html` checks both against the app**, because a
+mirrored constant that drifts is this fault one field along.
+
+**The test to apply when changing storage:** *what does this make a HEALTHY
+device say?* The v1.4 blob check was not wrong about broken devices. It was
+wrong about working ones, and nothing failed until the first phone that had
+actually migrated — which is to say, until the first time it mattered.
+
+Written up as a structural rule in `02_Iteration Guide.md` §3, so it is found by
+somebody changing storage rather than only by somebody reading this log.
+
+---
+
 ## 5. Open questions
 
 | Question | Blocking | Notes |

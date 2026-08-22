@@ -734,6 +734,53 @@ function run(W){
       ok(!dlgBox(), 'every dialog opened by these tests was closed again');
     }));
 
+  /* ===== OI-17: the diagnostic must track the storage layout it inspects =====
+
+     diagnostics.html was written against v1.3's layout and survived the v1.4
+     rewrite untouched, so it judged whether a photograph existed by reading
+     fields the migration DELETES. It reported total data loss on a healthy
+     device, and nothing caught it until a real phone had actually migrated.
+
+     These check the page against index.html rather than against a stub, because
+     the fault was precisely that the two had drifted apart. */
+  later('the diagnostic reads photographs where v1.4 actually keeps them',
+    fetch('diagnostics.html?r=' + Date.now()).then(function(r){ return r.text(); })
+      .then(function(src){
+        ok(/W\.bytesFor\(rec, 'original'\)/.test(src),
+           'the blob check goes through bytesFor(), the call the upload path makes',
+           'reading rec.original/rec.blob alone reports MISSING on every migrated record');
+        ok(!/var blob = DSMedia\.originalOf\(rec\);/.test(src),
+           'and no longer judges existence on the pre-v1.4 fields alone');
+        ok(/objectStoreNames\.contains\('bytes'\)/.test(src),
+           'the state panels read the bytes store alongside media');
+        /* Issue order matters: requests in one transaction complete in the
+           order they were made, so media-first would read an empty result. */
+        var now = src.indexOf("var brq = hasBytes ? t.objectStore('bytes').getAll() : null;");
+        var med = src.indexOf("var rq = t.objectStore('media').getAll();");
+        ok(now > -1 && med > -1 && now < med,
+           'the bytes request is issued before the media one, so its result is ready',
+           'requests in a transaction complete in issue order');
+      }));
+
+  /* OI-10's exit criterion is "the record reads schema: 4". The page never
+     showed it, so the number the rehearsal exists to check had to be taken on
+     trust. It is shown now - and SCHEMA_NOW must not drift from the app. */
+  later('the diagnostic knows which record schema is current',
+    fetch('diagnostics.html?r=' + Date.now()).then(function(r){ return r.text(); })
+      .then(function(src){
+        var m = src.match(/var SCHEMA_NOW = (\d+);/);
+        ok(!!m, 'diagnostics.html names the expected record schema');
+        if(!m) return;
+        /* Derived from the app, not typed twice: ensureSchema() raises a record
+           step by step, so the highest step it can reach IS the current schema. */
+        var rec = W.ensureSchema({});
+        eq(Number(m[1]), rec.schema,
+           'and it matches what ensureSchema() actually migrates a record to',
+           'diagnostics says ' + m[1] + ', the app produces ' + rec.schema);
+        ok(/Record schema \(expected/.test(src),
+           'the storage panel reports it, so OI-10 can be judged on a reading');
+      }));
+
   /* The count in the status bar is the way in to the trail. Checked against the
      source: renderStageBar() needs a live record and a rendered form. */
   later('the logged-changes count is the way into the trail',

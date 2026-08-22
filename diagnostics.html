@@ -266,6 +266,11 @@ function dbName(){
     ? 'ds-inspections-beta' : 'ds-inspections';
 }
 
+/* Mirrors the highest step in ensureSchema() in index.html. If that function
+   gains a step and this does not, every record reads as migrated when it is
+   not — the same class of fault as OI-17, one field along. */
+var SCHEMA_NOW = 4;
+
 function el(id){ return document.getElementById(id); }
 function ms(n){ return Math.round(n) + ' ms'; }
 
@@ -1568,7 +1573,7 @@ function measureStorage(){
         clearTimeout(bail);
         var db = open.result;
         var names = Array.prototype.slice.call(db.objectStoreNames);
-        var inspIds = {}, media = {}, byteRows = [];
+        var inspIds = {}, media = {}, byteRows = [], inspSchemas = [];
         var chain = Promise.resolve();
 
         line('storage', '', '');
@@ -1588,7 +1593,13 @@ function measureStorage(){
               } else if(n === 'media'){
                 if(v && v.mid) media[v.mid] = {iid: (v.iid || null), name: (v.name || v.mid)};
               } else if(n === 'inspections'){
-                if(v && v.id) inspIds[v.id] = true;
+                /* The schema too, not only the id. OI-10's exit criterion is
+                   "the record reads schema: 4", and until 22 August 2026 this
+                   page never showed it — so the one number the upgrade
+                   rehearsal exists to check had to be taken on trust or dug out
+                   of an exported backup. A criterion nothing measures is a
+                   criterion nobody meets. */
+                if(v && v.id){ inspIds[v.id] = true; inspSchemas.push(v.schema); }
               }
             }).then(function(){
               total.idb += bytes;
@@ -1619,6 +1630,23 @@ function measureStorage(){
 
           line('storage', '', '');
           line('storage', 'Inspections on this device', String(inspCount));
+
+          /* Record schema — OI-10's exit criterion, read rather than assumed.
+             SCHEMA_NOW must move whenever ensureSchema() gains a step. */
+          if(inspCount){
+            var behind = inspSchemas.filter(function(v){ return (v || 0) < SCHEMA_NOW; });
+            var counts = {};
+            inspSchemas.forEach(function(v){
+              var k = (v === undefined || v === null) ? 'absent' : String(v);
+              counts[k] = (counts[k] || 0) + 1;
+            });
+            line('storage', 'Record schema (expected ' + SCHEMA_NOW + ')',
+                 Object.keys(counts).sort().map(function(k){
+                   return 'schema ' + k + ': ' + counts[k];
+                 }).join('   ') +
+                 (behind.length ? '   ' + behind.length + ' NOT MIGRATED' : '   all migrated'),
+                 behind.length ? 'bad' : 'ok');
+          }
           line('storage', 'Media records', String(mids.length));
           line('storage', 'Media records whose inspection is gone',
                String(orphanMedia.length) +

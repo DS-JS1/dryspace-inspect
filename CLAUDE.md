@@ -110,6 +110,13 @@ These exist because breaking one of them lost, or nearly lost, real data.
   the record, so there is nothing to lose track of. Rebuild a Blob only when
   one is needed, and never store it (D49; D45 was the same fault diagnosed
   one layer too high). This cost a real inspection's evidence photo.
+- **A storage change is not finished until `diagnostics.html` is updated in the
+  same commit.** The page is a second reader of the layout and reads raw, before
+  the app boots, so it cannot follow a change automatically — it just starts
+  lying, confidently. It once reported *"3 of 3 unreadable — HYPOTHESIS 2
+  CONFIRMED"* on a device whose migration had worked perfectly, because it read
+  the fields the migration deletes. Ask what a HEALTHY device makes it say
+  (OI-17; decision log §4j; `02_Iteration Guide` §3).
 - **Never bump `APP_VER` without bumping `CACHE_VERSION`.** A forgotten cache bump
   is silent: the deploy succeeds and every installed device keeps the old app.
 - **Capture is never blocked.** Storage warnings warn; they do not prevent a photo

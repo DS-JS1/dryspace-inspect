@@ -213,6 +213,44 @@ Two consequences worth knowing before you touch this area:
   both. Deletion is the one operation that has to know about both stores; missing
   that left 139 MB stranded on a device with no inspections left at all.
 
+### A change to storage is not finished until `diagnostics.html` has caught up
+
+`diagnostics.html` is not documentation of the storage layout — it is a
+**second reader** of it, and it reads by hand rather than through the app's
+functions, because it has to work before the app has booted.
+
+**So every store, field or key you add, move or delete exists in two places, and
+the second one fails silently.** The app keeps working; the diagnostic starts
+lying. And it lies with total confidence, which is worse than saying nothing.
+
+This has now happened twice, in different fields:
+
+| | What the app changed | What the diagnostic kept doing | What it reported |
+|---|---|---|---|
+| **OI-C1 era** | the beta got its own database | derived the name from the path — correct by luck | — |
+| **D49 / v1.4** | photo bytes moved to the `bytes` store and `rec.original` is **deleted** | read `rec.original` / `rec.blob` | *"3 of 3 unreadable — HYPOTHESIS 2 CONFIRMED"* on a device that had migrated perfectly (**OI-17**) |
+| **schema 4** | `ensureSchema()` raises records to 4 | never read `schema` at all | nothing — the exit criterion of an entire open item could not be met |
+
+**The rule.** When you change where or how something is stored:
+
+1. **Update `diagnostics.html` in the same commit.** Not the next session. The
+   fault does not show until somebody is standing on a device relying on it.
+2. **Prefer the app's own accessor.** `checkBlobs()` now calls `bytesFor()` —
+   the same call the upload path makes — so it cannot disagree with what ships.
+   Read by hand only where you must, and say why.
+3. **Mirror constants explicitly and test them.** `dbName()` mirrors `DB_NAME`;
+   `SCHEMA_NOW` mirrors the top of `ensureSchema()`. `tests.html` checks both
+   against the app, because a mirrored constant that drifts is this same fault
+   one field along.
+4. **Ask what a HEALTHY device makes this say.** The v1.4 blob check was not
+   wrong on broken devices — it was wrong on working ones, and would have
+   condemned a migration that had done its job.
+
+> **A diagnostic that reports catastrophe on a healthy device is worse than no
+> diagnostic.** It is the instrument the exit criteria are written against, so
+> when it is wrong it does not merely fail to help — it sends somebody hunting a
+> fault that was never there, or condemns work that was fine.
+
 ---
 
 ## 4. Versioning — required on every change
