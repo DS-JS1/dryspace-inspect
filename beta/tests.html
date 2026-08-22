@@ -544,52 +544,206 @@ function run(W){
        'a field holding only spaces still counts as blank');
   });
 
-  test('a complete record is never interrupted', function(){
-    var asked = false;
-    var real = W.confirm;
-    W.confirm = function(){ asked = true; return true; };
-    var go = W.confirmFiling({inspNo: 'INS-2026-0142', client: 'Smith',
-                              address: '12 Marine Pde', inspDate: '2026-08-15',
-                              editedBy: 'JS'}, 'FOLDER');
-    W.confirm = real;
-    ok(go === true, 'the handover proceeds');
-    ok(asked === false, 'and nothing is put in front of the person');
-  });
+  /* ===== OI-13, the dialogs staff cannot read =====
 
-  test('a blank field is named, with the folder it would file as', function(){
-    var msg = null, real = W.confirm;
-    W.confirm = function(m){ msg = m; return true; };
-    var go = W.confirmFiling({client: 'Tom Kelly', address: '57 Newmarket Rd',
-                              inspDate: '2026-07-23', editedBy: 'JS'},
-                             'Tom Kelly - 57 Newmarket Rd');
-    W.confirm = real;
-    ok(go === true, 'answering OK hands over anyway \u2014 it asks, it does not block');
-    ok(/Inspection number/.test(msg), 'the missing field is named');
-    ok(/Tom Kelly - 57 Newmarket Rd/.test(msg), 'and the folder it would file as is shown');
-  });
+     The box is a singleton in the DOM, so two open at once would collide on
+     .pick-back. Everything that drives one runs in ONE chain, started off a
+     resolved promise so it begins after every synchronous test definition in
+     run() has finished with its own box. */
+  function dlgBox(){ return D.querySelector('.pick-back'); }
+  function dlgChoices(b){
+    return Array.prototype.slice.call(b.querySelectorAll('.pick-row'))
+             .map(function(r){ return r.textContent; });
+  }
+  function dlgTap(b, re){
+    var rows = Array.prototype.slice.call(b.querySelectorAll('.pick-row'));
+    var hit = rows.filter(function(r){ return re.test(r.textContent); })[0];
+    if(!hit) throw new Error('no choice matching ' + re + '; offered: ' + dlgChoices(b).join(' | '));
+    hit.click();
+  }
+  function dlgText(b){ return b.textContent; }
 
-  test('cancelling stops the handover', function(){
-    var real = W.confirm;
-    W.confirm = function(){ return false; };
-    var go = W.confirmFiling({client: 'X'}, 'F');
-    W.confirm = real;
-    ok(go === false, 'Cancel means nothing is sent');
-  });
+  later('the filing gate asks in a box that cannot truncate', Promise.resolve()
 
-  /* The folder is pinned on first upload, so filling a number in afterwards does
-     NOT rename it. Saying otherwise would be untrue at the one moment somebody
-     could act on the difference. */
-  test('the message tells the truth about whether filing can still change', function(){
-    var msgs = [], real = W.confirm;
-    W.confirm = function(m){ msgs.push(m); return true; };
-    W.confirmFiling({client: 'X'}, 'F');                        /* nothing uploaded yet */
-    W.confirmFiling({client: 'X', mediaFolder: 'F'}, 'F');      /* photos already filed */
-    W.confirm = real;
-    ok(/would still change how/.test(msgs[0]),
-       'before any upload: filling them in still changes the filing');
-    ok(/already fixed/.test(msgs[1]) && /NOT rename/.test(msgs[1]),
-       'after photos have filed: the folder is fixed and the message says so');
-  });
+    /* A complete record is still never interrupted. */
+    .then(function(){
+      var go = W.confirmFiling({inspNo: 'INS-2026-0142', client: 'Smith',
+                                address: '12 Marine Pde', inspDate: '2026-08-15',
+                                editedBy: 'JS'}, 'FOLDER');
+      ok(!dlgBox(), 'a complete record puts nothing in front of the person');
+      return go.then(function(v){ ok(v === true, 'and the handover proceeds'); });
+    })
+
+    /* A blank field is named, with the folder it would file as. */
+    .then(function(){
+      var go = W.confirmFiling({client: 'Tom Kelly', address: '57 Newmarket Rd',
+                                inspDate: '2026-07-23', editedBy: 'JS'},
+                               'Tom Kelly - 57 Newmarket Rd');
+      var b = dlgBox();
+      ok(!!b, 'a blank filing field opens the dialog');
+      if(!b) return go;
+      ok(/Inspection number/.test(dlgText(b)), 'the missing field is named');
+      ok(/Tom Kelly - 57 Newmarket Rd/.test(dlgText(b)),
+         'and the folder it would file as is shown');
+      /* The whole of OI-13 in one assertion: what the buttons DO is on the
+         buttons, so nothing depends on a last line surviving. */
+      ok(dlgChoices(b).some(function(t){ return /Hand over anyway/.test(t); }) &&
+         dlgChoices(b).some(function(t){ return /fill them in/.test(t); }),
+         'both outcomes are named on the buttons, not in a trailing line',
+         'offered: ' + dlgChoices(b).join(' | '));
+      dlgTap(b, /Hand over anyway/);
+      return go.then(function(v){
+        ok(v === true, 'handing over anyway proceeds \u2014 it asks, it does not block');
+        ok(!dlgBox(), 'and the box closes');
+      });
+    })
+
+    /* Going back stops the handover. */
+    .then(function(){
+      var go = W.confirmFiling({client: 'X'}, 'F');
+      dlgTap(dlgBox(), /fill them in/);
+      return go.then(function(v){ ok(v === false, 'going back means nothing is sent'); });
+    })
+
+    /* The folder is pinned on first upload, so filling a number in afterwards
+       does NOT rename it. Saying otherwise would be untrue at the one moment
+       somebody could act on the difference. */
+    .then(function(){
+      var go = W.confirmFiling({client: 'X'}, 'F');            /* nothing uploaded yet */
+      var t = dlgText(dlgBox());
+      dlgTap(dlgBox(), /Hand over anyway/);
+      return go.then(function(){
+        ok(/would still change how/.test(t),
+           'before any upload: filling them in still changes the filing');
+        var go2 = W.confirmFiling({client: 'X', mediaFolder: 'F'}, 'F');  /* photos filed */
+        var t2 = dlgText(dlgBox());
+        dlgTap(dlgBox(), /Hand over anyway/);
+        return go2.then(function(){
+          ok(/already fixed/.test(t2) && /NOT rename/.test(t2),
+             'after photos have filed: the folder is fixed and the message says so');
+        });
+      });
+    })
+
+    /* ----- the fork warning: the worst case, and the reason OI-13 was graded
+       worse than "bold text". A native confirm() could only say what OK and
+       Cancel meant on the last line, and the last line is what iOS cut. ----- */
+    .then(function(){
+      ok(typeof W.askImportChoice === 'function', 'askImportChoice() is separable');
+      var lines = [{k: 'On this device', v: 'yesterday'}, {k: 'Incoming file', v: 'today'}];
+      var q = W.askImportChoice('Smith - 12 Marine Pde', false, lines);
+      var b = dlgBox();
+      ok(!!b, 'the fork warning opens the dialog');
+      if(!b) return q;
+      ok(/NEWER than the file you are importing/.test(dlgText(b)),
+         'the warning that the local copy is newer is carried');
+      eq(b.querySelectorAll('.pick-line').length, 2,
+         'the two copies are laid out as facts, not run together in a sentence');
+      var c = dlgChoices(b);
+      ok(c.length === 3, 'three outcomes are offered, not two', 'offered: ' + c.join(' | '));
+      ok(c.some(function(t){ return /Replace/.test(t); }) &&
+         c.some(function(t){ return /Keep both/.test(t); }) &&
+         c.some(function(t){ return /Cancel this import/.test(t); }),
+         'replace, fork and cancel are each named on their own button');
+      ok(c.some(function(t){ return /more recent work is lost/.test(t); }),
+         'and replacing says what it costs, on the button that does it');
+      dlgTap(b, /Replace/);
+      return q.then(function(v){ eq(v, 'replace', 'the chosen outcome comes back'); });
+    })
+
+    /* A fork stayed a two-step act: it was two confirms before and it is two
+       dialogs now. */
+    .then(function(){
+      var q = W.askImportChoice('Smith', true, []);
+      ok(/incoming file is the newer/.test(dlgText(dlgBox())),
+         'when the incoming file is newer it says so instead of warning');
+      dlgTap(dlgBox(), /Keep both/);
+      return new Promise(function(r){ setTimeout(r, 0); }).then(function(){
+        var b = dlgBox();
+        ok(!!b && /creates a FORK/i.test(b ? dlgText(b) : ''),
+           'keeping both asks a second time before forking');
+        if(!b) return;
+        dlgTap(b, /Cancel this import/);
+        return q.then(function(v){
+          eq(v, null, 'cancelling the second step imports nothing');
+        });
+      });
+    })
+
+    /* ----- the structural fix. A long message put in the old .pick-note sat in
+       a head that does not scroll, so it would have been clipped exactly the way
+       iOS clips alert() -- the fault moved rather than fixed. ----- */
+    .then(function(){
+      var d = W.showDialog({
+        title: 'A long message',
+        note: new Array(60).join('This is a long line of guidance. '),
+        choices: [{title: 'Done', value: true}],
+        cancel: null
+      });
+      var b = dlgBox();
+      var scroll = b.querySelector('.pick-scroll');
+      var note = b.querySelector('.pick-note');
+      ok(!!scroll, 'the box has one scroll region');
+      ok(!!note && scroll.contains(note),
+         'and the message is inside it, so a long one scrolls rather than being cut');
+      ok(!!scroll.contains(b.querySelector('.pick-list')),
+         'the choices scroll with it, so they can always be reached');
+      ok(/auto|scroll/.test(W.getComputedStyle(scroll).overflowY),
+         'the region scrolls rather than hiding what does not fit');
+      ok(W.getComputedStyle(note).whiteSpace === 'pre-wrap',
+         'blank lines in a message survive, so paragraphs stay paragraphs');
+      dlgTap(b, /Done/);
+      return d;
+    })
+
+    /* ----- OI-14: the trail is recorded and could not be read ----- */
+    .then(function(){
+      ok(typeof W.showAuditTrail === 'function', 'showAuditTrail() is defined');
+      var job = {audit: [
+        {at: '2026-08-20T01:00:00.000Z', by: 'Ann Lee',    stage: 'office', action: 'Created'},
+        {at: '2026-08-21T02:00:00.000Z', by: 'Jamie Stone', stage: 'site',  action: 'Handover forced by Jamie Stone, recovered from archive'}
+      ]};
+      var d = W.showAuditTrail(job);
+      var b = dlgBox();
+      ok(!!b, 'the trail opens in the same box');
+      if(!b) return d;
+      var ents = b.querySelectorAll('.pick-ent');
+      eq(ents.length, 2, 'every entry is shown, not counted');
+      ok(/recovered from archive/.test(ents[0].textContent),
+         'newest first \u2014 the forced handover is what anybody opens this to read',
+         'first entry was: ' + ents[0].textContent);
+      ok(/Jamie Stone/.test(ents[0].textContent), 'who did it is on the entry');
+      ok(/21\/08\/2026/.test(ents[0].textContent), 'and when, in Australian order');
+      ok(!b.querySelector('.pick-row'),
+         'nothing is tappable \u2014 the entries are read, not chosen');
+      ok(b.querySelector('.pick-cancel').textContent === 'Close',
+         'and the way out says Close rather than Cancel');
+      ok(!/Nothing to choose from/.test(dlgText(b)),
+         'a dialog with no choices does not claim there is nothing to choose from');
+      b.querySelector('.pick-cancel').click();
+      return d;
+    })
+    .then(function(){
+      var d = W.showAuditTrail({audit: []});
+      ok(/Nothing has been logged/.test(dlgText(dlgBox())),
+         'an empty trail says so plainly');
+      dlgTap(dlgBox(), /Close/);
+      return d;
+    })
+    .then(function(){
+      ok(!dlgBox(), 'every dialog opened by these tests was closed again');
+    }));
+
+  /* The count in the status bar is the way in to the trail. Checked against the
+     source: renderStageBar() needs a live record and a rendered form. */
+  later('the logged-changes count is the way into the trail',
+    fetch('index.html?r=' + Date.now()).then(function(r){ return r.text(); })
+      .then(function(src){
+        ok(/id="sb-audit"/.test(src), 'the count is rendered as a control with an id');
+        ok(/class="audit-open"/.test(src), 'and is styled as something to tap');
+        ok(/aud\.onclick = function\(\)\{ showAuditTrail\(cur\); \}/.test(src),
+           'tapping it opens the trail for the record on screen');
+      }));
 
   /* ===== the beta build ===== */
   section('Test build routing');

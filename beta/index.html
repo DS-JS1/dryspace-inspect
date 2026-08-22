@@ -65,15 +65,16 @@ input[type=text],input[type=date],select,textarea{font-size:16px !important;padd
 @media(min-width:768px){.pick-back{align-items:center}.pick-box{border-radius:12px}}
 .pick-head{padding:12px 14px 8px;border-bottom:1px solid #e5e7eb}
 .pick-title{font-weight:700;font-size:16px;color:#0b2a4a}
-.pick-note{font-size:12px;color:#4b5563;margin-top:3px;line-height:1.4}
+.pick-note{font-size:13px;color:#374151;margin:10px 14px 0;line-height:1.45;white-space:pre-wrap}
+.pick-scroll{overflow:auto;-webkit-overflow-scrolling:touch;flex:1;min-height:0}
 .pick-lines{margin:10px 14px 0;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden}
 .pick-line{display:flex;gap:8px;padding:6px 10px;font-size:12px;border-bottom:1px solid #f1f5f9}
 .pick-line:last-child{border-bottom:0}
 .pick-line-k{color:#6b7280;flex:0 0 34%}
 .pick-line-v{color:#0b2a4a;font-weight:600;word-break:break-word;flex:1}
 
-.pick-filter{margin:10px 14px 0;padding:9px 10px;font-size:14px;border:1px solid #cbd5e1;border-radius:8px;-webkit-appearance:none}
-.pick-list{overflow:auto;-webkit-overflow-scrolling:touch;padding:8px 8px 4px;flex:1}
+.pick-filter{display:block;width:calc(100% - 28px);margin:10px 14px 0;padding:9px 10px;font-size:14px;border:1px solid #cbd5e1;border-radius:8px;-webkit-appearance:none;position:sticky;top:0;z-index:1}
+.pick-list{padding:8px 8px 4px}
 .pick-row{display:block;width:100%;text-align:left;background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;padding:9px 11px;margin:0 0 6px;font:inherit;cursor:pointer}
 .pick-row:active{background:#eef2f7}
 .pick-row-t{font-size:14px;font-weight:600;color:#0b2a4a;line-height:1.3}
@@ -94,6 +95,12 @@ input[type=text],input[type=date],select,textarea{font-size:16px !important;padd
 .pick-row-w.bs-waiting{background:none;color:#15803d}
 .pick-row-w.bs-held{background:none;color:#b45309}
 
+.audit-open{display:inline-block;font:inherit;font-weight:600;background:none;border:0;border-bottom:1px solid currentColor;padding:4px 2px;margin:-4px 0;color:#1d4ed8;cursor:pointer}
+.pick-ents{margin:10px 14px 0;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden}
+.pick-ent{padding:8px 10px;border-bottom:1px solid #f1f5f9}
+.pick-ent:last-child{border-bottom:0}
+.pick-ent-a{font-size:13px;font-weight:600;color:#0b2a4a;line-height:1.35}
+.pick-ent-m{font-size:11px;color:#6b7280;margin-top:2px;line-height:1.35}
 .pick-none{font-size:13px;color:#6b7280;padding:14px;text-align:center}
 .pick-foot{padding:8px 14px 12px;border-top:1px solid #e5e7eb;text-align:right}
 
@@ -2076,6 +2083,44 @@ function logAudit(action){
                   stage: cur.stage || 'office', action: action});
   if(cur.audit.length > 60) cur.audit = cur.audit.slice(-60);
 }
+/* OI-14 — reading back what logAudit() has been writing all along.
+
+   Newest first, because the question that brings anybody here is "who has just
+   taken this, and from where" — a forced handover happens over somebody's head,
+   and the app's answer to that was a number.
+
+   The same box as every other dialog (OI-13), so a long trail scrolls instead of
+   being cut. Not a picker: the entries are read, not chosen, so tapping one must
+   not close anything. */
+function showAuditTrail(job){
+  var trail = (job && job.audit) || [];
+  if(!trail.length){
+    return showDialog({
+      title: 'Log of changes',
+      note: 'Nothing has been logged against this inspection yet.',
+      choices: [{title: 'Close', value: true}],
+      cancel: null
+    });
+  }
+  var entries = trail.slice().reverse().map(function(en){
+    var at = Date.parse(en.at);
+    return {
+      a: en.action || 'Change',
+      m: (isNaN(at) ? (en.at || 'unknown time') : fmtAUStamp(at)) +
+         '  ·  ' + (en.by || 'unnamed') +
+         '  ·  ' + stageDef(en.stage || 'office').short
+    };
+  });
+  return showDialog({
+    title: 'Log of changes',
+    note: trail.length + ' entr' + (trail.length > 1 ? 'ies' : 'y') + ', newest first. '
+        + 'The full trail also travels in the exported report.',
+    entries: entries,
+    choices: [],
+    cancel: 'Close'
+  });
+}
+
 function renderStageBar(){
   var box = document.getElementById('stagebar');
   if(!box || !cur) return;
@@ -2092,7 +2137,14 @@ function renderStageBar(){
     '<div><strong>Last updated</strong> ' + fmtAUStamp(cur.updatedAt) +
       (cur.editedBy ? ' by ' + esc(cur.editedBy) : '') +
       ' &nbsp;·&nbsp; <strong>Created</strong> ' + fmtAUStamp(cur.createdAt) +
-      (cur.audit && cur.audit.length ? ' &nbsp;·&nbsp; ' + cur.audit.length + ' logged change' + (cur.audit.length > 1 ? 's' : '') : '') + '</div>' +
+      /* OI-14 — the count was the whole answer. Every entry was recorded and
+         the only way to read one was to export a backup and open the JSON, which
+         is not a thing anybody does standing in a driveway asking who took this
+         record off them. The number is now the way in. */
+      (cur.audit && cur.audit.length
+        ? ' &nbsp;·&nbsp; <button type="button" class="audit-open" id="sb-audit">' +
+          cur.audit.length + ' logged change' + (cur.audit.length > 1 ? 's' : '') + '</button>'
+        : '') + '</div>' +
     '<div style="margin-top:4px">Handover: <strong>Hand over through SharePoint</strong> uploads the record to <strong>current</strong> and files the previous version in <strong>archive</strong> for you. Then tell the next person and delete your device copy.</div>';
   var sel = document.getElementById('sb-stage');
   sel.onchange = function(){
@@ -2101,6 +2153,8 @@ function renderStageBar(){
     logAudit('Stage changed from ' + stageDef(prev).short + ' to ' + stageDef(cur.stage).short);
     saveNow().then(renderStageBar);
   };
+  var aud = document.getElementById('sb-audit');
+  if(aud) aud.onclick = function(){ showAuditTrail(cur); };
   var usr = document.getElementById('sb-user');
   usr.onchange = function(){
     cur.editedBy = usr.value.trim();
@@ -2653,10 +2707,24 @@ function toggleComplete(){
   saveNow().then(function(){ updateFormTitle(); renderStageBar(); });
 }
 function deleteInspection(id, label){
-  if(!confirm('Delete "' + label + '" and all its photos/videos from this device? This cannot be undone.\n\nIf you have not sent the report yet, cancel and send it first.')) return;
-  mediaFor(id).then(function(recs){
-    return Promise.all(recs.map(function(r){ return forgetMedia(r.mid); }));
-  }).then(function(){ return dbDel('inspections', id); }).then(renderHome);
+  /* OI-13 — "This cannot be undone" was in the middle of a native confirm(),
+     and OK/Cancel said nothing about which one deleted. Both buttons name what
+     they do, and the destructive one is not the first thing under the thumb. */
+  return showDialog({
+    title: 'Delete this inspection from this device?',
+    note: 'If you have not sent the report yet, cancel and send it first.',
+    lines: [{k: 'Inspection', v: label}],
+    choices: [
+      {title: 'Keep it', sub: 'Nothing is deleted.', value: false},
+      {title: 'Delete it and its photos', sub: 'This cannot be undone.', value: true}
+    ],
+    cancel: null
+  }).then(function(go){
+    if(go !== true) return;
+    return mediaFor(id).then(function(recs){
+      return Promise.all(recs.map(function(r){ return forgetMedia(r.mid); }));
+    }).then(function(){ return dbDel('inspections', id); }).then(renderHome);
+  });
 }
 function renderHome(){
   Promise.all([dbAll('inspections'), dbAll('media')]).then(function(res){
@@ -3183,12 +3251,15 @@ function photoReferences(recs){
   });
 }
 
-/* Returns true to go ahead. Asks once, never twice for the same handover, and
+/* Resolves true to go ahead. Asks once, never twice for the same handover, and
    never blocks outright — an inspection with a missing number is still worth
-   handing on, and the person may have no way to find it right now. */
+   handing on, and the person may have no way to find it right now.
+
+   A promise since OI-13, because the custom dialog is one. A complete record is
+   still never interrupted; it just resolves rather than returns. */
 function confirmFiling(job, folder){
   var missing = missingFilingFields(job);
-  if(!missing.length) return true;
+  if(!missing.length) return Promise.resolve(true);
 
   /* The folder is pinned on first upload, so once photos exist, filling the
      number in afterwards does NOT rename anything. Saying "add it and it will
@@ -3196,19 +3267,34 @@ function confirmFiling(job, folder){
      the difference. */
   var pinned = !!job.mediaFolder;
 
-  var msg = 'Before handing this over \u2014 ' + missing.length +
-            (missing.length > 1 ? ' details that decide how it files are blank:'
-                                : ' detail that decides how it files is blank:') + '\n\n';
-  missing.forEach(function(f){ msg += '  \u2022 ' + f.label + ' \u2014 ' + f.why + '\n'; });
-  msg += '\nIt will file as:\n  ' + folder + '\n\n';
-  msg += pinned
-    ? 'This folder is already fixed, because photos have uploaded to it. Filling '
-      + 'these in now will correct the record and the library columns, but will '
-      + 'NOT rename the folder or any photo already in it.\n\n'
-    : 'Nothing has uploaded yet, so filling these in now would still change how '
-      + 'it files.\n\n';
-  msg += 'OK = hand over anyway\nCancel = go back and fill them in';
-  return confirm(msg);
+  /* OI-13 — a list of blank fields, a folder name and a caveat is four or five
+     lines before the two lines that say what the buttons do, which is precisely
+     the shape iOS truncates. The blanks are facts, so they are laid out as
+     facts, and each button says what it does. Resolves true / false, so the
+     caller reads the same as it did. */
+  var note = 'Before handing this over \u2014 ' + missing.length +
+             (missing.length > 1 ? ' details that decide how it files are blank.'
+                                 : ' detail that decides how it files is blank.') + '\n\n' +
+    (pinned
+      ? 'This folder is already fixed, because photos have uploaded to it. Filling '
+        + 'these in now will correct the record and the library columns, but will '
+        + 'NOT rename the folder or any photo already in it.'
+      : 'Nothing has uploaded yet, so filling these in now would still change how '
+        + 'it files.');
+
+  var lines = missing.map(function(f){ return {k: f.label, v: f.why}; });
+  lines.push({k: 'It will file as', v: folder});
+
+  return showDialog({
+    title: 'Some filing details are blank',
+    note: note,
+    lines: lines,
+    choices: [
+      {title: 'Go back and fill them in', sub: 'Nothing is sent.', value: false},
+      {title: 'Hand over anyway', sub: 'Files as ' + folder + '.', value: true}
+    ],
+    cancel: null
+  }).then(function(v){ return v === true; });
 }
 
 function handoverToSharePoint(){
@@ -3222,14 +3308,21 @@ function handoverToSharePoint(){
   var name = 'DS_Draft_' + stampName() + '.json';
 
   /* Asked before anything is listed, moved or written — cancelling here must
-     leave SharePoint exactly as it was. */
-  if(!confirmFiling(job, folder)){
-    setHandover('Handover cancelled \u2014 nothing was sent.', '');
-    return;
-  }
+     leave SharePoint exactly as it was. The gate became a promise with OI-13,
+     so everything after it moved inside the then(); nothing else changed. */
+  confirmFiling(job, folder).then(function(go){
+    if(!go){
+      setHandover('Handover cancelled \u2014 nothing was sent.', '');
+      return;
+    }
+    return handoverToSharePointConfirmed(job, folder, currentPath, name);
+  });
+}
+
+function handoverToSharePointConfirmed(job, folder, currentPath, name){
 
   setHandover('Checking what is in current\u2026', 'busy');
-  saveNow()
+  return saveNow()
     .then(function(){ return dsTransport.list(currentPath); })
     .then(function(existing){
       var files = existing.filter(function(f){ return !f.isFolder; });
@@ -3346,17 +3439,37 @@ function handoverToSharePoint(){
     })
     .then(function(){
       setHandover('Handed over. The live record is now in current/.', 'ok');
-      alert('Handed over.\n\n' + name + '\n\nis now the live record in:\n' + currentPath +
-            '\n\nThe previous version is in archive/.\n\n' +
-            'Tell the next person, with a link to the folder. Delete your copy from this ' +
-            'device once they confirm they have it.');
-      renderHome();
+      /* OI-13 — the owner's screenshot of this alert() on an iPhone ended
+         mid-sentence at "Delete your copy from", with no scroll and no way to
+         reach the rest. What was cut is the operative half: the instruction
+         that stops two people holding the same record. It leads now, and the
+         filenames sit underneath as facts rather than inside the sentence. */
+      return showDialog({
+        title: 'Handed over',
+        note: 'Tell the next person, with a link to the folder.\n\n'
+            + 'Delete your copy from this device once they confirm they have it.',
+        lines: [
+          {k: 'The live record', v: name},
+          {k: 'is now in',      v: currentPath},
+          {k: 'Previous version', v: 'filed in archive/'}
+        ],
+        choices: [{title: 'Done', value: true}],
+        cancel: null
+      }).then(renderHome);
     })
     .catch(function(e){
       if(e && e.cancelled){ setHandover('Handover cancelled \u2014 nothing was changed.', ''); return; }
       setHandover('Handover failed: ' + ((e && e.message) || e), 'bad');
-      alert((e && e.partial ? '' : 'Handover failed.\n\n') + ((e && e.message) || e) +
-            (e && e.partial ? '' : '\n\nYour copy on this device is untouched.'));
+      /* A partial failure's message is several lines and ends with the thing to
+         do about it (Handover Protocol §8), so it truncates exactly where it
+         matters — same fault as the success message above. */
+      return showDialog({
+        title: (e && e.partial) ? 'Handed over, but the tidying failed' : 'Handover failed',
+        note: ((e && e.message) || String(e)) +
+              (e && e.partial ? '' : '\n\nYour copy on this device is untouched.'),
+        choices: [{title: 'Done', value: true}],
+        cancel: null
+      });
     });
 }
 
@@ -3540,12 +3653,21 @@ function recoverWorkInProgress(){
             importDraftMedia(payload, function(n){
               renderHome();
               setSync('Recovered a working copy.', 'ok');
-              alert('Recovered ' + who + '\u2019s work in progress, backed up ' + when + '.\n\n' +
-                    chosen.folder + '\n\n' +
-                    'This is a WORKING COPY, not the baton. Photos already uploaded stay in ' +
-                    'SharePoint.\n\nBefore you carry on, check current/ \u2014 if there is a newer ' +
-                    'handover there, that one is the live record and this is not.');
-              res();
+              /* OI-13 — read once, and the last paragraph is the one that stops
+                 somebody working all afternoon on a copy that does not count. */
+              showDialog({
+                title: 'Recovered a working copy',
+                note: 'This is a WORKING COPY, not the baton. Photos already uploaded stay '
+                    + 'in SharePoint.\n\nBefore you carry on, check current/ \u2014 if there is '
+                    + 'a newer handover there, that one is the live record and this is not.',
+                lines: [
+                  {k: 'Backed up by', v: who},
+                  {k: 'Backed up',    v: when},
+                  {k: 'Folder',       v: chosen.folder}
+                ],
+                choices: [{title: 'Done', value: true}],
+                cancel: null
+              }).then(res);
             });
           }, res);
         });
@@ -3573,6 +3695,7 @@ function recoverWorkInProgress(){
    undifferentiated wall at whatever size iOS picks.
 
    opts.lines  - array of {k, v} shown as a small definition list
+   opts.entries- array of {a, m} shown as a log: action leading, meta beneath
    opts.choices- [{title, sub, value}], first is the affirmative
    Resolves to the chosen value, or null on Cancel / Escape / backdrop. */
 function showDialog(opts){
@@ -3580,6 +3703,7 @@ function showDialog(opts){
     title: opts.title,
     note: opts.note,
     lines: opts.lines,
+    entries: opts.entries,
     items: (opts.choices || [{title: 'OK', value: true}]),
     cancel: opts.cancel === undefined ? 'Cancel' : opts.cancel
   });
@@ -3594,20 +3718,30 @@ function pickFromList(opts){
       '<div class="pick-box" role="dialog" aria-modal="true">' +
         '<div class="pick-head">' +
           '<div class="pick-title"></div>' +
-          '<div class="pick-note"></div>' +
         '</div>' +
-        '<div class="pick-lines"></div>' +
-        '<input class="pick-filter" type="search" autocomplete="off" ' +
-               'placeholder="Filter by client, address, number or stage">' +
-        '<div class="pick-list"></div>' +
+        /* ONE scroll region, holding the message, the facts and the choices.
+           A message long enough to need scrolling is exactly the message iOS
+           truncates in a native dialog, so it must be able to scroll here or
+           nothing has been fixed (OI-13). */
+        '<div class="pick-scroll">' +
+          '<div class="pick-note"></div>' +
+          '<div class="pick-lines"></div>' +
+          '<div class="pick-ents"></div>' +
+          '<input class="pick-filter" type="search" autocomplete="off" ' +
+                 'placeholder="Filter by client, address, number or stage">' +
+          '<div class="pick-list"></div>' +
+        '</div>' +
         '<div class="pick-foot"><button type="button" class="btn pick-cancel">Cancel</button></div>' +
       '</div>';
     back.querySelector('.pick-title').textContent = opts.title || 'Choose one';
-    back.querySelector('.pick-note').textContent = opts.note || '';
+    var noteEl = back.querySelector('.pick-note');
+    noteEl.textContent = opts.note || '';
+    if(!opts.note) noteEl.style.display = 'none';
 
     var listEl = back.querySelector('.pick-list');
     var filterEl = back.querySelector('.pick-filter');
     var linesEl = back.querySelector('.pick-lines');
+    var entsEl = back.querySelector('.pick-ents');
 
     /* Facts, laid out, rather than run together in a paragraph. Somebody
        deciding whether to overwrite a colleague's work needs to SEE the two
@@ -3623,6 +3757,21 @@ function pickFromList(opts){
       linesEl.appendChild(row);
     });
     if(!(opts.lines || []).length) linesEl.style.display = 'none';
+
+    /* A log, not a definition list: what happened leads, and when/who/stage
+       sits beneath it. Putting a timestamp in a 34% key column leaves the
+       action a third of a phone's width and wrapping to four rows. */
+    (opts.entries || []).forEach(function(en){
+      var row = document.createElement('div');
+      row.className = 'pick-ent';
+      var a = document.createElement('div'); a.className = 'pick-ent-a';
+      a.textContent = en.a;
+      var m = document.createElement('div'); m.className = 'pick-ent-m';
+      m.textContent = en.m;
+      row.appendChild(a); row.appendChild(m);
+      entsEl.appendChild(row);
+    });
+    if(!(opts.entries || []).length) entsEl.style.display = 'none';
 
     /* The filter is for a list. One or two choices do not need one, and a search
        box over two buttons looks like something is missing. */
@@ -3646,6 +3795,9 @@ function pickFromList(opts){
                  .toLowerCase().indexOf(q) > -1;
       });
       listEl.innerHTML = '';
+      /* A message with no choices at all is not "nothing to choose from" --
+         it is a message. Say nothing rather than something wrong. */
+      if(!items.length && (opts.entries || opts.lines || opts.note)) return;
       if(!shown.length){
         var none = document.createElement('div');
         none.className = 'pick-none';
@@ -3781,9 +3933,18 @@ function copyRequest(body){
 }
 
 function showRequest(body){
-  /* Last resort: put it on screen so it can be selected by hand. Better than a
-     dead end, and it costs nothing to include. */
-  alert(body);
+  /* Last resort: put it on screen so it can be read and copied by hand. Better
+     than a dead end, and it costs nothing to include.
+
+     OI-13 — as an alert() this was the clearest case of all: the message IS
+     the whole point of the screen, and a native dialog decides for itself how
+     much of it to show. */
+  return showDialog({
+    title: 'Copy this and send it',
+    note: body,
+    choices: [{title: 'Done', value: true}],
+    cancel: null
+  });
 }
 
 function isAdmin(){
@@ -4239,46 +4400,95 @@ function exportDraft(){
   });
 }
 /* v1.2 — the incoming timestamp is preserved (not overwritten with "now") so the
-   two copies can be compared honestly, and "keep both" is called what it is: a fork. */
+   two copies can be compared honestly, and "keep both" is called what it is: a fork.
+
+   v1.4.0, OI-13 — this was two nested confirm() calls, and it is the worst case
+   of the truncation fault rather than merely one of them. A native dialog has
+   two buttons whose labels are fixed, so what OK and Cancel MEAN had to be
+   written as the last line of a dozen — and the last line is what iOS cuts.
+   With it gone the reader could not know that Cancel led to more options rather
+   than abandoning the import, and had no warning that OK might overwrite newer
+   work. The choices now carry their own consequences, so nothing depends on a
+   line surviving. */
 function importRecord(rec, then, onAbort){
   rec = ensureSchema(rec);
   var incoming = rec.updatedAt || Date.now();
   dbGet('inspections', rec.id).then(function(existing){
-    var wipe = Promise.resolve();
-    if(existing){
-      var name = rec.client || rec.address || 'Untitled inspection';
-      var newer = incoming >= (existing.updatedAt || 0);
-      var msg = 'This inspection already exists on this device.\n\n' + name + '\n\n' +
-        'On this device : ' + fmtAUStamp(existing.updatedAt) + '  ·  ' + stageDef(existing.stage || 'office').short +
-          (existing.editedBy ? '  ·  ' + existing.editedBy : '') + '\n' +
-        'Incoming file  : ' + fmtAUStamp(incoming) + '  ·  ' + stageDef(rec.stage || 'office').short +
-          (rec.editedBy ? '  ·  ' + rec.editedBy : '') + '\n\n' +
-        (newer ? 'The incoming file is the newer of the two.'
-               : 'WARNING — the copy already on this device is NEWER than the file you are importing.\n' +
-                 'Replacing it will lose the more recent work.') + '\n\n' +
-        'OK = replace with the imported copy\nCancel = show other options';
-      if(confirm(msg)){
-        /* replacing: clear the old copy's stored files so they aren't orphaned/duplicated */
-        wipe = mediaFor(rec.id).then(function(ms){ return Promise.all(ms.map(function(m){ return forgetMedia(m.mid); })); });
-        rec.audit = (rec.audit || []).concat([{at: new Date().toISOString(), by: userName() || 'unnamed',
-          stage: rec.stage || 'office', action: 'Imported — replaced the copy on this device'}]);
-      } else if(confirm('Keep BOTH copies?\n\nThis creates a FORK — two separate records carrying the same ' +
-          'inspection number, which can drift apart and lead to the wrong version being quoted.\n\n' +
-          'Only do this if you have been asked to. Otherwise cancel and agree which copy is current.\n\n' +
-          'OK = keep both (creates a fork)\nCancel = cancel this import')){
-        rec.forkedFrom = rec.id;
-        rec.id = uuid();
-        rec.audit = (rec.audit || []).concat([{at: new Date().toISOString(), by: userName() || 'unnamed',
-          stage: rec.stage || 'office', action: 'FORK — imported alongside an existing copy of this inspection'}]);
-      } else {
-        if(onAbort) onAbort();
-        return;
-      }
-    } else {
+    if(!existing){
       rec.audit = (rec.audit || []).concat([{at: new Date().toISOString(), by: userName() || 'unnamed',
         stage: rec.stage || 'office', action: 'Imported onto this device'}]);
+      return dbPut('inspections', rec).then(then);
     }
-    wipe.then(function(){ dbPut('inspections', rec).then(then); });
+    var name = rec.client || rec.address || 'Untitled inspection';
+    var newer = incoming >= (existing.updatedAt || 0);
+    var describe = function(when, stage, who){
+      return fmtAUStamp(when) + '  ·  ' + stageDef(stage || 'office').short + (who ? '  ·  ' + who : '');
+    };
+    return askImportChoice(name, newer, [
+        {k: 'On this device', v: describe(existing.updatedAt, existing.stage, existing.editedBy)},
+        {k: 'Incoming file',  v: describe(incoming, rec.stage, rec.editedBy)}
+      ])
+      .then(function(choice){
+        if(choice === 'replace'){
+          rec.audit = (rec.audit || []).concat([{at: new Date().toISOString(), by: userName() || 'unnamed',
+            stage: rec.stage || 'office', action: 'Imported — replaced the copy on this device'}]);
+          /* replacing: clear the old copy's stored files so they aren't orphaned/duplicated */
+          return mediaFor(rec.id)
+            .then(function(ms){ return Promise.all(ms.map(function(m){ return forgetMedia(m.mid); })); })
+            .then(function(){ return dbPut('inspections', rec).then(then); });
+        }
+        if(choice === 'fork'){
+          rec.forkedFrom = rec.id;
+          rec.id = uuid();
+          rec.audit = (rec.audit || []).concat([{at: new Date().toISOString(), by: userName() || 'unnamed',
+            stage: rec.stage || 'office', action: 'FORK — imported alongside an existing copy of this inspection'}]);
+          return dbPut('inspections', rec).then(then);
+        }
+        if(onAbort) onAbort();
+      });
+  });
+}
+
+/* Split out so the wording can be tested without a database behind it.
+   Resolves to 'replace', 'fork', or null for cancel. */
+function askImportChoice(name, newer, lines){
+  return showDialog({
+    title: 'This inspection already exists on this device',
+    note: name + (newer
+      ? '\n\nThe incoming file is the newer of the two.'
+      : '\n\nWARNING — the copy already on this device is NEWER than the file you are '
+        + 'importing. Replacing it will lose the more recent work.'),
+    lines: lines,
+    choices: [
+      {title: 'Replace with the imported copy',
+       sub: newer ? 'The copy on this device is discarded.'
+                  : 'Discards the NEWER copy on this device. The more recent work is lost.',
+       value: 'replace'},
+      {title: 'Keep both copies',
+       sub: 'Creates a fork — asks again first.',
+       value: 'fork?'},
+      {title: 'Cancel this import',
+       sub: 'Nothing on this device changes.',
+       value: null}
+    ],
+    cancel: null
+  }).then(function(choice){
+    if(choice !== 'fork?') return choice;
+    /* A fork stayed a two-step act. It was two confirms before and it is two
+       dialogs now: the cost of getting it wrong is paid later, by whoever
+       quotes the version that drifted. */
+    return showDialog({
+      title: 'Keep BOTH copies?',
+      note: 'This creates a FORK — two separate records carrying the same inspection '
+          + 'number, which can drift apart and lead to the wrong version being quoted.\n\n'
+          + 'Only do this if you have been asked to. Otherwise go back and agree which '
+          + 'copy is current.',
+      choices: [
+        {title: 'Keep both — create the fork', value: 'fork'},
+        {title: 'Cancel this import', sub: 'Nothing on this device changes.', value: null}
+      ],
+      cancel: null
+    });
   });
 }
 function importDraftMedia(payload, done){
