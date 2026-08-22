@@ -226,6 +226,31 @@ far says the migration worked; it has not yet been *read off an instrument that
 can be trusted*, and this project has been caught believing a confident
 diagnostic before.
 
+#### RUN 3, 22 August 2026 — `schema 3: 2  2 NOT MIGRATED`
+
+**The record schema is migrated LAZILY, and nothing at boot does it.**
+`ensureSchema()` is called only when a record is opened (`index.html:2675`,
+`2855`), imported (`4250`, `4414`) or saved (`2413`). The only boot-time
+migration is `migrateMediaBytes()` (`5266`), which moves photo bytes and does
+not touch the record. So a record that has never been opened in v1.4 sits at
+schema 3 for ever, on the home screen, looking migrated.
+
+**This is not necessarily wrong** — lazy migration is a legitimate choice, and
+the record is raised the instant somebody opens it. Two things make it worth an
+answer rather than a shrug:
+
+1. **OI-10's exit criterion cannot be met by the upgrade alone.** *"The record
+   reads `schema: 4`"* only becomes true after each record is opened. The
+   rehearsal step must say so, or it reports a failure that is really an
+   un-taken action. **Open the record in `/rehearsal/`, then re-read §8.**
+2. **A record can travel at schema 3 without ever being opened.** Handover,
+   draft export and the backup all read the stored record. Whether any consumer
+   assumes schema 4 has **not been checked**, and that is the real question
+   hiding behind the reading.
+
+**Raised as OI-19.** Do not fold it into this item: OI-10 is a test run, and
+this is a design question about when migration happens.
+
 #### What it actually takes
 
 The migration only runs where v1.4 opens `ds-inspections`, and `isBetaBuild()` is
@@ -289,6 +314,37 @@ it was pointed at a device that had actually migrated.
 **Done means:** re-run on the phone against the migrated record and the panels
 report the photographs readable from the bytes store, with sizes matching
 `origSize`. Then OI-10 can be judged on evidence.
+
+### OI-19 · The record schema migrates lazily, so an unopened record stays behind
+**Status:** open — raised 22 Aug 2026 by the OI-10 rehearsal · **Tier:** unknown until answered
+**Detail:** `index.html:1953` `ensureSchema()` · called at `2413`, `2675`, `2855`, `4250`, `4414` · boot migration at `5266`
+
+The v1.4 upgrade moves photo **bytes** at boot (`migrateMediaBytes()`) and does
+**not** touch the **record**. `ensureSchema()` runs only when a record is opened,
+imported or saved. So after upgrading, every record a person has not opened
+still reads `schema: 3` — proved on the device: `schema 3: 2   2 NOT MIGRATED`,
+on a handset whose byte migration had worked perfectly.
+
+**Why it may be fine:** the record is raised the moment it is opened, and a
+record nobody opens is a record nobody is using. Lazy migration avoids rewriting
+every record at boot, which is exactly the kind of bulk write that aborts under
+storage pressure (D43, D44).
+
+**Why it may not be:** the stored record is read by things that are not "opening"
+it. Handover uploads `draftPayload(job, …)`, the backup exports every record, and
+the browse list reads them. **Whether any of those assumes schema 4 has not been
+checked** — that is the whole of this item. A schema-3 record handed to a device
+that expects 4 is the same shape of fault as the ones this project keeps finding:
+silent, and only visible to whoever receives it.
+
+**Cheap to settle:** read `draftPayload()`, the backup export and `renderHome()`
+and ask whether each tolerates `schema: 3`. No device needed.
+
+**Done means:** either every consumer of a stored record is confirmed to tolerate
+an unmigrated one — recorded in the decision log, and OI-10's step reworded to
+open each record before reading the schema — or the record migration is moved to
+boot alongside `migrateMediaBytes()`, with the bulk-write risk considered
+explicitly.
 
 ### OI-18 · The printed guides are stale, and nothing will say so before release
 **Status:** open — **do this at the v1.4.0 release, before pushing to root** · **Tier:** part of the release, not a change
