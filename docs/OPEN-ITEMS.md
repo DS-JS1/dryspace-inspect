@@ -32,23 +32,10 @@ when the register itself has decayed.
 
 ## 1. Blocks release
 
-Nothing ships while any of these is open. **Down to one.** OI-2 and OI-11 closed
-22 August 2026, and OI-10 was re-graded out of this list the same day once it was
-known that nobody has ever had data in the app.
-
-### OI-1 · "Force the handover" has never been seen to work
-**Status:** open · **Tier:** test-only run, no code expected
-**Detail:** `bug tests/OUTSTANDING-baton-status-and-forced-handover.txt` step 5;
-`docs/HANDOFF-22-august-baton-and-storage.md` §2
-
-The reason it was unreachable is fixed and proved *at the transport* — the app
-receives `BatonHolder`, so `batonState()` can reach `held`, so the gate at
-`index.html:3917` can open. **Nobody has watched the button appear and work.**
-
-**Done means:** steps 4 and 5 run on a real device against real SharePoint, **with
-two different people** — one administrator, one holder. Every run so far has had
-one person as both, which is not what the feature is for and is part of why this
-went unnoticed. Result appended to the bug-test file.
+**Nothing blocks release.** OI-1, OI-2 and OI-11 all closed on 22 August 2026, and
+OI-10 was re-graded out of this list the same day once it was known that nobody
+has ever had data in the app. The remaining items below are worth doing and none
+of them stands between v1.4.0 and a release decision.
 
 ---
 
@@ -141,6 +128,16 @@ change to the gate at all. That is a reading, not a decision.
 the taking device.** Moving it out of `current/` first would put a record's only
 copy in flight, which is the non-negotiable this project exists around.
 
+**Corroborated 22 August 2026, and it has a visible cost.** Taking over writes
+`BatonStatus = In progress` to the column (`index.html:4175`) but does not move
+the file out of `current/`. So after a takeover **the library and the app say
+different things about the same folder** — SharePoint shows *In progress* while
+the app's browse screen shows *WAITING*, because `batonState()` reads the file's
+presence rather than the column. Both were on screen at once on 22 August. Anyone
+reading the library to find out who has a record is being told something the app
+disagrees with, and that is the same root cause: the takeover does not move the
+file.
+
 **Done means:** either a normal sequence is demonstrated that empties `current/`
 and reaches `held`, written down with the steps — or it is established that none
 exists, and then a decision-log entry choosing between moving the file on
@@ -173,6 +170,29 @@ native one that cannot.
 **Done means:** the messages staff actually meet — handover, take-over, fork
 warning — display in full on an iPhone, verified on the device rather than in a
 desktop browser, which does not truncate and will not show the fault.
+
+### OI-14 · The audit trail is recorded but cannot be read in the app
+**Status:** open · **Tier:** minor — new capability
+**Detail:** `index.html:2072` `logAudit()`, `index.html:2095` the count,
+`index.html:2924` `auditTrail` in the export
+
+Every meaningful action writes an audit entry — created, stage changed, marked
+complete, handed over, and **handover forced by X, recovered from Y**. The record
+carries the lot.
+
+**Nothing displays them.** The status bar shows a count — *"7 logged changes"* —
+and the entries themselves only ever appear inside the exported JSON, so reading
+them means downloading a backup and opening the file.
+
+It matters most for exactly the action that has just been proved. A forced
+handover is taken over somebody's head; *"who took this, when, and where did they
+recover it from"* is the first question anyone will ask, and the app's answer is
+a number. The library column carries the headline — *recovered from* — but not the
+when, nor the source folder, nor anything else in the trail.
+
+**Done means:** the entries are readable on the device without exporting
+anything — or a recorded decision that the count plus the library column is
+enough, and why.
 
 ### OI-9 · `dbAll()` can return `[]` from a store that is not empty
 **Status:** open — **guarded, not cured** · **Tier:** unknown
@@ -263,6 +283,7 @@ agreed destination.
 
 | ID | Item | Closed | By what |
 |---|---|---|---|
+| OI-C13 | "Force the handover" had never been seen to work — the test that had never been passed | 22 Aug 2026 | Run on the device. Library shows **Recovered** in purple and `BatonHolder` = *Jamie Stone, recovered from Jamie Stone*, and the record came back to the home screen. The script's own expectation, met |
 | OI-C12 | The beta and the live app shared one database, so opening the beta broke the live app and removed the rollback | 22 Aug 2026 | The beta now uses `ds-inspections-beta`. **Confirmed closed on the device:** clearing the leftover `ds-inspections` through diagnostics §8c brought the live app back — its list and storage line returned. Decision log §4h |
 | OI-C11 | The orphan-bytes assertion failed ~5 runs in 8 | 22 Aug 2026 | Not a harness race after all — `dbAll()` was returning `[]` from a non-empty store (OI-9). Checks lifted out of `later()` and sequenced after boot, with per-run keys. **20 consecutive runs 554/554**, 16 under load, 6 from a cleared store |
 | OI-C10 | `sweepOrphanBytes()` returned `0` both when it failed and when it found nothing | 22 Aug 2026 | Returns `SWEEP_FAILED` (-1) on failure; the boot caller warns rather than reporting a count |

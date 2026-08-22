@@ -370,3 +370,57 @@ staff read and were right to be alarmed by.
 
 Full brief for the next session:
 docs/HANDOFF-22-august-baton-and-storage.md
+
+
+================================================================================
+RUN 3 - 22 August 2026, real iPhone against real SharePoint, build v1.4.0-30
+STEP 5 PASSES. THE TEST IS COMPLETE.
+================================================================================
+
+"Force the handover" has been run for the first time. The button that had never
+been reached was offered, tapped, and did what it says.
+
+SharePoint library afterwards, for INS - 22xx - Frinight TestClient:
+
+    BatonStatus  = Recovered          shown PURPLE
+    BatonHolder  = Jamie Stone, recovered from Jamie Stone
+
+Both names being the same is correct and is what the script predicts - one
+person is both the administrator and the holder. The record returned to the
+home screen.
+
+ONE PERSON WAS ENOUGH, and the two-device plan was not needed. The gate is
+isAdmin() && batonState === 'held'. isAdmin() checks the signed-in address
+against SP_CONFIG.admins, which holds one entry. 'held' needs current/ empty
+with BatonHolder set - and BatonHolder only has to be somebody, which can be
+yourself.
+
+ALSO OBSERVED, and both are recorded in docs/OPEN-ITEMS.md:
+
+OI-12 - the takeover writes BatonStatus = "In progress" to the column
+(index.html:4175) but does NOT move the file out of current/. So the library and
+the app then disagree about the same folder: SharePoint showed SatTest-10 38am
+as "In progress" while the app's browse screen showed it as WAITING, because
+batonState() reads the file's presence rather than the column. Both were on
+screen at the same moment. How a folder reaches 'held' by ordinary use is still
+unanswered - the one used here got there in run 1 by a file being moved out of
+current/ by hand.
+
+OI-13 - the handover confirmation is a native alert() and iOS TRUNCATES it. The
+message ends mid-sentence at "Delete your copy from", losing "...this device once
+they confirm they have it" - the instruction that stops two people holding one
+record. Not visible on a desktop browser.
+
+OI-14 - the audit trail records the forced handover but nothing in the app
+displays it. The status bar shows a count only; the entries are readable only by
+exporting the record as JSON.
+
+WHAT THE BROWSE SCREEN LOOKED LIKE - all three baton states at once, columns
+read correctly, which is fault 1's fix working in ordinary use:
+
+    IN PROGRESS      amber  INS - 22xx - Frinight TestClient  held by Jamie Stone
+    WAITING          green  SatTest-10 38am - SatTest Client  last held by Jamie Stone
+    NOT HANDED OVER  grey   Unfiled                           never sent
+
+Step 6, storage: resolved separately and not by the sweep - see
+docs/HANDOFF-22-august-baton-and-storage.md section 4.
